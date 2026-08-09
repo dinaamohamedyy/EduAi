@@ -24,9 +24,41 @@
  * @package EduAI
  */
 
+// Load-bearing, despite looking like a stray constant with no reader here.
+// class-eduai-exams.php opens with `defined( 'ABSPATH' ) || exit;` — the
+// standard WordPress direct-access guard — so without this define the require
+// below exits silently and the whole check passes having tested nothing. The
+// value is irrelevant; only its existence is. Deleting this as "unused" turns
+// the guard vacuous rather than breaking it, which is the dangerous direction.
+// (The one `ABSPATH .` use in that file sits inside a method, so nothing here
+// ever touches a real WordPress path.)
 define( 'ABSPATH', __DIR__ );
 
+// Tripwire against this guard passing by not running. Verified by execution:
+// with the define above removed, the require below hits `exit;` and terminates
+// the whole script with status 0, printing nothing — CI reads only the exit
+// code, so the step stays green forever while testing nothing at all. Nothing
+// placed after the require can detect that, because nothing after it runs; the
+// flag has to be armed first. Legitimate exits below all happen once $loaded is
+// true, so they keep their own status codes.
+$loaded = false;
+register_shutdown_function(
+	static function () use ( &$loaded ) {
+		if ( ! $loaded ) {
+			fwrite(
+				STDERR,
+				"redaction guard never loaded EduAI_Exams and exited early — almost certainly the\n"
+					. "`defined( 'ABSPATH' ) || exit;` line in class-eduai-exams.php. Failing rather than\n"
+					. "reporting success: a check that did not run must never look like one that passed.\n"
+			);
+			exit( 3 );
+		}
+	}
+);
+
 require_once __DIR__ . '/../wp-content/plugins/eduai-assistant/includes/class-eduai-exams.php';
+
+$loaded = true;
 
 /** Fields that must never reach the student before marking. */
 const FORBIDDEN = array( 'answer_index', 'expected', 'explanation' );
