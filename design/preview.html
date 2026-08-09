@@ -470,6 +470,10 @@ background:hsl(var(--surface));border:1px solid hsl(var(--border-strong));border
 text-transform:uppercase;letter-spacing:.06em;margin:0 0 .55rem}
 .pathtag--exact{background:hsl(var(--success)/.14);color:hsl(var(--success))}
 .pathtag--model{background:hsl(var(--brand)/.12);color:hsl(var(--brand))}
+/* Not a path result — a notice that the model path needs a key. Its own class
+   on purpose: aicalc-label-parity anchors on pathtag--exact|model, and those
+   two must each carry exactly one string in this file. */
+.pathtag--nokey{background:hsl(var(--warning)/.15);color:hsl(var(--warning))}
 
 /* ===================== PrepareME ===================== */
 .prepflow{list-style:none;display:grid;gap:1rem;grid-template-columns:repeat(3,minmax(0,1fr));
@@ -1900,7 +1904,7 @@ function bindCalc(){
   }
 
   if(!apiKey()){
-   out.innerHTML='<div class="bub"><p class="pathtag pathtag--model">Model path</p>'+
+   out.innerHTML='<div class="bub"><p class="pathtag pathtag--nokey">Model path — needs a key</p>'+
     '<p>That needs the model — it is symbolic, worded or unit-bearing. This copy has no key configured: connect one in the strip at the top of the <a href="#" data-go="qa">Q&amp;A page</a> and AiCalc answers it for real at temperature 0, showing every step.</p></div>';
    var l=out.querySelector('[data-go]');
    if(l) l.onclick=function(e2){e2.preventDefault();go('qa');};
@@ -1942,14 +1946,14 @@ var EXAM_FIXTURE={
  "questions":[
   {"id":1,"band":"easy","type":"mcq","question":"What does the coefficient a0 represent in a Fourier series?","options":["The amplitude of the first harmonic","The phase offset of the fundamental","The average value of the function over one period","The period of the function"],"answer_index":2,"marks":1,"explanation":"a0 is the DC term: the mean of the function across one full period. The harmonics an and bn describe variation about that mean."},
   {"id":2,"band":"easy","type":"mcq","question":"For an even function on a symmetric interval, which coefficients vanish?","options":["All bn","All an","Only a0","None of them"],"answer_index":0,"marks":1,"explanation":"For even f, the product f(x)·sin(nx) is odd, so it integrates to zero across a symmetric interval and every bn vanishes."},
-  {"id":3,"band":"easy","type":"short","question":"State, in one sentence, what a Fourier series lets you do to a periodic function.","expected":"It rewrites any reasonably well-behaved periodic function as a sum of sines and cosines, each with its own frequency and weight.","marks":2},
-  {"id":4,"band":"easy","type":"short","question":"Name one physical situation where decomposing a signal into frequencies is useful, and say why.","expected":"Any of: audio equalisation, filtering noise from a measurement, spectral analysis, image compression. The reason should be that the components can be treated independently once separated.","marks":2},
+  {"id":3,"band":"easy","type":"short","question":"State, in one sentence, what a Fourier series lets you do to a periodic function.","expected":"says it rewrites a periodic function as a sum of sines and cosines (1); notes each component carries its own frequency and weight (1)","marks":2},
+  {"id":4,"band":"easy","type":"short","question":"Name one physical situation where decomposing a signal into frequencies is useful, and say why.","expected":"names a valid situation — audio equalisation, filtering noise from a measurement, spectral analysis, image compression (1); gives the reason: once separated, the frequency components can be treated independently (1)","marks":2},
   {"id":5,"band":"medium","type":"mcq","question":"How many Dirichlet conditions must a function satisfy for its Fourier series to converge?","options":["One","Two","Three","Four"],"answer_index":2,"marks":1,"explanation":"Three: the function must be absolutely integrable over a period, have a finite number of extrema in that period, and a finite number of finite discontinuities."},
   {"id":6,"band":"medium","type":"mcq","question":"At a point where a function has a jump discontinuity, its Fourier series converges to:","options":["The value on the left of the jump","The midpoint of the jump","The value on the right of the jump","It does not converge at all"],"answer_index":1,"marks":1,"explanation":"The series converges to the average of the left and right limits — the midpoint — regardless of how the function itself is defined at that point."},
-  {"id":7,"band":"medium","type":"short","question":"Write the integral expression for bn and explain what the sine factor is doing.","expected":"bn = (1/pi) times the integral of f(x)·sin(nx) dx over one period. The sine factor projects f onto that harmonic: it measures how much of that particular frequency is present.","marks":3},
-  {"id":8,"band":"medium","type":"short","question":"Explain why the Dirichlet conditions are a constraint rather than a formality.","expected":"They bound what the series can represent. A function violating them — infinitely many discontinuities, or not absolutely integrable — has a series that need not converge to it, so results derived from the expansion stop being valid.","marks":3},
+  {"id":7,"band":"medium","type":"short","question":"Write the integral expression for bn and explain what the sine factor is doing.","expected":"gives bn = 1/pi times the integral of f(x)·sin(nx) dx (1); states it is taken over one full period (1); explains the sine factor projects f onto that harmonic, measuring how much of that frequency is present (1)","marks":3},
+  {"id":8,"band":"medium","type":"short","question":"Explain why the Dirichlet conditions are a constraint rather than a formality.","expected":"states that the conditions bound what the series can represent (1); gives a function that violates them, such as one with infinitely many discontinuities or one that is not absolutely integrable (1); draws the consequence: the series need not converge to the function, so results derived from the expansion stop being valid (1)","marks":3},
   {"id":9,"band":"hard","type":"mcq","question":"The Fast Fourier Transform reduces the cost of computing a discrete transform from O(n^2) to:","options":["O(n)","O(n log n)","O(log n)","O(n^1.5)"],"answer_index":1,"marks":2,"explanation":"The FFT exploits symmetry in the roots of unity to split the transform recursively, giving O(n log n) — the result that makes spectral methods practical at scale."},
-  {"id":10,"band":"hard","type":"short","question":"Describe the Gibbs phenomenon and explain why adding more terms does not remove it.","expected":"Near a jump discontinuity the partial sums overshoot by roughly 9% of the jump height. Adding terms narrows the region where the overshoot occurs but does not reduce its size, because the convergence is pointwise rather than uniform near the discontinuity.","marks":4}
+  {"id":10,"band":"hard","type":"short","question":"Describe the Gibbs phenomenon and explain why adding more terms does not remove it.","expected":"describes the partial sums overshooting near a jump discontinuity (1); gives the size of the overshoot as roughly 9% of the jump height (1); states that adding terms narrows the region but does not shrink the overshoot (1); explains the cause: convergence there is pointwise rather than uniform (1)","marks":4}
  ]
 };
 

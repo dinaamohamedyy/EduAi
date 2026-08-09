@@ -456,3 +456,63 @@
   .eduai-msg, .eduai-dock { animation: none; }
   .eduai-launcher { transition: none; }
 }
+
+/* ------------------------------------------------------------- AiCalc ---- */
+/* The exact and model paths are deliberately different colours. A student
+   glancing at the screen should be able to tell which kind of answer they have
+   without reading the badge. */
+.eduai-calc { display: grid; gap: 0.9rem; max-width: 46rem; }
+.eduai-calc__form { display: flex; gap: 0.5rem; }
+.eduai-calc__form input {
+  flex: 1; min-width: 0; padding: 0.7rem 0.85rem;
+  font: inherit; font-size: 1rem; font-variant-numeric: tabular-nums;
+  color: hsl(var(--eduai-text)); background: hsl(var(--eduai-bg));
+  border: 1px solid hsl(var(--eduai-border)); border-radius: 12px;
+}
+.eduai-calc__form input:focus {
+  outline: none; border-color: hsl(var(--eduai-brand));
+  box-shadow: 0 0 0 3px hsl(var(--eduai-brand) / 0.18);
+}
+.eduai-calc__examples { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.eduai-calc__examples button {
+  border: 1px solid hsl(var(--eduai-border)); background: hsl(var(--eduai-bg-subtle));
+  color: hsl(var(--eduai-text)); font: inherit; font-size: 0.78rem;
+  padding: 0.3rem 0.7rem; border-radius: 999px; cursor: pointer;
+}
+.eduai-calc__examples button:hover {
+  border-color: hsl(var(--eduai-brand)); background: hsl(var(--eduai-brand) / 0.08);
+}
+.eduai-calc__card {
+  padding: 1rem; border-radius: 14px;
+  border: 1px solid hsl(var(--eduai-border)); background: hsl(var(--eduai-surface));
+  border-left-width: 4px;
+}
+.eduai-calc__card.is-exact { border-left-color: hsl(var(--eduai-accent)); }
+.eduai-calc__card.is-model { border-left-color: hsl(var(--eduai-brand)); }
+.eduai-calc__badge {
+  display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.is-exact .eduai-calc__badge {
+  background: hsl(var(--eduai-accent) / 0.15); color: hsl(var(--eduai-accent));
+}
+.is-model .eduai-calc__badge {
+  background: hsl(var(--eduai-brand) / 0.15); color: hsl(var(--eduai-brand-strong));
+}
+.eduai-calc__answer {
+  margin: 0.6rem 0 0.4rem; font-size: 1.9rem; font-weight: 700;
+  font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.eduai-calc__steps {
+  margin: 0.5rem 0 0; padding-left: 1.3rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.86rem;
+  color: hsl(var(--eduai-muted));
+}
+.eduai-calc__steps li { margin-bottom: 0.15rem; }
+.eduai-calc__steps li.is-input { color: hsl(var(--eduai-text)); }
+.eduai-calc__prose { margin-top: 0.6rem; }
+.eduai-calc__note {
+  margin: 0.7rem 0 0; font-size: 0.75rem; color: hsl(var(--eduai-muted));
+}
+.eduai-calc__working { padding: 0.5rem 0; }
+.eduai-calc__foot { margin: 0; font-size: 0.75rem; color: hsl(var(--eduai-muted)); }

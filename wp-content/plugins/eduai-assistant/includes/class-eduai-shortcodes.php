@@ -16,6 +16,48 @@ class EduAI_Shortcodes {
 	public static function init(): void {
 		add_shortcode( 'eduai_panel', array( __CLASS__, 'panel' ) );
 		add_shortcode( 'eduai_summarizer', array( __CLASS__, 'summarizer' ) );
+		add_shortcode( 'eduai_calc', array( __CLASS__, 'calc' ) );
+	}
+
+	/**
+	 * AiCalc.
+	 *
+	 * Its assets are enqueued here rather than unconditionally on every page:
+	 * the calculator is one destination, and the chat bundle it would otherwise
+	 * ride along with is a different feature entirely.
+	 *
+	 * @param array $atts Shortcode attributes.
+	 */
+	public static function calc( $atts = array() ): string {
+		if ( EduAI_Settings::get( 'logged_in_only', true ) && ! is_user_logged_in() ) {
+			return self::login_card();
+		}
+
+		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
+		wp_enqueue_script( 'eduai-calc', EDUAI_URL . 'assets/js/calc.js', array(), EDUAI_VERSION, true );
+
+		wp_localize_script( 'eduai-calc', 'EduAICalcConfig', array(
+			'root'     => esc_url_raw( rest_url( EduAI_REST::NS ) ),
+			'nonce'    => wp_create_nonce( 'wp_rest' ),
+			'loggedIn' => is_user_logged_in(),
+			'i18n'     => array(
+				// Wording is taken verbatim from the AiCalc screen in
+				// design/preview.html. Two surfaces describing the same split in
+				// different words is how a student ends up unsure which kind of
+				// answer they are looking at, which is the one thing this
+				// feature exists to make obvious.
+				'exact'       => __( 'Computed exactly — code, not a model', 'eduai' ),
+				'viaModel'    => __( 'Model answer — temperature 0, house rules on', 'eduai' ),
+				'exactNote'   => __( 'Worked out on the server, not by a language model, and no tokens spent.', 'eduai' ),
+				'modelNote'   => __( 'This one needed the assistant rather than plain arithmetic, so check it against your notes.', 'eduai' ),
+				'error'       => __( 'Something went wrong. Please try again.', 'eduai' ),
+				'loginPrompt' => __( 'Please sign in to use the calculator.', 'eduai' ),
+			),
+		) );
+
+		ob_start();
+		include EDUAI_DIR . 'templates/calc.php';
+		return (string) ob_get_clean();
 	}
 
 	/**

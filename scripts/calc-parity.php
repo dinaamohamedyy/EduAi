@@ -24,9 +24,39 @@
 
 // This file runs standalone, outside WordPress. EduAI_Calc guards itself with
 // `defined( 'ABSPATH' ) || exit;`, so stand that constant up before loading it.
+//
+// That define is load-bearing despite reading like an unused constant. Without
+// it the require below hits the guard, which terminates the script with status
+// 0 printing nothing — so CI's "AiCalc PHP port matches the reference" step
+// goes green having compared no cases at all. A check that did not run must
+// never look like one that passed, so a tripwire is armed before the require
+// and disarmed after it. Nothing placed after the require can detect this,
+// because nothing after the require runs.
+//
+// The same failure was found in scripts/redaction-guard.php first; this is the
+// other instance of it.
+$eduai_loaded = false;
+
+register_shutdown_function(
+	static function () use ( &$eduai_loaded ) {
+		if ( $eduai_loaded ) {
+			return;
+		}
+		fwrite(
+			STDERR,
+			"calc parity never loaded EduAI_Calc and exited early — almost certainly the\n"
+			. "`defined( 'ABSPATH' ) || exit;` line in class-eduai-calc.php. Failing rather than\n"
+			. "reporting success: a check that did not run must never look like one that passed.\n"
+		);
+		exit( 3 );
+	}
+);
+
 define( 'ABSPATH', __DIR__ );
 
 require_once __DIR__ . '/../wp-content/plugins/eduai-assistant/includes/class-eduai-calc.php';
+
+$eduai_loaded = true;
 
 $fixture_path = __DIR__ . '/calc-cases.json';
 

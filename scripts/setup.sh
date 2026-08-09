@@ -44,6 +44,9 @@ fi
 
 # ------------------------------------------------------------- settings ----
 say "Applying site settings"
+# blogname is set by `core install` only on a fresh install — update it here
+# too so the Scholaris→EduAi display rename reaches already-installed sites.
+$WP option update blogname "$SITE_TITLE"
 $WP option update blogdescription "Study material, quizzes and an AI study assistant"
 $WP option update permalink_structure '/%postname%/'
 $WP option update timezone_string 'Africa/Cairo'
@@ -119,7 +122,7 @@ make_page "Privacy Policy" "privacy" "How student data and AI conversations are 
 # shortcodes land — the back end swaps the content, the slug and menu slot are
 # already right.
 make_page "Q&A" "ask" "[eduai_panel height=\"600\"]"
-make_page "AiCalc" "calc" "AiCalc is being wired up: exact arithmetic computed in code, symbolic and worded problems answered by the model with every step shown."
+make_page "AiCalc" "calc" "[eduai_calc]"
 make_page "PrepareME" "prepare" "PrepareME is being wired up: upload a lecture, sit an exam generated from it, and get it marked with corrections."
 
 # Auth pages. Content stays empty: the theme routes wp_login_url()/
@@ -157,6 +160,13 @@ say "Building the primary menu"
 if ! $WP menu list --format=csv | grep -q '^.*,Primary,'; then
 	$WP menu create "Primary" >/dev/null || true
 fi
+
+# Rebuild the Primary menu from scratch on every run so restructures converge
+# on already-installed sites: stale items (Material, Study Assistant) drop out,
+# nothing duplicates, and the order below is exactly what ships.
+for item_id in $($WP menu item list Primary --format=ids 2>/dev/null); do
+	$WP menu item delete "$item_id" >/dev/null 2>&1 || true
+done
 
 add_menu_item() {
 	local slug="$1"

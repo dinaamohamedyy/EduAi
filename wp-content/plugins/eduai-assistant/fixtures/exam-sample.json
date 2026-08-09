@@ -37,7 +37,7 @@
       "band": "easy",
       "type": "short",
       "question": "State, in one sentence, what a Fourier series lets you do to a periodic function.",
-      "expected": "It rewrites any reasonably well-behaved periodic function as a sum of sines and cosines, each with its own frequency and weight.",
+      "expected": "says it rewrites a periodic function as a sum of sines and cosines (1); notes each component carries its own frequency and weight (1)",
       "marks": 2
     },
     {
@@ -45,7 +45,7 @@
       "band": "easy",
       "type": "short",
       "question": "Name one physical situation where decomposing a signal into frequencies is useful, and say why.",
-      "expected": "Any of: audio equalisation, filtering noise from a measurement, spectral analysis, image compression. The reason should be that the components can be treated independently once separated.",
+      "expected": "names a valid situation — audio equalisation, filtering noise from a measurement, spectral analysis, image compression (1); gives the reason: once separated, the frequency components can be treated independently (1)",
       "marks": 2
     },
     {
@@ -83,7 +83,7 @@
       "band": "medium",
       "type": "short",
       "question": "Write the integral expression for bn and explain what the sine factor is doing.",
-      "expected": "bn = (1/pi) times the integral of f(x)·sin(nx) dx over one period. The sine factor projects f onto that harmonic: it measures how much of that particular frequency is present.",
+      "expected": "gives bn = 1/pi times the integral of f(x)·sin(nx) dx (1); states it is taken over one full period (1); explains the sine factor projects f onto that harmonic, measuring how much of that frequency is present (1)",
       "marks": 3
     },
     {
@@ -91,7 +91,7 @@
       "band": "medium",
       "type": "short",
       "question": "Explain why the Dirichlet conditions are a constraint rather than a formality.",
-      "expected": "They bound what the series can represent. A function violating them — infinitely many discontinuities, or not absolutely integrable — has a series that need not converge to it, so results derived from the expansion stop being valid.",
+      "expected": "states that the conditions bound what the series can represent (1); gives a function that violates them, such as one with infinitely many discontinuities or one that is not absolutely integrable (1); draws the consequence: the series need not converge to the function, so results derived from the expansion stop being valid (1)",
       "marks": 3
     },
     {
@@ -114,7 +114,7 @@
       "band": "hard",
       "type": "short",
       "question": "Describe the Gibbs phenomenon and explain why adding more terms does not remove it.",
-      "expected": "Near a jump discontinuity the partial sums overshoot by roughly 9% of the jump height. Adding terms narrows the region where the overshoot occurs but does not reduce its size, because the convergence is pointwise rather than uniform near the discontinuity.",
+      "expected": "describes the partial sums overshooting near a jump discontinuity (1); gives the size of the overshoot as roughly 9% of the jump height (1); states that adding terms narrows the region but does not shrink the overshoot (1); explains the cause: convergence there is pointwise rather than uniform (1)",
       "marks": 4
     }
   ]

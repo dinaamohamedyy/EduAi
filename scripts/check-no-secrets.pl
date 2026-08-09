@@ -31,6 +31,14 @@ my $repo  = File::Spec->rel2abs( File::Spec->catdir( dirname(__FILE__), File::Sp
 my @roots = @ARGV ? map { File::Spec->rel2abs($_) } @ARGV : ($repo);
 my $given = @ARGV ? 1 : 0;
 
+# DO NOT "unify" these two branches. The exemptions are conditional on scanning
+# the developer's own tree, and that conditionality is the entire design: the
+# archive scan must catch a key-bearing preview.html *inside* a zip, which is
+# the single most likely way a live key reaches the public repository. Make the
+# skip unconditional and every check still passes, the CI step still prints
+# "clean", and the one file that matters becomes invisible again.
+# Regression test: plant a key in an extracted archive's preview.html — it must
+# still be reported.
 my %skip = $given ? () : map { File::Spec->canonpath("$repo/$_") => 1 } (
     'preview.html',
     '.env',

@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use File::Basename qw(dirname);
 use File::Spec;
+use JSON::PP ();
 
 # Cross-file contract tests for machines with no PHP, Node or Docker on them.
 #
@@ -31,6 +32,7 @@ my $REST    = "wp-content/plugins/eduai-assistant/includes/class-eduai-rest.php"
 my $AGENTSPHP = "wp-content/plugins/eduai-assistant/includes/class-eduai-agents.php";
 my $AUTH    = "wp-content/themes/scholaris/inc/auth.php";
 my $FLOW    = "wp-content/themes/scholaris/inc/auth-flow.php";
+my $FIXTURE = "wp-content/plugins/eduai-assistant/fixtures/exam-sample.json";
 my $HANDOFF = "docs/05-frontend-handoff.md";
 my $HOSTING = "docs/03-hosting-deployment.md";
 my $TESTPG  = "tools/agent-test.html";
@@ -49,6 +51,8 @@ my @checks = (
     [ 'summariser-prompt'      => \&check_summariser_prompt ],
     [ 'exam-fixture-schema'    => \&check_exam_fixture ],
     [ 'exam-route-parity'      => \&check_exam_routes ],
+    [ 'fixture-inline-parity'  => \&check_fixture_inline ],
+    [ 'aicalc-label-parity'    => \&check_calc_labels ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -550,6 +554,99 @@ sub squash {
     return $s;
 }
 
+# The preview inlines fixtures/exam-sample.json as EXAM_FIXTURE, for the same
+# reason it inlines the house rules: a file:// page cannot fetch a sibling file
+# without tripping CORS. So the demo renders a copy, and a copy goes stale the
+# moment the fixture is regenerated — which is exactly what happened when the
+# `expected` values were rewritten to mark-scheme form and the pages kept
+# showing the old answers.
+#
+# Compared as decoded JSON rather than as text: the inline is formatted one
+# question per line while the fixture is pretty-printed, so a string compare
+# would fail on whitespace forever and teach everyone to ignore it.
+sub check_fixture_inline {
+    my $raw = slurp($FIXTURE);
+    my $json = JSON::PP->new->utf8(0);
+
+    my $want = eval { $json->decode($raw) };
+    return ("$FIXTURE is not valid JSON: $@") if $@;
+
+    my @problems;
+
+    for my $file ( $PREVIEW, $LIVE ) {
+        next if skip_absent_local($file);
+
+        my ($lit) = slurp($file) =~ /var EXAM_FIXTURE\s*=\s*(\{.*?\n\});/s;
+        if ( !defined $lit ) {
+            push @problems, "$file: no EXAM_FIXTURE literal found";
+            next;
+        }
+
+        my $got = eval { $json->decode($lit) };
+        if ($@) {
+            my $err = $@;
+            $err =~ s/ at \S+ line \d+\.?\s*\z//;    # the reader wants the JSON fault, not our line number
+            $err =~ s/\s+\z//;
+            push @problems, "$file: EXAM_FIXTURE is not decodable as JSON — $err";
+            next;
+        }
+
+        my $diff = json_diff( $got, $want, 'EXAM_FIXTURE' );
+        push @problems, "$file has drifted from $FIXTURE at $diff" if defined $diff;
+    }
+
+    return @problems;
+}
+
+# First difference between two decoded JSON structures, as a path a human can
+# go and look at — "EXAM_FIXTURE.questions[2].expected" beats "they differ" on
+# a five-kilobyte fixture.
+sub json_diff {
+    my ( $got, $want, $path ) = @_;
+
+    my $rg = ref $got;
+    my $rw = ref $want;
+
+    return "$path: " . ( $rg || 'scalar' ) . " inline, " . ( $rw || 'scalar' ) . " in the fixture"
+        if $rg ne $rw;
+
+    if ( 'HASH' eq $rg ) {
+        for my $k ( sort keys %$want ) {
+            return "$path.$k: in the fixture, missing from the inlined copy"
+                unless exists $got->{$k};
+            my $d = json_diff( $got->{$k}, $want->{$k}, "$path.$k" );
+            return $d if defined $d;
+        }
+        for my $k ( sort keys %$got ) {
+            return "$path.$k: inlined but not in the fixture" unless exists $want->{$k};
+        }
+        return undef;
+    }
+
+    if ( 'ARRAY' eq $rg ) {
+        return "$path: " . scalar(@$got) . ' entries inline, ' . scalar(@$want) . ' in the fixture'
+            if @$got != @$want;
+        for my $i ( 0 .. $#$want ) {
+            my $d = json_diff( $got->[$i], $want->[$i], $path . '[' . $i . ']' );
+            return $d if defined $d;
+        }
+        return undef;
+    }
+
+    # Leaves, including JSON::PP::Boolean objects, which stringify to 1 and 0.
+    my $g = defined $got  ? "$got"  : '<null>';
+    my $w = defined $want ? "$want" : '<null>';
+    return undef if $g eq $w;
+
+    return "$path:\n            inline : " . clip($g) . "\n            fixture: " . clip($w);
+}
+
+sub clip {
+    my ($s) = @_;
+    $s =~ s/\s+/ /g;
+    return length($s) > 110 ? substr( $s, 0, 107 ) . '...' : $s;
+}
+
 # Every constant the theme and plugin read must be findable in the hosting
 # guide, and no single PHP block there may define the same constant twice.
 # The wp-config snippets in docs/03 are written to be pasted wholesale, so two
@@ -812,4 +909,53 @@ sub normalise_route {
     $path =~ s{/\d+}{/<id>}g;               # a concrete id used as an example
     $path =~ s{/+\z}{};                     # trailing slash
     return $path;
+}
+
+# AiCalc exists to make one distinction obvious: whether the answer was computed
+# exactly in code or produced by a model. The preview page and the real page are
+# two surfaces stating that same distinction, and the moment they word it
+# differently a student cannot tell whether they are looking at the same claim.
+# The preview is the design reference, so the plugin's labels have to appear in
+# it verbatim.
+sub check_calc_labels {
+    my $php     = slurp('wp-content/plugins/eduai-assistant/includes/class-eduai-shortcodes.php');
+    my $preview = slurp($PREVIEW);
+    my @err;
+
+    # Whole labels on both sides, compared as complete strings. An earlier
+    # version asked only whether the plugin's label appeared *somewhere* in the
+    # preview, which a truncated label passes: "Computed exactly" is a prefix of
+    # "Computed exactly â code, not a model". Mutation testing caught it.
+    my %plugin;
+    for my $key (qw(exact viaModel)) {
+        $plugin{$key} = $1 if $php =~ /'\Q$key\E'\s*=>\s*__\(\s*'(.*?)',/;
+    }
+
+    for my $key (qw(exact viaModel)) {
+        push @err, "no '$key' label found in class-eduai-shortcodes.php"
+            unless defined $plugin{$key};
+    }
+    return @err if @err;
+
+    # The preview renders each badge as <p class="pathtag pathtag--KIND">TEXT</p>.
+    my %design;
+    while ( $preview =~ /pathtag--(exact|model)">([^<]+)</g ) {
+        $design{ 'exact' eq $1 ? 'exact' : 'viaModel' } = $2;
+    }
+
+    for my $key (qw(exact viaModel)) {
+        push @err, "no '$key' path tag found in $PREVIEW â the design reference moved"
+            unless defined $design{$key};
+    }
+    return @err if @err;
+
+    for my $key (qw(exact viaModel)) {
+        next if $plugin{$key} eq $design{$key};
+        push @err, sprintf(
+            '%s badge differs: plugin says "%s", %s says "%s"',
+            $key, $plugin{$key}, $PREVIEW, $design{$key}
+        );
+    }
+
+    return @err;
 }
