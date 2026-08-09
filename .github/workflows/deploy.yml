@@ -31,6 +31,30 @@ jobs:
       - name: No secrets in shippable files
         run: perl scripts/check-no-secrets.pl
 
+      # The step above cannot see inside an archive. Zip entries are compressed,
+      # so scanning the container byte-for-byte matches nothing and reports
+      # "clean" — which reads as assurance while checking nothing. This repo
+      # ships scholaris-wordpress-platform.zip, and the repo is PUBLIC, so a
+      # re-zip taken from a working copy holding a live key would otherwise sail
+      # straight through the one gate that guards an irreversible mistake.
+      - name: No secrets inside committed archives
+        run: |
+          archives=$(git ls-files '*.zip')
+          if [ -z "$archives" ]; then
+            echo "no committed archives — nothing to extract"
+            exit 0
+          fi
+          for z in $archives; do
+            echo "── scanning inside $z"
+            tmp=$(mktemp -d)
+            unzip -qq "$z" -d "$tmp"
+            # Explicit path => no exemptions: an archive carrying a key-bearing
+            # preview.html is exactly the bug being hunted. The script also
+            # fails if it reads zero files, so a bad extract cannot pass.
+            perl scripts/check-no-secrets.pl "$tmp"
+            rm -rf "$tmp"
+          done
+
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:

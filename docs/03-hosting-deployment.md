@@ -51,30 +51,41 @@ concurrent students exceed ~50 or the library exceeds ~2 GB.
 
 ---
 
-## Setting up the repository
+## The repository
+
+Already set up and pushed — **<https://github.com/dinaamohamedyy/EduAi>**, branch
+`main`. Nothing here needs doing again; it is recorded so the next person knows
+where the code lives.
 
 ```bash
-cd D:\chatbot
-git init
-git add .
-git commit -m "Scholaris learning platform: theme, assistant and library"
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/chatbot.git
-git push -u origin main
+git clone https://github.com/dinaamohamedyy/EduAi.git
 ```
 
-`.gitignore` already excludes WordPress core, uploads, `wp-config.php`,
-third-party plugins and `.env`. Only your own code is committed — which is what
-you want, because core and plugins are managed by WordPress's own updater on the
-server.
+`.gitignore` excludes WordPress core, uploads, `wp-config.php`, third-party
+plugins, `.env`, and every `preview*.html` at the root — that last one is the
+working copy which deliberately holds a live key. Only our own code is
+committed, because core and plugins are managed by WordPress's own updater on
+the server.
 
-**Before the first push, confirm no key is in the repo:**
+### The repository is public
+
+Anyone can read it, so a leaked key is not a mistake a later commit can undo —
+it is public the moment it is pushed, and it stays in the history. Rotate
+immediately rather than trying to erase it.
+
+CI runs `scripts/check-no-secrets.pl` as its **first** step for exactly this
+reason, and a second step extracts every committed `.zip` and scans inside it —
+archive entries are compressed, so scanning the container itself matches
+nothing and would report "clean" while checking nothing.
+
+**Before any push, and before regenerating the zip:**
 
 ```bash
-git grep -i "sk-ant"
+perl scripts/check-no-secrets.pl
 ```
 
-That must return nothing.
+That must print `clean`. Do not use `git grep "sk-ant"` — it misses Groq
+(`gsk_`), Z.ai, and a filled-in `var API_KEY`, all of which the script catches.
 
 ---
 
