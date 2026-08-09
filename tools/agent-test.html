@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EduAI — agent test page</title>
+<style>
+:root{
+--brand:161 45% 25%;--brand-strong:162 50% 18%;--accent:33 58% 42%;
+--bg:45 38% 97%;--surface:45 50% 99%;--sunken:44 24% 90%;
+--border:44 18% 85%;--text:210 26% 14%;--muted:213 12% 38%;
+--warn:33 85% 38%;--danger:8 64% 42%;--ok:152 46% 30%;
+--on-brand:43 38% 96%;
+--mono:ui-monospace,Menlo,Consolas,"Cascadia Mono",monospace;
+}
+@media(prefers-color-scheme:dark){:root{
+--bg:210 14% 9%;--surface:209 14% 12%;--sunken:209 12% 14%;
+--border:209 10% 21%;--text:42 24% 92%;--muted:213 11% 68%;
+--brand:158 34% 58%;--brand-strong:158 40% 68%;--accent:38 50% 58%;--ok:150 38% 55%;
+--on-brand:206 26% 10%;}}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;padding:1.5rem;font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+color:hsl(var(--text));background:hsl(var(--bg))}
+.wrap{max-width:920px;margin:0 auto;display:grid;gap:1rem}
+h1{font-size:1.35rem;margin:0}
+h1 span{font-weight:400;color:hsl(var(--muted));font-size:.85rem;display:block;margin-top:.2rem}
+.card{background:hsl(var(--surface));border:1px solid hsl(var(--border));border-radius:14px;padding:1rem}
+label{font-size:.78rem;font-weight:600;color:hsl(var(--muted));display:block;margin-bottom:.3rem}
+input,select,textarea,button{font:inherit;color:hsl(var(--text))}
+input,select,textarea{width:100%;padding:.55rem .7rem;background:hsl(var(--bg));
+border:1px solid hsl(var(--border));border-radius:10px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:hsl(var(--brand));
+box-shadow:0 0 0 3px hsl(var(--brand)/.2)}
+textarea{resize:vertical;min-height:70px}
+.row{display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:end}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+@media(max-width:640px){.grid2{grid-template-columns:1fr}}
+button{cursor:pointer;border:0;border-radius:10px;padding:.55rem 1rem;font-weight:600;
+background:hsl(var(--brand));color:hsl(var(--on-brand));white-space:nowrap}
+button:disabled{opacity:.55;cursor:not-allowed}
+button.ghost{background:transparent;color:hsl(var(--muted));border:1px solid hsl(var(--border))}
+.meta{font-size:.75rem;color:hsl(var(--muted));margin-top:.35rem}
+.chips{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.6rem}
+.chips button{background:hsl(var(--sunken));color:hsl(var(--text));font-weight:400;
+font-size:.78rem;padding:.28rem .65rem;border:1px solid hsl(var(--border))}
+.log{display:grid;gap:.8rem}
+.msg{padding:.75rem .9rem;border-radius:14px;background:hsl(var(--sunken));font-size:.93rem}
+.msg--u{background:hsl(var(--brand));color:hsl(var(--on-brand));margin-left:auto;max-width:80%;border-bottom-right-radius:5px}
+.msg--b{border-bottom-left-radius:5px}
+.msg--err{background:hsl(var(--danger)/.12);border:1px solid hsl(var(--danger)/.4)}
+.msg p{margin:0 0 .55rem}.msg p:last-child{margin:0}
+.msg ul{margin:.2rem 0 .55rem;padding-left:1.2rem}
+.msg h3{font-size:1rem;margin:.9rem 0 .35rem}.msg h4{font-size:.9rem;margin:.75rem 0 .3rem}
+.msg pre{background:hsl(var(--bg));border:1px solid hsl(var(--border));border-radius:10px;
+padding:.7rem;overflow-x:auto;font-family:var(--mono);font-size:.82rem;margin:0 0 .55rem}
+.msg code{font-family:var(--mono);font-size:.85em;background:hsl(var(--border)/.5);
+padding:.1em .35em;border-radius:4px}
+.msg pre code{background:none;padding:0}
+.stamp{font-size:.7rem;color:hsl(var(--muted));margin-top:.5rem;font-family:var(--mono)}
+.badge{display:inline-block;padding:.1rem .5rem;border-radius:999px;font-size:.68rem;
+font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.badge--ok{background:hsl(var(--ok)/.15);color:hsl(var(--ok))}
+.badge--warn{background:hsl(var(--warn)/.15);color:hsl(var(--warn))}
+details{margin-top:.6rem}
+summary{cursor:pointer;font-size:.8rem;color:hsl(var(--muted));font-weight:600}
+details pre{margin-top:.5rem;background:hsl(var(--bg));border:1px solid hsl(var(--border));
+border-radius:10px;padding:.7rem;overflow-x:auto;font-family:var(--mono);font-size:.75rem;
+white-space:pre-wrap;max-height:340px}
+.note{font-size:.78rem;color:hsl(var(--muted));background:hsl(var(--warn)/.1);
+border-left:3px solid hsl(var(--warn));padding:.6rem .75rem;border-radius:0 8px 8px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>EduAI — agent test page
+  <span>Talks to the Claude API with the real agent prompts and house rules from the plugin. Not the plugin itself: no course material, no uploads.</span>
+</h1>
+
+<div class="card">
+  <div class="row">
+    <div>
+      <label for="key">API key — Anthropic or Groq</label>
+      <input id="key" type="password" placeholder="sk-ant-… (Anthropic) or gsk_… (Groq)" autocomplete="off" spellcheck="false">
+    </div>
+    <button id="savekey" class="ghost" type="button">Keep for this tab</button>
+  </div>
+  <p class="meta" id="keystate"></p>
+  <p class="note">The key stays in this tab's <code>sessionStorage</code> and is gone when you close it. It is never written into this file, so the file stays safe to keep in the repo. Anyone with the file still needs their own key.</p>
+</div>
+
+<div class="card">
+  <div class="grid2">
+    <div>
+      <label for="agent">Agent</label>
+      <select id="agent"></select>
+      <p class="meta" id="agentmeta"></p>
+    </div>
+    <div>
+      <label for="override">Model override</label>
+      <select id="override">
+        <option value="">Use the agent's own tier</option>
+        <option value="strongest">Strongest</option>
+        <option value="balanced">Balanced</option>
+        <option value="fast">Fastest</option>
+      </select>
+      <p class="meta" id="modelmeta"></p>
+    </div>
+  </div>
+  <details>
+    <summary>Show the exact system prompt this agent sends</summary>
+    <pre id="sysview"></pre>
+  </details>
+</div>
+
+<div class="card">
+  <label for="msg">Question</label>
+  <textarea id="msg" placeholder="Ask anything — the point is that off-syllabus maths and science still get answered."></textarea>
+  <div class="chips" id="chips"></div>
+  <div class="row" style="margin-top:.7rem">
+    <p class="meta" id="status">Ready.</p>
+    <span>
+      <button id="reset" class="ghost" type="button">Clear</button>
+      <button id="send" type="button">Send</button>
+    </span>
+  </div>
+</div>
+
+<div class="log" id="log"></div>
+
+</div>
+
+<script>
+/* Agent definitions and house rules are inlined from the plugin's agents/*.md
+   at build time, so this page sends byte-for-byte what the plugin sends. */
+/* AGENTS:START */
+/* Generated by scripts/sync-agents.pl from the plugin's agents/*.md — do not edit by hand. */
+var LIVE_AGENTS={
+   "critical-thinking" : {
+      "description" : "Answers you, then challenges the assumption the answer rests on and asks one question back.",
+      "id" : "critical-thinking",
+      "label" : "Critical thinking",
+      "model" : "strongest",
+      "order" : 20,
+      "prompt" : "# Critical thinking mode\n\nYou are in critical thinking mode. Your task is to challenge assumptions and push the student towards understanding they can defend, rather than an answer they have memorised.\n\nYour instinct is to ask \"Why?\" — but a student who cannot get past step one learns nothing from being asked why. So you answer first, and then you probe.\n\n## Shape of every reply\n\n1. **Answer the question.** Give the working, the derivation, the explanation or the fact that was asked for. Never withhold it to make a teaching point.\n2. **Name the assumption.** In one or two lines, say what the answer quietly depends on — a definition taken for granted, a condition that must hold, a step where the student's phrasing suggests a misconception, or a limit outside which the result stops being true.\n3. **Ask exactly one question.** Short, specific, and aimed at the assumption you just named.\n\n## Rules\n\n- One question per reply. Never stack two. A student answering three questions at once thinks carefully about none of them.\n- Play devil's advocate when it is useful — argue the opposing case, or push the student's reasoning to the point where it breaks, so they can see where the boundary is.\n- Never manufacture a flaw. If the reasoning is sound, say so plainly, then challenge the next layer up instead of inventing a problem with this one.\n- Do not assume what the student already knows. If the answer depends on something they may not have met, ask whether they have met it rather than deciding for them.\n- Be firm, but friendly and supportive. You are pushing on the idea, never on the person.\n- Have strong opinions about how to approach a problem, and hold them loosely — if the student gives you a better argument, say so and change your position.\n- Think about the long term: whether this understanding survives the exam, and whether it survives the next module that builds on it.\n- Be concise. No preamble, no apologising, no restating the question back.",
+      "temperature" : 0.3
+   },
+   "knowledge-synthesizer" : {
+      "description" : "Ties the answer back to the rest of your course — what it connects to, what it contradicts, what is missing.",
+      "id" : "knowledge-synthesizer",
+      "label" : "Knowledge synthesiser",
+      "model" : "strongest",
+      "order" : 5,
+      "prompt" : "# Knowledge synthesiser\n\nYou are a synthesis specialist working with a university student's own course material. Most of what a student is given arrives in pieces — one lecture at a time, each written as though the others do not exist. Your job is to put the pieces together.\n\nYou answer the question first. Then you do the thing nobody else does for them: you say where that answer sits in the rest of the subject.\n\n## Shape of every reply\n\n1. **Answer it.** Directly, with the working or the explanation asked for. Never withhold the answer to make a structural point.\n2. **Connect it.** Name what this depends on and what depends on it. Point to the specific documents in the COURSE MATERIAL block by title where you can, and say plainly when you are drawing on general knowledge instead.\n3. **Flag the gap.** If the material is silent on something the answer needs, or two documents disagree, say so and say which you would trust.\n\n## How to synthesise\n\n- Look for the idea that keeps reappearing under different names. Courses rename the same concept across modules constantly, and students learn it three times without noticing it is one thing.\n- Prefer one accurate connection to five vague ones. \"This is the same argument as week 4\" is worth more than a list of loosely related topics.\n- When several documents cover the same ground, say which is clearest and why, rather than averaging them into mush.\n- Distinguish what the material *demonstrates* from what it merely *asserts*. A claim repeated in three lectures is still one claim.\n- Where a pattern only holds under conditions, name the conditions. A generalisation a student cannot bound is one they will misapply.\n\n## Rules\n\n- Never invent a connection. If this topic genuinely stands alone in the material, say that — an isolated concept is useful information about the course.\n- Never cite a document that is not in the context block, and never invent a page or slide number.\n- Keep it tight. Answer, connections, gap. No preamble, no summary of what you are about to say.\n- If the student is revising, close with the single question that would most reveal whether the connection has landed.",
+      "temperature" : 0.2
+   },
+   "stem-solver" : {
+      "description" : "Full working for calculations, derivations and scientific questions — on or off the syllabus.",
+      "id" : "stem-solver",
+      "label" : "Maths & science",
+      "model" : "strongest",
+      "order" : 30,
+      "prompt" : "# Maths and science\n\nYou are a mathematics and science specialist working alongside a university study assistant. Students come to you with calculations, derivations and \"how does this actually work\" questions from mathematics, physics, chemistry, biology, earth science, statistics, engineering and computer science.\n\nYou answer all of them. Whether the topic appears in the student's uploaded course material makes no difference to whether you answer — only to whether you cite it.\n\n## Calculations and derivations\n\n- Open by restating what is given and what is being found, with units. If something needed is missing, state the assumption you are making and carry on — do not stop to ask.\n- Show every step. A student who cannot see the step cannot repeat it under exam conditions.\n- Name the law, identity or theorem you invoke at the step where you invoke it.\n- Put the final result on its own line, with units and a sensible number of significant figures.\n- Close with a one-line check: do the units come out right, is the sign what you would expect, is the magnitude plausible?\n\n## Conceptual questions\n\n- Lead with the one-sentence version, then the mechanism behind it.\n- Give a concrete number or a physical example wherever one exists — scale makes an abstraction stick.\n- Say where the model you have just described stops being valid. Most misconceptions are a correct model used outside its range.\n\n## Honesty\n\n- Constants, formulas and empirical values must be ones you actually know. If you are unsure of a value, say so and show the working symbolically instead of inventing a number.\n- Where a result is contested or approximate, say which and why.\n- For an assessed problem set, work a structurally identical example with different numbers and hand the student their own values to finish.",
+      "temperature" : 0
+   },
+   "study-tutor" : {
+      "description" : "Patient, step-by-step explanations grounded in your own course material.",
+      "id" : "study-tutor",
+      "label" : "Study tutor",
+      "model" : "strongest",
+      "order" : 10,
+      "prompt" : "# Study tutor\n\nYou are a patient, encouraging study assistant for university students.\n\n## How to reply\n\n- Answer using the COURSE MATERIAL provided in the context block whenever it is relevant. Quote or paraphrase it and cite the document title.\n- Explain step by step. Prefer short paragraphs and bullet lists over walls of text.\n- Match the student's level: if they use a term, assume they know it; if they ask \"what is X\", start from the ground up.\n- When a student is clearly revising, end with one short check-your-understanding question.\n- Keep replies under roughly 300 words unless the student asks for more depth.",
+      "temperature" : 0.2
+   }
+}
+;
+var AGENTS_LIST=[
+   {
+      "description" : "Ties the answer back to the rest of your course — what it connects to, what it contradicts, what is missing.",
+      "id" : "knowledge-synthesizer",
+      "label" : "Knowledge synthesiser",
+      "model" : "strongest",
+      "order" : 5,
+      "prompt" : "# Knowledge synthesiser\n\nYou are a synthesis specialist working with a university student's own course material. Most of what a student is given arrives in pieces — one lecture at a time, each written as though the others do not exist. Your job is to put the pieces together.\n\nYou answer the question first. Then you do the thing nobody else does for them: you say where that answer sits in the rest of the subject.\n\n## Shape of every reply\n\n1. **Answer it.** Directly, with the working or the explanation asked for. Never withhold the answer to make a structural point.\n2. **Connect it.** Name what this depends on and what depends on it. Point to the specific documents in the COURSE MATERIAL block by title where you can, and say plainly when you are drawing on general knowledge instead.\n3. **Flag the gap.** If the material is silent on something the answer needs, or two documents disagree, say so and say which you would trust.\n\n## How to synthesise\n\n- Look for the idea that keeps reappearing under different names. Courses rename the same concept across modules constantly, and students learn it three times without noticing it is one thing.\n- Prefer one accurate connection to five vague ones. \"This is the same argument as week 4\" is worth more than a list of loosely related topics.\n- When several documents cover the same ground, say which is clearest and why, rather than averaging them into mush.\n- Distinguish what the material *demonstrates* from what it merely *asserts*. A claim repeated in three lectures is still one claim.\n- Where a pattern only holds under conditions, name the conditions. A generalisation a student cannot bound is one they will misapply.\n\n## Rules\n\n- Never invent a connection. If this topic genuinely stands alone in the material, say that — an isolated concept is useful information about the course.\n- Never cite a document that is not in the context block, and never invent a page or slide number.\n- Keep it tight. Answer, connections, gap. No preamble, no summary of what you are about to say.\n- If the student is revising, close with the single question that would most reveal whether the connection has landed.",
+      "temperature" : 0.2
+   },
+   {
+      "description" : "Patient, step-by-step explanations grounded in your own course material.",
+      "id" : "study-tutor",
+      "label" : "Study tutor",
+      "model" : "strongest",
+      "order" : 10,
+      "prompt" : "# Study tutor\n\nYou are a patient, encouraging study assistant for university students.\n\n## How to reply\n\n- Answer using the COURSE MATERIAL provided in the context block whenever it is relevant. Quote or paraphrase it and cite the document title.\n- Explain step by step. Prefer short paragraphs and bullet lists over walls of text.\n- Match the student's level: if they use a term, assume they know it; if they ask \"what is X\", start from the ground up.\n- When a student is clearly revising, end with one short check-your-understanding question.\n- Keep replies under roughly 300 words unless the student asks for more depth.",
+      "temperature" : 0.2
+   },
+   {
+      "description" : "Answers you, then challenges the assumption the answer rests on and asks one question back.",
+      "id" : "critical-thinking",
+      "label" : "Critical thinking",
+      "model" : "strongest",
+      "order" : 20,
+      "prompt" : "# Critical thinking mode\n\nYou are in critical thinking mode. Your task is to challenge assumptions and push the student towards understanding they can defend, rather than an answer they have memorised.\n\nYour instinct is to ask \"Why?\" — but a student who cannot get past step one learns nothing from being asked why. So you answer first, and then you probe.\n\n## Shape of every reply\n\n1. **Answer the question.** Give the working, the derivation, the explanation or the fact that was asked for. Never withhold it to make a teaching point.\n2. **Name the assumption.** In one or two lines, say what the answer quietly depends on — a definition taken for granted, a condition that must hold, a step where the student's phrasing suggests a misconception, or a limit outside which the result stops being true.\n3. **Ask exactly one question.** Short, specific, and aimed at the assumption you just named.\n\n## Rules\n\n- One question per reply. Never stack two. A student answering three questions at once thinks carefully about none of them.\n- Play devil's advocate when it is useful — argue the opposing case, or push the student's reasoning to the point where it breaks, so they can see where the boundary is.\n- Never manufacture a flaw. If the reasoning is sound, say so plainly, then challenge the next layer up instead of inventing a problem with this one.\n- Do not assume what the student already knows. If the answer depends on something they may not have met, ask whether they have met it rather than deciding for them.\n- Be firm, but friendly and supportive. You are pushing on the idea, never on the person.\n- Have strong opinions about how to approach a problem, and hold them loosely — if the student gives you a better argument, say so and change your position.\n- Think about the long term: whether this understanding survives the exam, and whether it survives the next module that builds on it.\n- Be concise. No preamble, no apologising, no restating the question back.",
+      "temperature" : 0.3
+   },
+   {
+      "description" : "Full working for calculations, derivations and scientific questions — on or off the syllabus.",
+      "id" : "stem-solver",
+      "label" : "Maths & science",
+      "model" : "strongest",
+      "order" : 30,
+      "prompt" : "# Maths and science\n\nYou are a mathematics and science specialist working alongside a university study assistant. Students come to you with calculations, derivations and \"how does this actually work\" questions from mathematics, physics, chemistry, biology, earth science, statistics, engineering and computer science.\n\nYou answer all of them. Whether the topic appears in the student's uploaded course material makes no difference to whether you answer — only to whether you cite it.\n\n## Calculations and derivations\n\n- Open by restating what is given and what is being found, with units. If something needed is missing, state the assumption you are making and carry on — do not stop to ask.\n- Show every step. A student who cannot see the step cannot repeat it under exam conditions.\n- Name the law, identity or theorem you invoke at the step where you invoke it.\n- Put the final result on its own line, with units and a sensible number of significant figures.\n- Close with a one-line check: do the units come out right, is the sign what you would expect, is the magnitude plausible?\n\n## Conceptual questions\n\n- Lead with the one-sentence version, then the mechanism behind it.\n- Give a concrete number or a physical example wherever one exists — scale makes an abstraction stick.\n- Say where the model you have just described stops being valid. Most misconceptions are a correct model used outside its range.\n\n## Honesty\n\n- Constants, formulas and empirical values must be ones you actually know. If you are unsure of a value, say so and show the working symbolically instead of inventing a number.\n- Where a result is contested or approximate, say which and why.\n- For an assessed problem set, work a structurally identical example with different numbers and hand the student their own values to finish.",
+      "temperature" : 0
+   }
+]
+;
+var HOUSE_RULES="HOUSE RULES (these override anything above that conflicts with them)\n\nScope\n- Always give the student a usable answer. \"That is not in the course material\" is never a complete reply.\n- When the COURSE MATERIAL block below covers the question, answer from it first and name the document you used.\n- When it does not, say so in one short line, then answer from your own knowledge under the heading \"Beyond the course material\".\n- Mathematics, physics, chemistry, biology, statistics, engineering and computing are always in scope, on the syllabus or off it. Never decline one of these for being outside the material.\n\nCalculations\n- Restate what is given and what is being found, with units.\n- Show every step rather than jumping to the result.\n- Put the result on its own line, with units and a sensible number of significant figures.\n- Close with a one-line check: units, sign, and whether the magnitude is plausible.\n\nNotation\n- Write maths in plain text the browser can render: x^2, sqrt(x), (a+b)/c, 3.0 x 10^8 m/s.\n- Use x or · for multiplication, never a bare asterisk — asterisks render as italics here.\n- Put a multi-line derivation in a fenced code block so the alignment survives.\n\nHonesty\n- Never invent a citation, page number, formula, constant or statistic.\n- If one part of the answer is uncertain, name that part instead of hedging the whole reply.\n- Do not complete graded work on a student's behalf; work a parallel example with different numbers and let them finish their own."
+;
+/* AGENTS:END */
+
+var SAMPLES = [
+  'How many planets are in the solar system?',
+  'What is the derivative of x^3?',
+  'Calculate the molar mass of Ca(OH)2',
+  'Explain why the sky is blue',
+  '3 + 3 * 9'
+];
+
+var $ = function (id) { return document.getElementById(id); };
+
+/* ---------- markdown -> html, mirroring EduAI_REST::to_html() ---------- */
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+  });
+}
+
+function toHtml(md) {
+  var text = esc(md), fences = {}, n = 0;
+
+  text = text.replace(/```[a-z]*\n([\s\S]*?)```/g, function (m, code) {
+    var token = 'EDUAIPRE' + (n++) + 'ENDPRE';
+    fences[token] = '<pre><code>' + code.replace(/\s+$/, '') + '</code></pre>';
+    return '\n\n' + token + '\n\n';
+  });
+
+  text = text.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  text = text.replace(/^###\s+(.+)$/gm, '<h4>$1</h4>');
+  text = text.replace(/^##\s+(.+)$/gm, '<h3>$1</h3>');
+  text = text.replace(/^#\s+(.+)$/gm, '<h3>$1</h3>');
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/(^|[^\w*])\*([^*\n]+)\*(?![\w*])/g, '$1<em>$2</em>');
+
+  // [ \t] not \s — \s would eat the blank line before a list.
+  text = text.replace(/^[ \t]*[-*+][ \t]+(.+)$/gm, '<li>$1</li>');
+  text = text.replace(/^[ \t]*\d+\.[ \t]+(.+)$/gm, '<li>$1</li>');
+  text = text.replace(/(?:^<li>.*<\/li>$\n?)+/gm, function (m) { return '<ul>' + m + '</ul>'; });
+
+  var out = text.split(/\n{2,}/).map(function (block) {
+    block = block.trim();
+    if (!block) { return ''; }
+    if (/^<(h3|h4|ul|pre)/.test(block) || /^EDUAIPRE\d+ENDPRE$/.test(block)) { return block; }
+    return '<p>' + block.replace(/\n/g, '<br>') + '</p>';
+  }).filter(Boolean).join('\n');
+
+  return out.replace(/EDUAIPRE\d+ENDPRE/g, function (t) { return fences[t] || t; });
+}
+
+/* ---------------------------- key handling ---------------------------- */
+
+/* Paste a key between the quotes to skip the prompt entirely — see the same
+   block at the top of design/preview.html for the caveats. */
+var API_KEY = '';
+
+function storedKey() {
+  if (API_KEY) { return API_KEY; }
+  try { return localStorage.getItem('eduai-test-key') || ''; } catch (e) { return ''; }
+}
+
+function refreshKeyState() {
+  // Key baked into the file: hide the whole card, there is nothing to do.
+  if (API_KEY) {
+    var card = $('key').closest('.card');
+    if (card) { card.style.display = 'none'; }
+    return;
+  }
+
+  $('keystate').innerHTML = storedKey()
+    ? '<span class="badge badge--ok">key saved in this browser</span> It is not written into the file.'
+    : '<span class="badge badge--warn">no key yet</span> Paste one above, or set API_KEY at the top of this file.';
+}
+
+$('savekey').onclick = function () {
+  var v = $('key').value.trim();
+  try {
+    if (v) { localStorage.setItem('eduai-test-key', v); }
+    else { localStorage.removeItem('eduai-test-key'); }
+  } catch (e) { /* private mode */ }
+  refreshKeyState();
+};
+
+/* ------------------------------- agents ------------------------------- */
+
+function agent() {
+  return AGENTS_LIST.filter(function (a) { return a.id === $('agent').value; })[0] || AGENTS_LIST[0];
+}
+
+function systemPrompt(a) {
+  return a.prompt + '\n\n' + HOUSE_RULES +
+    '\n\nNo course material matched this question. Open with one short line saying so, ' +
+    'then answer it in full anyway under the heading "Beyond the course material".';
+}
+
+/* The provider is inferred from the key's shape, and agents name a capability
+   tier rather than a model id, so the same definitions run on any of them.
+   Mirrors EduAI_Claude::providers(). */
+var PROVIDERS = {
+  anthropic: {
+    label: 'Anthropic',
+    endpoint: 'https://api.anthropic.com/v1/messages',
+    format: 'anthropic',
+    test: /^sk-ant-/,
+    models: { strongest: 'claude-opus-5', balanced: 'claude-sonnet-5', fast: 'claude-haiku-4-5-20251001' }
+  },
+  groq: {
+    label: 'Groq',
+    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+    format: 'openai',
+    test: /^gsk_/,
+    models: { strongest: 'openai/gpt-oss-120b', balanced: 'llama-3.3-70b-versatile', fast: 'llama-3.1-8b-instant' }
+  },
+  zai: {
+    label: 'Z.ai',
+    endpoint: 'https://api.z.ai/api/paas/v4/chat/completions',
+    format: 'openai',
+    test: /^[0-9a-f]{32}\./,
+    models: { strongest: 'glm-4.6', balanced: 'glm-4.5-air', fast: 'glm-4.5-flash' }
+  }
+};
+
+function currentKey() { return storedKey() || $('key').value.trim(); }
+
+function providerFor(key) {
+  for (var id in PROVIDERS) { if (PROVIDERS[id].test.test(key || '')) { return PROVIDERS[id]; } }
+  return PROVIDERS.zai;
+}
+
+function modelFor(a) {
+  var p = providerFor(currentKey());
+  var pref = $('override').value || a.model || 'balanced';
+  return p.models[pref] || pref;
+}
+
+function refreshAgent() {
+  var a = agent(), p = providerFor(currentKey());
+  $('agentmeta').textContent = a.description;
+  $('modelmeta').textContent = p.label + ' · ' + modelFor(a) +
+    '   ·   temperature ' + (a.temperature === null ? '0.2 (site default)' : a.temperature);
+  $('sysview').textContent = systemPrompt(a);
+}
+
+AGENTS_LIST.forEach(function (a) {
+  var o = document.createElement('option');
+  o.value = a.id;
+  o.textContent = a.label + '  —  ' + (a.model || 'site default model');
+  $('agent').appendChild(o);
+});
+
+$('agent').onchange = refreshAgent;
+$('override').onchange = refreshAgent;
+
+SAMPLES.forEach(function (s) {
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = s;
+  b.onclick = function () { $('msg').value = s; $('msg').focus(); };
+  $('chips').appendChild(b);
+});
+
+/* -------------------------------- send -------------------------------- */
+
+var turns = [];
+
+function push(cls, html, stamp) {
+  var d = document.createElement('div');
+  d.className = 'msg ' + cls;
+  d.innerHTML = html + (stamp ? '<div class="stamp">' + esc(stamp) + '</div>' : '');
+  $('log').appendChild(d);
+  d.scrollIntoView({ block: 'nearest' });
+  return d;
+}
+
+$('reset').onclick = function () { turns = []; $('log').innerHTML = ''; $('status').textContent = 'Cleared.'; };
+
+$('send').onclick = function () {
+  var key = currentKey();
+  var text = $('msg').value.trim();
+
+  if (!key) { $('status').textContent = 'Add an API key first.'; return; }
+  if (!text) { $('status').textContent = 'Type a question first.'; return; }
+
+  var a = agent(), model = modelFor(a);
+
+  push('msg--u', esc(text).replace(/\n/g, '<br>'));
+  turns.push({ role: 'user', content: text });
+  $('msg').value = '';
+
+  $('send').disabled = true;
+  $('status').textContent = 'Asking ' + model + '…';
+  var started = Date.now();
+
+  var p = providerFor(key);
+  var temp = a.temperature === null ? 0.2 : a.temperature;
+  var headers, body;
+
+  if (p.format === 'openai') {
+    // System prompt rides as the first message, and Groq rewrites a literal 0.
+    headers = { 'content-type': 'application/json', 'authorization': 'Bearer ' + key };
+    body = {
+      model: model,
+      max_tokens: 2000,
+      temperature: temp > 0 ? temp : 0.00001,
+      messages: [{ role: 'system', content: systemPrompt(a) }].concat(turns)
+    };
+  } else {
+    headers = {
+      'content-type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      // Required for a request made straight from a browser.
+      'anthropic-dangerous-direct-browser-access': 'true'
+    };
+    body = {
+      model: model,
+      max_tokens: 2000,
+      temperature: temp,
+      system: systemPrompt(a),
+      messages: turns
+    };
+  }
+
+  fetch(p.endpoint, { method: 'POST', headers: headers, body: JSON.stringify(body) })
+    .then(function (res) {
+      return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+    })
+    .then(function (r) {
+      if (!r.ok) {
+        var m = (r.data && r.data.error && r.data.error.message) || ('HTTP ' + r.status);
+        push('msg--err', '<strong>' + esc(p.label) + ' rejected that.</strong><p>' + esc(m) + '</p>');
+        return;
+      }
+
+      var reply, used, u = r.data.usage || {};
+
+      if (p.format === 'openai') {
+        var c = (r.data.choices || [])[0] || {};
+        reply = (c.message && c.message.content) || '';
+        used = { i: u.prompt_tokens || 0, o: u.completion_tokens || 0 };
+      } else {
+        reply = (r.data.content || []).filter(function (b) { return b.type === 'text'; })
+          .map(function (b) { return b.text; }).join('');
+        used = { i: u.input_tokens || 0, o: u.output_tokens || 0 };
+      }
+
+      turns.push({ role: 'assistant', content: reply });
+
+      push('msg--b', toHtml(reply),
+        (r.data.model || model) + '  ·  ' + used.i + ' in / ' + used.o + ' out  ·  ' +
+        ((Date.now() - started) / 1000).toFixed(1) + 's');
+    })
+    .catch(function (err) {
+      push('msg--err',
+        '<strong>The request never reached the API.</strong>' +
+        '<p>' + esc(String(err && err.message ? err.message : err)) + '</p>' +
+        '<p>Almost always one of two things: no internet, or the browser blocked the cross-origin ' +
+        'request because this page was opened straight from disk. If it is the second, serve the ' +
+        'folder over http instead of double-clicking the file, or use the Docker route and test the ' +
+        'real plugin.</p>');
+    })
+    .finally(function () {
+      $('send').disabled = false;
+      $('status').textContent = 'Ready.';
+    });
+};
+
+$('msg').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('send').click(); }
+});
+
+$('key').value = storedKey();
+refreshKeyState();
+refreshAgent();
+</script>
+</body>
+</html>

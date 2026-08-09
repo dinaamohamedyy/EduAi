@@ -1,0 +1,157 @@
+name: Deploy to WordPress host
+
+# Ships the custom theme and plugins to the live server.
+# WordPress core, uploads and third-party plugins are managed on the server —
+# this workflow only syncs the code that lives in this repository.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Pull requests run the checks only (see the `if` on the deploy job), so they
+# must not share a concurrency group with production — otherwise opening a PR
+# would cancel a deploy that is mid-rsync. Keyed per ref: superseded PR runs
+# cancel each other, deploys never get cancelled part-way through.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # First, and deliberately: a live key reaching a public repository is the
+      # one failure here that cannot be undone by a follow-up commit.
+      - name: No secrets in shippable files
+        run: perl scripts/check-no-secrets.pl
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      # scripts/ is in scope here for the same reason it is on the JavaScript
+      # step below: the checkers are hand-edited files that nothing else lints.
+      # It earned its place on this step when calc-parity.php and
+      # redaction-guard.php arrived — both are executed further down, so a parse
+      # error would fail the build regardless, but as an opaque runtime error
+      # rather than a named syntax failure pointing at the line.
+      - name: PHP syntax check
+        run: |
+          find wp-content php scripts -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -l \
+            | grep -v 'No syntax errors' && exit 1 || echo "PHP OK"
+
+      # scripts/ is in scope for the same reason php/ is on the PHP step: the
+      # checkers themselves are hand-edited files that nothing else lints.
+      - name: JavaScript syntax check
+        run: |
+          for f in $(find wp-content scripts -name '*.js'); do
+            node --check "$f" || exit 1
+          done
+          echo "JS OK"
+
+      - name: Inline JavaScript syntax check (HTML pages)
+        run: node scripts/check-inline-js.js
+
+      - name: Shell syntax check
+        run: bash -n scripts/setup.sh
+
+      # Cross-file agreements the codebase asserts in prose: agent prompts,
+      # model registries, markdown rules, preview copies, auth notice flags.
+      - name: Contract tests
+        run: perl scripts/contract-tests.pl
+
+      # AiCalc answers arithmetic in code rather than asking the model, so the
+      # PHP evaluator and the JavaScript one in the preview page have to agree
+      # exactly — same answer, same working, same refusals. Two steps because
+      # the two halves run on different interpreters: the first re-derives the
+      # expected results from design/preview.html, the second holds the PHP
+      # port to them.
+      - name: AiCalc reference is unchanged
+        run: node scripts/calc-parity.js
+
+      - name: AiCalc PHP port matches the reference
+        run: php scripts/calc-parity.php
+
+      # Behavioural, needs PHP, so it lives here rather than in the Perl
+      # contract tests: runs the real EduAI_Exams::redact() over the fixture
+      # and fails if answer_index/expected/explanation survive — the "exam
+      # ships with its own answer key" regression.
+      - name: PrepareME redaction guard
+        run: php scripts/redaction-guard.php
+
+  deploy:
+    name: Deploy
+    needs: lint
+    # Pull requests get the checks above and stop there. Only main and a manual
+    # dispatch reach the server.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # Option A — SSH/rsync (Cloudways, a VPS, most managed WP hosts).
+      # Add these repository secrets:
+      #   SSH_HOST, SSH_USER, SSH_PORT, SSH_PRIVATE_KEY, REMOTE_PATH
+      # ------------------------------------------------------------------
+      - name: Install the SSH key
+        if: ${{ vars.DEPLOY_METHOD == 'ssh' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${{ secrets.SSH_PORT || 22 }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync theme and plugins over rsync
+        if: ${{ vars.DEPLOY_METHOD == 'ssh' }}
+        run: |
+          rsync -avz --delete \
+            -e "ssh -p ${{ secrets.SSH_PORT || 22 }} -i ~/.ssh/id_ed25519" \
+            --exclude '.git*' --exclude 'node_modules' \
+            wp-content/themes/scholaris/ \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}/wp-content/themes/scholaris/"
+
+          rsync -avz --delete \
+            -e "ssh -p ${{ secrets.SSH_PORT || 22 }} -i ~/.ssh/id_ed25519" \
+            --exclude '.git*' \
+            wp-content/plugins/eduai-assistant/ \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}/wp-content/plugins/eduai-assistant/"
+
+          rsync -avz --delete \
+            -e "ssh -p ${{ secrets.SSH_PORT || 22 }} -i ~/.ssh/id_ed25519" \
+            --exclude '.git*' \
+            wp-content/plugins/scholaris-library/ \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}/wp-content/plugins/scholaris-library/"
+
+      # ------------------------------------------------------------------
+      # Option B — FTPS (shared hosting: Hostinger, Namecheap, GoDaddy).
+      # Set the repository variable DEPLOY_METHOD to "ftp" and add secrets:
+      #   FTP_SERVER, FTP_USERNAME, FTP_PASSWORD
+      # ------------------------------------------------------------------
+      - name: Upload over FTPS
+        if: ${{ vars.DEPLOY_METHOD == 'ftp' }}
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          local-dir: ./wp-content/
+          server-dir: ${{ secrets.FTP_REMOTE_DIR }}
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/uploads/**
+
+      - name: Deployment summary
+        run: echo "Deployed ${{ github.sha }} via ${{ vars.DEPLOY_METHOD || 'ssh' }}" >> $GITHUB_STEP_SUMMARY

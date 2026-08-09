@@ -1,0 +1,458 @@
+/* ==========================================================================
+   EduAI Assistant — chat UI
+   Self-contained: falls back to its own "modern academia" values (ink, paper,
+   laurel, bronze) when the Scholaris tokens are absent, so the widget looks
+   right on any theme.
+   ========================================================================== */
+
+.eduai-app,
+.eduai-launcher,
+.eduai-card {
+  --eduai-brand: var(--brand, 161 45% 25%);
+  --eduai-brand-strong: var(--brand-strong, 162 50% 18%);
+  --eduai-accent: var(--accent, 33 58% 42%);
+  --eduai-on-brand: var(--on-brand, 43 38% 96%);
+  --eduai-surface: var(--surface, 45 50% 99%);
+  --eduai-bg: var(--bg, 45 38% 97%);
+  --eduai-bg-subtle: var(--bg-subtle, 45 30% 94%);
+  --eduai-sunken: var(--bg-sunken, 44 24% 90%);
+  --eduai-border: var(--border, 44 18% 85%);
+  --eduai-border-strong: var(--border-strong, 44 13% 72%);
+  --eduai-text: var(--text, 210 26% 14%);
+  --eduai-muted: var(--text-muted, 213 12% 38%);
+  --eduai-radius: var(--radius-l, 16px);
+  --eduai-radius-s: var(--radius-s, 8px);
+  --eduai-font: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+  --eduai-serif: var(--font-display, "Fraunces", "Iowan Old Style", Georgia, serif);
+  --eduai-mono: var(--font-mono, "Spline Sans Mono", ui-monospace, Menlo, Consolas, monospace);
+  --eduai-body-h: 480px;
+}
+
+/* --------------------------------------------------------------- shell ---- */
+.eduai-app {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--eduai-font);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: hsl(var(--eduai-text));
+  background: hsl(var(--eduai-surface));
+  border: 1px solid hsl(var(--eduai-border));
+  border-radius: var(--eduai-radius);
+  box-shadow: 0 8px 18px hsl(30 22% 12% / 0.07), 0 24px 56px hsl(30 22% 12% / 0.12);
+  overflow: hidden;
+  max-height: 100%;
+}
+
+.eduai-app--inline { height: calc(var(--eduai-body-h) + 128px); }
+
+/* ---------------------------------------------------------------- head ---- */
+.eduai-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: hsl(var(--eduai-brand-strong));
+  border-bottom: 1px solid hsl(var(--eduai-accent) / 0.5);
+  color: hsl(var(--eduai-on-brand));
+  flex: none;
+}
+
+.eduai-avatar {
+  width: 34px; height: 34px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: hsl(var(--eduai-on-brand) / 0.1);
+  box-shadow: inset 0 0 0 1px hsl(var(--eduai-on-brand) / 0.25);
+}
+
+.eduai-head__text { display: grid; line-height: 1.25; min-width: 0; }
+.eduai-head__text strong {
+  font-family: var(--eduai-serif);
+  font-size: 1.02rem; font-weight: 600; letter-spacing: -0.01em;
+}
+.eduai-status {
+  font-family: var(--eduai-mono);
+  font-size: 0.64rem; letter-spacing: 0.05em; opacity: 0.8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.eduai-status::before {
+  content: ""; display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: hsl(150 55% 55%); margin-right: 5px; vertical-align: 1px;
+}
+.eduai-app.is-busy .eduai-status::before { background: hsl(42 88% 58%); animation: eduai-pulse 1s infinite; }
+@keyframes eduai-pulse { 50% { opacity: 0.3; } }
+
+.eduai-head__actions { margin-left: auto; display: flex; gap: 0.25rem; flex: none; }
+
+.eduai-icon {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border: 0; border-radius: 7px;
+  background: hsl(var(--eduai-on-brand) / 0.1); color: hsl(var(--eduai-on-brand));
+  cursor: pointer; padding: 0;
+  transition: background-color 140ms ease;
+}
+.eduai-icon:hover { background: hsl(var(--eduai-on-brand) / 0.22); }
+
+/* ---------------------------------------------------------------- tabs ---- */
+.eduai-tabs {
+  display: flex; gap: 0.25rem; flex: none;
+  padding: 0.5rem 0.6rem 0;
+  background: hsl(var(--eduai-bg-subtle));
+  border-bottom: 1px solid hsl(var(--eduai-border));
+}
+
+.eduai-tab {
+  border: 0; background: transparent; cursor: pointer;
+  font: inherit; font-size: 0.85rem; font-weight: 600;
+  color: hsl(var(--eduai-muted));
+  padding: 0.5rem 0.8rem;
+  border-radius: 7px 7px 0 0;
+  border-bottom: 2px solid transparent;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.eduai-tab:hover { color: hsl(var(--eduai-text)); }
+.eduai-tab.is-active { color: hsl(var(--eduai-text)); border-bottom-color: hsl(var(--eduai-accent)); }
+
+.eduai-pane { display: none; flex-direction: column; min-height: 0; flex: 1; }
+.eduai-pane.is-active { display: flex; }
+
+/* ----------------------------------------------------------------- log ---- */
+.eduai-log {
+  flex: 1; min-height: 0;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex; flex-direction: column; gap: 0.85rem;
+  background: hsl(var(--eduai-bg));
+  scrollbar-width: thin;
+}
+.eduai-app--inline .eduai-log { height: var(--eduai-body-h); }
+.eduai-log::-webkit-scrollbar { width: 8px; }
+.eduai-log::-webkit-scrollbar-thumb { background: hsl(var(--eduai-border)); border-radius: 4px; }
+
+.eduai-msg { display: flex; gap: 0.6rem; max-width: 92%; animation: eduai-in 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes eduai-in { from { opacity: 0; transform: translateY(8px); } }
+
+.eduai-msg--user { margin-left: auto; flex-direction: row-reverse; }
+
+.eduai-bubble {
+  padding: 0.7rem 0.9rem;
+  border-radius: 14px;
+  background: hsl(var(--eduai-surface));
+  border: 1px solid hsl(var(--eduai-border));
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.eduai-msg--user .eduai-bubble {
+  background: hsl(var(--eduai-brand));
+  border-color: hsl(var(--eduai-brand));
+  color: hsl(var(--eduai-on-brand));
+  border-bottom-right-radius: 4px;
+}
+.eduai-msg--bot .eduai-bubble { border-bottom-left-radius: 4px; }
+
+.eduai-bubble > :first-child { margin-top: 0; }
+.eduai-bubble > :last-child { margin-bottom: 0; }
+.eduai-bubble p { margin: 0 0 0.6rem; }
+.eduai-bubble h3 { font-size: 0.98rem; margin: 0.9rem 0 0.35rem; font-weight: 700; }
+.eduai-bubble h4 { font-size: 0.9rem; margin: 0.75rem 0 0.3rem; font-weight: 700; }
+.eduai-bubble ul, .eduai-bubble ol { margin: 0 0 0.6rem; padding-left: 1.15rem; }
+.eduai-bubble li { margin-bottom: 0.2rem; }
+.eduai-bubble code { font-family: var(--eduai-mono); background: hsl(var(--eduai-sunken) / 0.8); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.87em; }
+.eduai-bubble pre { font-family: var(--eduai-mono); background: hsl(var(--eduai-sunken) / 0.8); padding: 0.7rem; border-radius: 8px; overflow-x: auto; margin: 0 0 0.6rem; }
+.eduai-bubble pre code { background: none; padding: 0; }
+
+.eduai-sources {
+  margin-top: 0.5rem; padding-top: 0.5rem;
+  border-top: 1px dashed hsl(var(--eduai-border-strong));
+  font-size: 0.78rem;
+}
+.eduai-sources strong { display: block; font-family: var(--eduai-mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: hsl(var(--eduai-muted)); margin-bottom: 0.3rem; font-weight: 600; }
+.eduai-sources a {
+  display: inline-block; margin: 0 0.3rem 0.3rem 0;
+  padding: 0.15rem 0.5rem; border-radius: 4px;
+  background: hsl(var(--eduai-brand) / 0.08);
+  border: 1px solid hsl(var(--eduai-brand) / 0.25);
+  color: hsl(var(--eduai-brand));
+  text-decoration: none;
+}
+.eduai-sources a:hover { background: hsl(var(--eduai-brand) / 0.16); }
+
+.eduai-msg__tools { display: flex; gap: 0.3rem; margin-top: 0.4rem; }
+.eduai-msg__tools button {
+  border: 1px solid hsl(var(--eduai-border));
+  background: transparent; color: hsl(var(--eduai-muted));
+  font: inherit; font-size: 0.72rem;
+  padding: 0.15rem 0.5rem; border-radius: 5px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+}
+.eduai-msg__tools button:hover { color: hsl(var(--eduai-brand)); border-color: hsl(var(--eduai-brand) / 0.5); }
+.eduai-msg__tools button.is-active { color: hsl(var(--eduai-brand)); border-color: hsl(var(--eduai-brand) / 0.5); background: hsl(var(--eduai-brand) / 0.08); }
+
+/* Typing indicator */
+.eduai-typing { display: flex; gap: 4px; padding: 0.85rem 0.9rem; }
+.eduai-typing span {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: hsl(var(--eduai-muted) / 0.6);
+  animation: eduai-bounce 1.1s infinite;
+}
+.eduai-typing span:nth-child(2) { animation-delay: 0.15s; }
+.eduai-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes eduai-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-5px); opacity: 1; } }
+
+.eduai-error {
+  background: hsl(8 62% 95%); color: hsl(8 60% 34%);
+  border: 1px solid hsl(8 50% 82%);
+  padding: 0.6rem 0.8rem; border-radius: 10px; font-size: 0.85rem;
+}
+
+.eduai-empty {
+  text-align: center; color: hsl(var(--eduai-muted));
+  padding: 1.25rem 0.5rem; font-size: 0.9rem;
+}
+.eduai-empty svg { margin: 0 auto 0.5rem; color: hsl(var(--eduai-accent)); opacity: 0.8; }
+
+/* --------------------------------------------------------- suggestions ---- */
+.eduai-suggestions {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+  padding: 0 1rem 0.5rem; flex: none;
+}
+.eduai-suggestions:empty { display: none; }
+.eduai-suggestions button {
+  border: 1px solid hsl(var(--eduai-border-strong) / 0.7);
+  background: hsl(var(--eduai-surface)); color: hsl(var(--eduai-text));
+  font: inherit; font-size: 0.78rem;
+  padding: 0.3rem 0.7rem; border-radius: 7px; cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+.eduai-suggestions button:hover { border-color: hsl(var(--eduai-brand)); background: hsl(var(--eduai-brand) / 0.06); }
+
+/* ---------------------------------------------------------- agent bar ---- */
+.eduai-agentbar {
+  display: flex; align-items: center; gap: 0.45rem;
+  padding: 0 1rem 0.5rem; flex: none;
+  font-size: 0.75rem; color: hsl(var(--eduai-muted));
+}
+.eduai-agentbar label { flex: none; font-weight: 600; }
+.eduai-agentbar select {
+  font: inherit; font-size: 0.75rem;
+  padding: 0.25rem 1.4rem 0.25rem 0.5rem;
+  border: 1px solid hsl(var(--eduai-border-strong) / 0.7); border-radius: 7px;
+  background: hsl(var(--eduai-surface)); color: hsl(var(--eduai-text));
+  cursor: pointer; max-width: 55%;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+.eduai-agentbar select:hover { border-color: hsl(var(--eduai-brand)); }
+.eduai-agentbar select:focus-visible {
+  outline: none; border-color: hsl(var(--eduai-accent));
+  box-shadow: 0 0 0 3px hsl(var(--eduai-accent) / 0.25);
+}
+/* The blurb is a nicety — it is the first thing to go when space is tight. */
+.eduai-agentbar__hint {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.eduai-agentbar__hint:empty { display: none; }
+@media (max-width: 420px) {
+  .eduai-agentbar__hint { display: none; }
+  .eduai-agentbar select { max-width: none; flex: 1 1 auto; }
+}
+
+/* ------------------------------------------------------------ composer ---- */
+.eduai-composer {
+  display: flex; align-items: flex-end; gap: 0.4rem;
+  padding: 0.65rem; flex: none;
+  border-top: 1px solid hsl(var(--eduai-border));
+  background: hsl(var(--eduai-surface));
+}
+
+.eduai-composer textarea {
+  flex: 1; resize: none;
+  max-height: 130px; min-height: 42px;
+  padding: 0.6rem 0.75rem;
+  font: inherit; font-size: 0.92rem; line-height: 1.45;
+  color: hsl(var(--eduai-text));
+  background: hsl(var(--eduai-bg));
+  border: 1px solid hsl(var(--eduai-border-strong) / 0.7);
+  border-radius: 10px;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.eduai-composer textarea:focus {
+  outline: none;
+  border-color: hsl(var(--eduai-accent));
+  box-shadow: 0 0 0 3px hsl(var(--eduai-accent) / 0.22);
+}
+
+.eduai-composer .eduai-icon,
+.eduai-send {
+  width: 42px; height: 42px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 10px; border: 0; cursor: pointer; padding: 0;
+  transition: transform 120ms ease, background-color 140ms ease;
+}
+
+.eduai-composer .eduai-mic { background: hsl(var(--eduai-sunken)); color: hsl(var(--eduai-muted)); }
+.eduai-composer .eduai-mic:hover { color: hsl(var(--eduai-brand)); }
+.eduai-composer .eduai-mic.is-listening {
+  background: hsl(8 64% 42%); color: hsl(43 38% 96%);
+  animation: eduai-rec 1.3s infinite;
+}
+@keyframes eduai-rec {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(8 64% 42% / 0.5); }
+  50% { box-shadow: 0 0 0 8px hsl(8 64% 42% / 0); }
+}
+
+.eduai-send { background: hsl(var(--eduai-brand)); color: hsl(var(--eduai-on-brand)); }
+.eduai-send:hover:not(:disabled) { background: hsl(var(--eduai-brand-strong)); }
+.eduai-send:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.eduai-foot {
+  margin: 0; padding: 0 1rem 0.65rem; flex: none;
+  font-size: 0.7rem; color: hsl(var(--eduai-muted)); text-align: center;
+}
+
+/* ------------------------------------------------------------- summary ---- */
+.eduai-summary { padding: 1rem; display: grid; gap: 0.75rem; overflow-y: auto; }
+
+.eduai-drop {
+  border: 1px dashed hsl(var(--eduai-border-strong));
+  border-radius: 10px;
+  padding: 1.4rem 1rem;
+  text-align: center;
+  color: hsl(var(--eduai-muted));
+  font-size: 0.86rem;
+  cursor: pointer;
+  display: grid; gap: 0.4rem; justify-items: center;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.eduai-drop:hover, .eduai-drop.is-over, .eduai-drop:focus-visible {
+  border-color: hsl(var(--eduai-brand));
+  background: hsl(var(--eduai-brand) / 0.05);
+  color: hsl(var(--eduai-brand));
+  outline: none;
+}
+.eduai-drop.has-file { border-style: solid; border-color: hsl(var(--eduai-accent)); color: hsl(var(--eduai-accent)); }
+
+.eduai-drop__hint {
+  margin: -0.35rem 0 0; text-align: center;
+  font-size: 0.72rem; line-height: 1.45; color: hsl(var(--eduai-muted));
+}
+
+.eduai-or { position: relative; text-align: center; font-size: 0.75rem; color: hsl(var(--eduai-muted)); }
+.eduai-or::before {
+  content: ""; position: absolute; inset: 50% 0 auto;
+  border-top: 1px solid hsl(var(--eduai-border));
+}
+.eduai-or span { position: relative; background: hsl(var(--eduai-surface)); padding: 0 0.6rem; }
+
+.eduai-summary textarea {
+  width: 100%; resize: vertical;
+  padding: 0.65rem 0.75rem;
+  font: inherit; font-size: 0.9rem;
+  color: hsl(var(--eduai-text));
+  background: hsl(var(--eduai-bg));
+  border: 1px solid hsl(var(--eduai-border-strong) / 0.7);
+  border-radius: 10px;
+}
+.eduai-summary textarea:focus { outline: none; border-color: hsl(var(--eduai-accent)); box-shadow: 0 0 0 3px hsl(var(--eduai-accent) / 0.22); }
+
+.eduai-summary__row { display: flex; gap: 0.5rem; }
+.eduai-summary__row select {
+  flex: 1; padding: 0.55rem 0.7rem;
+  font: inherit; font-size: 0.88rem;
+  color: hsl(var(--eduai-text));
+  background: hsl(var(--eduai-surface));
+  border: 1px solid hsl(var(--eduai-border-strong) / 0.7); border-radius: 8px;
+}
+
+.eduai-btn {
+  border: 0; border-radius: 8px; cursor: pointer;
+  font: inherit; font-size: 0.88rem; font-weight: 600;
+  padding: 0.55rem 1.1rem;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  text-decoration: none;
+}
+.eduai-btn--primary { background: hsl(var(--eduai-brand)); color: hsl(var(--eduai-on-brand)); }
+.eduai-btn--primary:hover { background: hsl(var(--eduai-brand-strong)); color: hsl(var(--eduai-on-brand)); }
+.eduai-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.eduai-summary-result {
+  padding: 0 1rem 1rem;
+  overflow-y: auto;
+  font-size: 0.9rem;
+}
+.eduai-summary-result h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
+.eduai-summary-result h4 { font-size: 0.92rem; margin: 0.8rem 0 0.3rem; }
+.eduai-summary-result ul { padding-left: 1.15rem; }
+.eduai-summary-result .eduai-msg__tools { margin-bottom: 0.75rem; }
+
+/* --------------------------------------------------------------- login ---- */
+.eduai-card {
+  font-family: var(--eduai-font);
+  background: hsl(var(--eduai-surface));
+  border: 1px solid hsl(var(--eduai-border));
+  border-radius: var(--eduai-radius);
+  padding: 1.5rem;
+  text-align: center;
+}
+.eduai-card h3 { margin-top: 0; }
+
+/* ------------------------------------------------------------ launcher ---- */
+.eduai-launcher {
+  position: fixed; z-index: 9998;
+  right: clamp(0.9rem, 3vw, 1.75rem);
+  bottom: clamp(0.9rem, 3vw, 1.75rem);
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.7rem 1.1rem 0.7rem 0.85rem;
+  border: 1px solid hsl(var(--eduai-on-brand) / 0.15);
+  border-radius: 999px; cursor: pointer;
+  font-family: var(--eduai-font); font-size: 0.9rem; font-weight: 600;
+  color: hsl(var(--eduai-on-brand));
+  background: hsl(var(--eduai-brand-strong));
+  box-shadow: 0 4px 10px hsl(30 22% 12% / 0.12), 0 14px 32px hsl(30 22% 12% / 0.22);
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 180ms ease;
+}
+.eduai-launcher:hover { transform: translateY(-2px); box-shadow: 0 6px 14px hsl(30 22% 12% / 0.14), 0 18px 40px hsl(30 22% 12% / 0.26); }
+.eduai-launcher__icon { display: grid; place-items: center; color: hsl(var(--eduai-accent)); }
+.eduai-launcher[aria-expanded="true"] { transform: scale(0.9); opacity: 0; pointer-events: none; }
+
+@media (max-width: 520px) {
+  .eduai-launcher__label { display: none; }
+  .eduai-launcher { padding: 0.85rem; }
+}
+
+/* ------------------------------------------------------------- docking ---- */
+.eduai-dock {
+  position: fixed; z-index: 9999;
+  right: clamp(0.75rem, 3vw, 1.75rem);
+  bottom: clamp(0.75rem, 3vw, 1.75rem);
+  width: min(400px, calc(100vw - 1.5rem));
+  height: min(640px, calc(100vh - 3rem));
+  display: flex;
+  animation: eduai-dock-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.eduai-dock[hidden] { display: none; }
+.eduai-dock .eduai-app { width: 100%; height: 100%; }
+
+@keyframes eduai-dock-in { from { opacity: 0; transform: translateY(16px) scale(0.97); } }
+
+@media (max-width: 520px) {
+  .eduai-dock { inset: 0.5rem; width: auto; height: auto; }
+  .eduai-dock .eduai-app { border-radius: 14px; }
+}
+
+/* ---------------------------------------------------------- dark mode ----- */
+[data-theme="dark"] .eduai-error { background: hsl(6 34% 15%); color: hsl(6 70% 80%); border-color: hsl(6 30% 30%); }
+[data-theme="dark"] .eduai-app { box-shadow: 0 18px 48px hsl(0 0% 0% / 0.6); }
+[data-theme="dark"] .eduai-head { background: hsl(var(--eduai-sunken)); color: hsl(var(--eduai-text)); }
+[data-theme="dark"] .eduai-avatar { background: hsl(var(--eduai-accent) / 0.15); box-shadow: inset 0 0 0 1px hsl(var(--eduai-accent) / 0.4); color: hsl(var(--eduai-accent)); }
+[data-theme="dark"] .eduai-icon { background: hsl(var(--eduai-text) / 0.08); color: hsl(var(--eduai-text)); }
+[data-theme="dark"] .eduai-icon:hover { background: hsl(var(--eduai-text) / 0.16); }
+[data-theme="dark"] .eduai-launcher { background: hsl(var(--eduai-sunken)); color: hsl(var(--eduai-text)); border-color: hsl(var(--eduai-border-strong)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .eduai-msg, .eduai-dock { animation: none; }
+  .eduai-launcher { transition: none; }
+}

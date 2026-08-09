@@ -1,0 +1,120 @@
+########################################################################
+# Local development stack for the Scholaris learning platform.
+#
+#   docker compose up -d          start WordPress on http://localhost:8080
+#   docker compose run --rm cli   run wp-cli commands
+#   docker compose down -v        stop and delete the database
+#
+# Every e-mail the site sends (password resets, new-user notifications) is
+# caught by Mailpit and shown at http://localhost:8025 — nothing leaves the
+# machine. Your theme and plugins are bind-mounted from ./wp-content, so
+# edits on disk appear immediately in the running site. WordPress core
+# lives in a named volume and is never committed to git.
+########################################################################
+
+services:
+  db:
+    image: mariadb:11
+    container_name: scholaris-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-scholaris}
+      MARIADB_USER: ${DB_USER:-scholaris}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-scholaris}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  wordpress:
+    image: wordpress:6.8-php8.3-apache
+    container_name: scholaris-wp
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${WP_PORT:-8080}:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${DB_NAME:-scholaris}
+      WORDPRESS_DB_USER: ${DB_USER:-scholaris}
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-scholaris}
+      WORDPRESS_DEBUG: ${WP_DEBUG:-1}
+      # API keys are read from the environment so they never reach the
+      # database and the settings screen never has to offer a field for
+      # one. Any single provider is enough — the assistant runs on
+      # whichever has a key (several set = choose in Settings → EduAI).
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'EDUAI_ZAI_API_KEY', getenv('ZAI_API_KEY') ?: '' );
+        define( 'EDUAI_ANTHROPIC_API_KEY', getenv('ANTHROPIC_API_KEY') ?: '' );
+        define( 'EDUAI_GROQ_API_KEY', getenv('GROQ_API_KEY') ?: '' );
+        define( 'SCHOLARIS_DEV_SMTP', getenv('DEV_SMTP') ?: 'mailpit:1025' );
+        define( 'SCHOLARIS_DEV_SMTP_TIMEOUT', (int) ( getenv('DEV_SMTP_TIMEOUT') ?: 10 ) );
+        define( 'WP_MEMORY_LIMIT', '256M' );
+        define( 'WP_DEBUG_LOG', true );
+        define( 'WP_DEBUG_DISPLAY', false );
+        define( 'DISALLOW_FILE_EDIT', true );
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      # Mail-stall testing: DEV_SMTP=10.255.255.1:1025 reproduces a hanging
+      # mail host without editing this file; empty means Mailpit.
+      DEV_SMTP: ${DEV_SMTP:-}
+      DEV_SMTP_TIMEOUT: ${DEV_SMTP_TIMEOUT:-}
+    volumes:
+      - wp_core:/var/www/html
+      - ./wp-content/themes/scholaris:/var/www/html/wp-content/themes/scholaris
+      - ./wp-content/plugins/eduai-assistant:/var/www/html/wp-content/plugins/eduai-assistant
+      - ./wp-content/plugins/scholaris-library:/var/www/html/wp-content/plugins/scholaris-library
+      - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
+      # Dev-only mail routing to Mailpit; inert without SCHOLARIS_DEV_SMTP.
+      - ./php/dev-mail.php:/var/www/html/wp-content/mu-plugins/dev-mail.php:ro
+
+  cli:
+    image: wordpress:cli-php8.3
+    container_name: scholaris-cli
+    profiles: ["tools"]
+    depends_on:
+      - wordpress
+    user: "33:33"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${DB_NAME:-scholaris}
+      WORDPRESS_DB_USER: ${DB_USER:-scholaris}
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-scholaris}
+    volumes:
+      - wp_core:/var/www/html
+      - ./wp-content/themes/scholaris:/var/www/html/wp-content/themes/scholaris
+      - ./wp-content/plugins/eduai-assistant:/var/www/html/wp-content/plugins/eduai-assistant
+      - ./wp-content/plugins/scholaris-library:/var/www/html/wp-content/plugins/scholaris-library
+      - ./scripts:/scripts
+
+  # Catches all outgoing e-mail: web UI at http://localhost:8025.
+  # Password resets and the "check your e-mail" registration fallback are
+  # untestable without it — wp_mail() fails silently in a bare container.
+  mailpit:
+    image: axllent/mailpit
+    container_name: scholaris-mail
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_PORT:-8025}:8025"
+
+  # Optional: browse the database at http://localhost:8081
+  adminer:
+    image: adminer:latest
+    container_name: scholaris-adminer
+    profiles: ["tools"]
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+
+volumes:
+  db_data:
+  wp_core:

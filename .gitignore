@@ -1,0 +1,51 @@
+# Secrets
+.env
+*.key
+*.pem
+
+# WordPress core and anything the site generates at runtime
+/wordpress/
+/wp-admin/
+/wp-includes/
+wp-config.php
+wp-config-local.php
+/wp-content/uploads/
+/wp-content/upgrade/
+/wp-content/cache/
+/wp-content/backup*/
+/wp-content/languages/
+/wp-content/debug.log
+/wp-content/advanced-cache.php
+/wp-content/object-cache.php
+
+# Third-party plugins and themes are installed by scripts/setup.sh, not committed.
+/wp-content/plugins/*
+!/wp-content/plugins/eduai-assistant/
+!/wp-content/plugins/scholaris-library/
+/wp-content/themes/*
+!/wp-content/themes/scholaris/
+
+# Claude Code: agent definitions are shared, machine-local settings are not.
+.claude/settings.local.json
+
+# The configured local copy of the demo — this is the one with a live API_KEY in
+# it. design/preview.html is the shippable source and stays key-free.
+/preview.html
+# Backup and scratch copies of it carry the same key, but .gitignore matches on
+# name: preview.html.bak or preview-old.html would not be covered by the line
+# above. (check-no-secrets.pl catches these too — this is the belt to its
+# braces.) design/preview.html is in a subdirectory, so these anchored patterns
+# leave the shippable copy alone.
+/preview.html.*
+/preview*.html
+
+# Build and tooling
+node_modules/
+vendor/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.sql
+*.sql.gz

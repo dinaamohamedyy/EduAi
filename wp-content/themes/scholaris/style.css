@@ -1,0 +1,21 @@
+/*
+Theme Name: EduAi
+Theme URI: https://example.com/scholaris
+Author: YZH Solution
+Author URI: https://example.com
+Description: The EduAi learning-platform theme: a study-material library organised by course, four AI study tools (Summarise, AiCalc, Q&A, PrepareME) and Tutor LMS quiz history. The directory keeps its original scholaris slug on purpose — renaming it would deactivate the theme.
+Version: 1.0.0
+Requires at least: 6.4
+Tested up to: 6.8
+Requires PHP: 8.0
+License: GNU General Public License v2 or later
+License URI: http://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: scholaris
+Tags: education, lms, custom-logo, custom-menu, featured-images, threaded-comments, translation-ready, accessibility-ready
+*/
+
+/*
+ * The compiled design system lives in assets/css/main.css.
+ * This file exists so WordPress can identify the theme and so that
+ * child themes have a stable parent stylesheet to enqueue.
+ */
