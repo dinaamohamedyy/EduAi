@@ -153,5 +153,25 @@ jobs:
             **/node_modules/**
             **/uploads/**
 
+      # Both transport steps above are gated on DEPLOY_METHOD. With it unset,
+      # both skip and the job still succeeds — so without this, the summary
+      # cheerfully read "Deployed <sha> via ssh" on a run that shipped nothing.
+      # A deploy that no-ops silently is worse than one that fails: you only
+      # find out when you check the server and yesterday's code is still on it.
+      # Deliberately not a hard failure — main would go permanently red until a
+      # host exists, and the checks above are the part that has to stay green.
       - name: Deployment summary
-        run: echo "Deployed ${{ github.sha }} via ${{ vars.DEPLOY_METHOD || 'ssh' }}" >> $GITHUB_STEP_SUMMARY
+        run: |
+          case "${{ vars.DEPLOY_METHOD }}" in
+            ssh|ftp)
+              echo "Deployed ${{ github.sha }} via ${{ vars.DEPLOY_METHOD }}" >> $GITHUB_STEP_SUMMARY
+              ;;
+            "")
+              echo "::warning::No deploy target configured - NOTHING WAS SHIPPED. Set the repository variable DEPLOY_METHOD to 'ssh' or 'ftp' and add the matching secrets (docs/03-hosting-deployment.md)."
+              echo "**Nothing was deployed.** \`${{ github.sha }}\` passed every check, but no host is configured yet: the repository variable \`DEPLOY_METHOD\` is unset, so both the rsync and FTPS steps were skipped. See \`docs/03-hosting-deployment.md\`." >> $GITHUB_STEP_SUMMARY
+              ;;
+            *)
+              echo "::error::DEPLOY_METHOD is set to '${{ vars.DEPLOY_METHOD }}', which matches no transport. Expected 'ssh' or 'ftp'. Nothing was shipped."
+              exit 1
+              ;;
+          esac
