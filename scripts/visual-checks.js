@@ -22,6 +22,15 @@
  * "The right user" had only ever been a question about authorisation, never
  * about layout — and "does it work" had never included "can you see it".
  *
+ * NOT A REPLACEMENT FOR scripts/ui-geometry.mjs, and it does not replace this
+ * one either. That harness drives headless Edge, mints its own cookie through
+ * wp-cli, and asserts its own instrument (that the scroll moved, that the
+ * stylesheet under test loaded) — so it runs unattended and can measure
+ * scrolled states, which the IDE browser pane cannot. This file runs in
+ * whatever browser a human already has open, on whatever page they are
+ * looking at, with no setup. Use that one in a gate; use this one when
+ * something looks wrong and you want an answer in ten seconds.
+ *
  * FULL COVERAGE NEEDS EIGHT RUNS: the four tool pages (/ask/, /summarise/,
  * /calc/, /prepare/) under the real theme and again under a stock one. The
  * stock-theme pass is not redundant — it is the only thing that exercises the
