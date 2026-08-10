@@ -394,6 +394,30 @@ them. Since Docker landed, the stack runs locally: WordPress on
   was generated from the implementation it tested and passed 31/31 while the
   `-3^2` convention in it was wrong.
 
+### Fixtures these harnesses leave behind
+
+They are idempotent — re-running reuses what exists rather than piling up — but
+they do create real rows on whatever stack they run against. Recorded here
+because an undocumented disposable account is worse than a documented permanent
+one: the next person to audit the user list should find an explanation rather
+than a mystery.
+
+| Fixture | Created by | Why it exists |
+|---|---|---|
+| `gate-student-a`, `gate-student-b` | `download-gate.php` | Two separate students are the only way to test whether a download URL copied from one works for the other — that is a cookie-level property |
+| `rl-student-a`, `rl-student-b` | `rate-limit.php` | One exhausts a quota, the other proves the bucket is not shared |
+| `rt-student` | `roundtrip.php` | Owns the generated exams |
+| `ui-admin` (**administrator**) | admin-bar geometry check | The only fixture with elevated rights. Every other harness runs as a student or logged out, which is why an admin-only rendering bug survived all of them |
+| Two `study_material` posts, `gate-members` / `gate-public` | `download-gate.php` | One of each access level; the public one proves the handler is not simply refusing everyone |
+| `scripts/roundtrip-deck.pptx` | `make-lecture-fixture.php` | Gitignored and rebuilt in one command. **Not** committed as a binary: its traps are the point and a zip cannot be reviewed |
+
+**About the ~20 `exam` rows attributed to user 0.** They are real, they are
+mine, and they are deliberately left in place. `EduAI_Exams::generate()` once
+returned no `user_id` while `grade()` read one, so composing the two filed
+attempts against nobody — silent with `WP_DEBUG` off. The fix landed; these
+rows are what the bug cost, kept as evidence it was worth fixing. If anyone
+later wonders why user 0 has an exam history, this is the answer.
+
 The first real-WordPress run happens on Docker (any machine that has it) or
 straight on the host: `setup.sh` finishes by asserting the database state,
 and its printed next-steps walk the register → dashboard → role check path.
