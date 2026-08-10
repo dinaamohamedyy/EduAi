@@ -144,8 +144,15 @@ run_wp "rate-limit         the assistant's quota is per user, not shared" rate-l
 if bash scripts/download-gate.sh >/tmp/lc.dg.$$ 2>&1; then
   ok "download-gate      a link copied from one student fails for another"
 else
-  bad "download-gate      a link copied from one student fails for another" \
-      "$(grep -E '^FAIL' /tmp/lc.dg.$$ | head -2 | tr '\n' ' ')"
+  # Two different failures wear the same exit code: assertions that failed
+  # (which print FAIL lines) and setup that never got far enough to assert
+  # (which prints "could not sign in as…" and stops). Grepping only for FAIL
+  # produced a bare red with no reason at all — seen once, and a red without a
+  # reason is the one thing worse than a red, because it teaches people to
+  # re-run rather than look. Fall back to the tail of the output.
+  reason="$(grep -E '^FAIL' /tmp/lc.dg.$$ | head -2 | tr '\n' ' ')"
+  [ -z "$reason" ] && reason="no assertion failed — it stopped before asserting: $(tail -2 /tmp/lc.dg.$$ | tr '\n' ' ')"
+  bad "download-gate      a link copied from one student fails for another" "$reason"
 fi
 rm -f /tmp/lc.dg.$$
 
