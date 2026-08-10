@@ -39,6 +39,8 @@ my $FLOW    = "wp-content/themes/scholaris/inc/auth-flow.php";
 my $FIXTURE = "wp-content/plugins/eduai-assistant/fixtures/exam-sample.json";
 my $HANDOFF = "docs/05-frontend-handoff.md";
 my $HOSTING = "docs/03-hosting-deployment.md";
+my $MAINCSS = "wp-content/themes/scholaris/assets/css/main.css";
+my $THEMEFN = "wp-content/themes/scholaris/functions.php";
 my $TESTPG  = "tools/agent-test.html";
 my $PREVIEW = "design/preview.html";
 my $LIVE    = "preview.html";
@@ -58,6 +60,7 @@ my @checks = (
     [ 'fixture-inline-parity'  => \&check_fixture_inline ],
     [ 'aicalc-label-parity'    => \&check_calc_labels ],
     [ 'abspath-tripwire-order' => \&check_abspath_tripwires ],
+    [ 'admin-bar-offset'       => \&check_admin_bar_offset ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -688,6 +691,49 @@ sub clip {
     my ($s) = @_;
     $s =~ s/\s+/ /g;
     return length($s) > 110 ? substr( $s, 0, 107 ) . '...' : $s;
+}
+
+# The theme must account for the WordPress admin bar, which only exists for
+# signed-in users with rights — so every logged-out check is blind to it. The
+# owner's homepage was visibly broken while fourteen contract checks and seven
+# live harnesses were green.
+#
+# READ THIS BEFORE TRUSTING A GREEN HERE. This check is weaker than it looks:
+# it proves the theme *says something* about the admin bar, not that the
+# geometry is right. It passes the moment any `admin-bar` rule exists, with any
+# value in it — a rule offsetting the header by 5px, or by a hard-coded 32px
+# that never becomes 46px on mobile, sails through. Only
+# scripts/admin-bar-geometry.js, run in a browser signed in as an
+# administrator, measures whether the header is actually clear. Do not record
+# this as covering the occlusion; it covers the *regression* of the fix being
+# deleted, which is a different and much smaller thing.
+sub check_admin_bar_offset {
+    my $css = slurp($MAINCSS);
+    my @problems;
+
+    my ($block) = $css =~ /(body\.admin-bar[^\{]*\{[^\}]*\})/s;
+
+    push @problems, "$MAINCSS has no body.admin-bar rule — the header will sit under the admin bar for every signed-in user"
+        unless defined $block;
+
+    return @problems unless defined $block;
+
+    # The offsets must come from core's own variable. A literal works today and
+    # silently stops working at core's 782px breakpoint, where the bar becomes
+    # 46px — a second number to drift, which is the whole failure mode.
+    push @problems,
+        "$MAINCSS offsets the admin bar with a literal rather than core's --wp-admin--admin-bar--height; that number has to be maintained by hand and is wrong on mobile"
+        unless $css =~ /admin-bar[^\{]*\{[^\}]*--wp-admin--admin-bar--height/s;
+
+    # Disabling core's own html margin is what makes the theme's spacer the
+    # single source of the offset. Without it both apply and the page gains a
+    # phantom gap.
+    my $functions = slurp($THEMEFN);
+    push @problems,
+        "$THEMEFN does not disable core's admin-bar margin (add_theme_support 'admin-bar' with a false callback), so core's offset and the theme's will both apply"
+        unless $functions =~ /add_theme_support\(\s*'admin-bar'/;
+
+    return @problems;
 }
 
 # Every constant the theme and plugin read must be findable in the hosting
