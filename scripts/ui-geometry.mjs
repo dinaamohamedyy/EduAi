@@ -31,6 +31,8 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const args = process.argv.slice(2);
 function argOf(flag, dflt) {
@@ -157,7 +159,10 @@ function check(name, pass, detail) {
 const cookie = mintCookie();
 const edge = spawn(EDGE, [
   '--headless=new', '--disable-gpu', `--remote-debugging-port=${PORT}`,
-  '--no-first-run', '--user-data-dir=' + process.env.TEMP + '\\edge-ui-geometry',
+  // os.tmpdir(), not process.env.TEMP: TEMP is a Windows variable, undefined
+  // on the ubuntu runner — the same written-on-Windows shape as the browser
+  // path above, caught by the tester reading for the next instance.
+  '--no-first-run', '--user-data-dir=' + join(tmpdir(), 'edge-ui-geometry'),
   'about:blank',
 ], { stdio: 'ignore' });
 
