@@ -21,10 +21,10 @@ PrepareME's form and marked report are built against
 | `/` (home) | `themes/scholaris/front-page.php` | Done. Pulls live counts, recent material, quiz strip when signed in. |
 | `/library/` | page + `[scholaris_library]` (plugin template `library-grid.php`) | Done. |
 | `/material/<slug>/` | `scholaris-library/templates/single-study_material.php` | Done. Gated download + inline PDF already implemented. |
-| `/dashboard/` | page + `[scholaris_dashboard]` | Done. Reads Tutor LMS attempts. |
+| `/progress/` | page + `[scholaris_dashboard]` | Done. Reads Tutor LMS attempts. **`/dashboard/` belongs to Tutor LMS** (created on activation); every theme link resolves through `scholaris_progress_url()`. |
 | `/assistant/`, `/summarise/` | pages + `[eduai_panel]` / `[eduai_summarizer]` | Done. Needs a key in `wp-config.php` or the environment. |
 | `/sign-in/` | `page-templates/auth-signin.php` | **Works today** against the native login endpoint. |
-| `/register/` | `page-templates/auth-register.php` + `inc/auth-flow.php` | **Works today** — full name + password chosen at signup, honeypot + rate limit, auto sign-in, lands on `/dashboard/?welcome=1`. |
+| `/register/` | `page-templates/auth-register.php` + `inc/auth-flow.php` | **Works today** — full name + password chosen at signup, honeypot + rate limit, auto sign-in, lands on `/progress/?welcome=1`. |
 | `/reset-password/` | `page-templates/auth-reset.php` + `inc/auth-flow.php` | **Works today** — native lost-password flow with throttling and themed error bounces. |
 | Search results | `index.php` (`is_search()` branch) | Done. |
 | Blog post / plain page | `single.php` / `page.php` | Done. |
@@ -67,6 +67,22 @@ outcome is allowed.
 Because the action URLs go through `site_url(..., 'login_post')`, they remain
 correct when **wps-hide-login** (installed by setup.sh) moves `wp-login.php`.
 
+**Two login URLs are in play, and they are not interchangeable.** This costs an
+afternoon the first time and is invisible in a diff:
+
+| Call | Resolves to | What it is for |
+|---|---|---|
+| `wp_login_url()` | `/sign-in/` | where you send a **person** — the theme filters it to the themed page |
+| `site_url( 'wp-login.php', 'login_post' )` | `/login/` | where a **form posts** — wps-hide-login rewrites it |
+
+POST credentials to the first and WordPress simply re-renders the sign-in page:
+no error, no cookie, nobody signed in, and a `200` that looks like success. Use
+`wp_login_url()` for links and redirects, the `login_post` form of `site_url()`
+for anything that submits. On this stack `wp-login.php` itself returns **404**
+and `/wp-admin/` redirects to `/404/` — that is wps-hide-login working, not a
+broken install, and any script that hard-codes the native path will fail in a
+way that reads like broken authentication.
+
 What `inc/auth.php` already does:
 
 - Filters `login_url`, `register_url`, `lostpassword_url` → the themed pages,
@@ -74,7 +90,8 @@ What `inc/auth.php` already does:
   Falls back to native URLs if the pages are deleted.
 - Applies the right template by slug (`sign-in`, `register`, `reset-password`)
   even if nobody assigns it in the editor.
-- Redirects signed-in visitors off the auth pages to `/dashboard/`.
+- Redirects signed-in visitors off the auth pages to their progress page
+  (via `scholaris_progress_url()`).
 - Sends failed logins back to `/sign-in/?login=failed` instead of the naked
   wp-login screen (`wp_login_failed` + an `authenticate` guard for empty
   fields).
@@ -92,7 +109,7 @@ What `inc/auth-flow.php` adds on top:
   reset. Failures bounce back to the themed pages as `?register=…` /
   `?lostpw=…` flags.
 - On success stores the real name, sets the chosen password, **signs the
-  student in** and redirects to `/dashboard/?welcome=1`; the admin
+  student in** and redirects to `/progress/?welcome=1`; the admin
   notification e-mail still goes out, the student's "set your password"
   e-mail is skipped (they already chose one). Fires
   `do_action( 'scholaris_student_registered', $user_id )` for anything
@@ -116,7 +133,7 @@ What `inc/auth-flow.php` adds on top:
 | `?password=changed` | sign-in | reset completed |
 | `?register=username_exists / email_exists / username / email / name / password / password_short / password_mismatch / throttled / generic` | register | validation bounce from auth-flow |
 | `?lostpw=invalid / throttled` | reset | lost-password bounce from auth-flow (any unrecognised value renders the `invalid` message — the render block's `else` is a deliberate catch-all) |
-| `?welcome=1` | `/dashboard/` | set after auto sign-in at signup — free to use for a first-visit banner (nothing renders it yet) |
+| `?welcome=1` | `/progress/` | set after auto sign-in at signup — free to use for a first-visit banner (nothing renders it yet) |
 | `?sl_form=<token>` | any auth page | refill token: what the student typed, flashed server-side for 5 min (never PII in the URL). Templates read it with `scholaris_auth_old( 'login'\|'username'\|'email'\|'name' )` — read once, then burned. |
 
 Notices may carry **one inline link** (`<a href>` only — the renderer runs
@@ -162,12 +179,12 @@ Still open if you want them:
 
 1. **Post-login routing** per role: filter `login_redirect`.
    The sign-in form already forwards `?redirect_to=` when it was given one,
-   and defaults to `/dashboard/`.
+   and defaults to `scholaris_progress_url()` (`/progress/`).
 2. **E-mail templates**: `retrieve_password_message`,
    `wp_new_user_notification_email` if the default mails should match the
    brand voice.
-3. **Welcome banner** on `/dashboard/?welcome=1` — the flag is set on first
-   arrival after signup; render it in the dashboard template or via
+3. **Welcome banner** on `/progress/?welcome=1` — the flag is set on first
+   arrival after signup; render it in the plugin's dashboard template or via
    `scholaris_student_registered`.
 
 ---
