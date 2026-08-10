@@ -450,14 +450,15 @@ body.admin-bar .site-header { top: var(--wp-admin--admin-bar--height, 32px); }
 }
 /* Hidden below the nav toggle: at phone widths the 48-char tagline wraps to
    three lines and grows the header past its 72px min (measured 80px at 375).
-   Deliberately NOT white-space:nowrap above 900: the one-line tagline is
-   ~360px wide, and beside the seven-tab row plus header actions the row
-   needs ~1320px — nowrap would trade 8px of height for horizontal overflow
-   across the 905–1320 band, the same defect class the TM measured at 375.
-   Between 900 and ~1320 the tagline wraps to two lines, which min-height
-   absorbs. The ~1320 figure is arithmetic, not measurement — the fit-floor
-   sweep is queued behind the tester's stock-theme pass; if it lands under
-   ~1250, nowrap above that measured floor becomes safe to add. */
+   Deliberately NOT white-space:nowrap above 900, and this is final, not
+   pending: the fit-floor was MEASURED 10 Aug 2026 (scripts/ui-geometry.mjs
+   pattern, signed in, nowrap injected) — the one-line 360px tagline beside
+   the seven-tab row fits at 1380 and breaks at 1370, failing by horizontal
+   document overflow (358px of it at 950). So nowrap above the toggle would
+   put a sideways-scrolling page on nearly every laptop. Between 900 and
+   ~1380 the tagline wraps to two lines and min-height absorbs it — that is
+   the designed behaviour, not a defect. Do not "complete" this fix by
+   adding the nowrap half. */
 @media (max-width: 900px) { .brand__tag { display: none; } }
 
 .nav { margin-left: auto; }
