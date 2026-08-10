@@ -92,3 +92,30 @@ function scholaris_progress_url(): string {
 	 */
 	return (string) apply_filters( 'scholaris_progress_url', $url );
 }
+
+/**
+ * Where "ask the assistant" sends a student: the Q&A tab.
+ *
+ * Needed because retiring the floating widget (docs/06 §3) removed the thing
+ * that `data-eduai-open` used to open. Any button still carrying that attribute
+ * on a page without the dock is inert — chat.js is not even enqueued there — so
+ * a call to action has to be a link to a destination now, not a trigger.
+ *
+ * Same resolver shape and same honest fallback as scholaris_progress_url():
+ * home is a worse landing than /ask/ but a visible one, whereas a dead button
+ * looks identical to a working page.
+ */
+function scholaris_ask_url(): string {
+	$page = get_page_by_path( 'ask' );
+
+	$url = ( $page && 'publish' === $page->post_status )
+		? (string) get_permalink( $page )
+		: home_url( '/' );
+
+	/**
+	 * Filter the Q&A destination.
+	 *
+	 * @param string $url Resolved URL.
+	 */
+	return (string) apply_filters( 'scholaris_ask_url', $url );
+}

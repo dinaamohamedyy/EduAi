@@ -213,12 +213,17 @@ link in the theme goes through `wp_login_url()`, which the theme routes to
 | `[scholaris_quiz_history limit="10" show_chart="yes" show_stats="yes"]` | Attempts table, stats and trend |
 | `[scholaris_dashboard]` | Greeting, quiz history and recent material |
 
-Any button on any page can open the assistant — give it `data-eduai-open`, or
-`data-eduai-open="summary"` to land on the summariser tab:
+To offer the assistant from any page, **link to its tab** — `/ask/` for Q&A,
+`/summarise/` for the summariser (in theme code, resolve with
+`scholaris_ask_url()` rather than hard-coding the slug):
 
 ```html
-<button data-eduai-open>Ask the assistant</button>
+<a class="btn btn--primary" href="/ask/">Ask the assistant</a>
 ```
+
+> The old `data-eduai-open` attribute opened the floating widget, which is
+> retired (docs/06 §3). The attribute is inert on every page now — a button
+> carrying it looks fine and does nothing.
 
 ---
 
