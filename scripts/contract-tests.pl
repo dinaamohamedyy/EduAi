@@ -64,6 +64,9 @@ my @checks = (
     [ 'abspath-tripwire-order' => \&check_abspath_tripwires ],
     [ 'admin-bar-offset'       => \&check_admin_bar_offset ],
     [ 'template-root-tokens'   => \&check_template_root_tokens ],
+    [ 'nav-breakpoint-parity'  => \&check_nav_breakpoint ],
+    [ 'admin-bar-pair'         => \&check_admin_bar_pair ],
+    [ 'nowrap-asymmetry'       => \&check_nowrap_asymmetry ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1231,6 +1234,142 @@ sub check_template_root_tokens {
         push @problems,
             "$file has root .$block, whose rules read --eduai-* values, but .$block is missing from the token list in $CHATCSS — those rules will compute to nothing"
             unless $declared{$block};
+    }
+
+    return @problems;
+}
+
+# The nav toggle and the tagline hide must share one breakpoint, in both the
+# theme and the shippable preview.
+#
+# Four places carry the number: main.css hides .brand__tag at it and shows
+# .nav-toggle at it, and design/preview.html mirrors both. They are one
+# transition — below it the header is a brand plus a toggle, above it a brand
+# plus a tagline plus a seven-item row. Move one alone and the transition
+# splits into two, producing a band where the tagline is gone but the full nav
+# is still trying to fit, which is the overflow the 1200 was measured to avoid.
+#
+# The value itself is not asserted: three people measured it and the owner ruled
+# it final, but a future re-measurement should be free to move it. What must not
+# happen is it moving in three places out of four.
+sub check_nav_breakpoint {
+    my @problems;
+
+    my %found;
+
+    my $css = slurp($MAINCSS);
+
+    # The media wrapping the toggle reveal, and the one wrapping the tag hide.
+    # Both are matched from the rule backwards so a reordering of the file does
+    # not quietly point this at some other media query.
+    if ( $css =~ /\@media\s*\(\s*max-width:\s*(\d+)px\s*\)\s*\{[^\}]*\.nav-toggle\s*\{\s*display:\s*grid/s ) {
+        $found{'main.css .nav-toggle'} = $1;
+    }
+
+    if ( $css =~ /\@media\s*\(\s*max-width:\s*(\d+)px\s*\)\s*\{\s*\.brand__tag\s*\{\s*display:\s*none/s ) {
+        $found{'main.css .brand__tag'} = $1;
+    }
+
+    my $preview = slurp($PREVIEW);
+
+    if ( $preview =~ /\@media\s*\(\s*max-width:\s*(\d+)px\s*\)\s*\{[^\}]*\.nav-toggle\s*\{\s*display:\s*grid/s ) {
+        $found{'preview.html .nav-toggle'} = $1;
+    }
+
+    if ( $preview =~ /\@media\s*\(\s*max-width:\s*(\d+)px\s*\)\s*\{\s*\.brand__tag\s*\{\s*display:\s*none/s ) {
+        $found{'preview.html .brand__tag'} = $1;
+    }
+
+    for my $where ( 'main.css .nav-toggle', 'main.css .brand__tag', 'preview.html .nav-toggle', 'preview.html .brand__tag' ) {
+        push @problems, "could not find the breakpoint for $where — this check can no longer see one of the four places the number lives"
+            unless exists $found{$where};
+    }
+
+    return @problems if @problems;
+
+    my %values = map { $_ => 1 } values %found;
+
+    return () if 1 == keys %values;
+
+    push @problems,
+        "the nav toggle and the tagline hide have drifted apart — "
+        . join( ', ', map { "$_=$found{$_}px" } sort keys %found )
+        . "; they are one transition and must carry one value";
+
+    return @problems;
+}
+
+# admin-bar: the theme opts out of core's spacing and must provide its own.
+#
+# functions.php disables core's html-margin bump with
+# add_theme_support( 'admin-bar', array( 'callback' => '__return_false' ) ).
+# That is only safe because main.css replaces it — a ::before spacer and a top
+# offset on the fixed header. Either half alone is broken: the opt-out without
+# the CSS puts the admin bar over the header for every signed-in user, and it
+# survived a week unmeasured precisely because nobody signed in looked.
+#
+# admin-bar-offset already asserts the offset derives from core's variable.
+# This asserts something different and cross-file: that the two halves exist
+# together at all.
+sub check_admin_bar_pair {
+    my $fn  = php_code_only( slurp($THEMEFN) );
+    my $css = slurp($MAINCSS);
+
+    my $opts_out = $fn =~ /add_theme_support\(\s*'admin-bar'.*?__return_false/s ? 1 : 0;
+    my $spacer   = $css =~ /body\.admin-bar::before\s*\{/         ? 1 : 0;
+    my $offset   = $css =~ /body\.admin-bar\s+\.site-header\s*\{/ ? 1 : 0;
+
+    return () unless $opts_out || $spacer || $offset;
+
+    my @problems;
+
+    if ( $opts_out && !( $spacer && $offset ) ) {
+        push @problems,
+            "$THEMEFN opts out of core's admin-bar spacing, but $MAINCSS no longer provides the replacement ("
+            . ( $spacer ? '' : 'body.admin-bar::before spacer missing' )
+            . ( $spacer || $offset ? '' : '; ' )
+            . ( $offset ? '' : 'body.admin-bar .site-header offset missing' )
+            . ") — the admin bar will cover the header for every signed-in user";
+    }
+
+    if ( !$opts_out && ( $spacer || $offset ) ) {
+        push @problems,
+            "$MAINCSS still carries the admin-bar replacement rules, but $THEMEFN no longer opts out of core's own spacing — the offset is now applied twice";
+    }
+
+    return @problems;
+}
+
+# The nowrap asymmetry, which reads like an oversight and is not.
+#
+# .nav a MUST keep white-space: nowrap — without it flex min-content shrinking
+# splits "My Progress" across two lines long before the row is out of room.
+# .brand__tag must NEVER gain it: the tagline is 48 characters, and holding it
+# on one line puts a sideways-scrolling page on most laptops (measured: fits at
+# 1380, overflows at 1370). Its comment says "do not complete this fix" for that
+# reason.
+#
+# So the risk is symmetrical and in opposite directions: a tidier adding the
+# missing nowrap for consistency, or removing the odd one out. Prose already
+# says both; this makes it fail instead.
+sub check_nowrap_asymmetry {
+    my $css = slurp($MAINCSS);
+    my @problems;
+
+    my ($nav) = $css =~ /(^\.nav a \{[^\}]*\})/ms;
+
+    if ( !defined $nav ) {
+        push @problems, "$MAINCSS has no .nav a rule — this check cannot see the half it is meant to protect";
+    } elsif ( $nav !~ /white-space:\s*nowrap/ ) {
+        push @problems, "$MAINCSS .nav a has lost white-space: nowrap — multi-word labels will split across two lines under flex shrinking, long before the row runs out of room";
+    }
+
+    my ($tag) = $css =~ /(^\.brand__tag \{[^\}]*\})/ms;
+
+    if ( !defined $tag ) {
+        push @problems, "$MAINCSS has no .brand__tag rule — this check cannot see the half it is meant to protect";
+    } elsif ( $tag =~ /white-space:\s*nowrap/ ) {
+        push @problems, "$MAINCSS .brand__tag has gained white-space: nowrap — measured to overflow the document horizontally below ~1380px. Its own comment says not to complete the fix this way";
     }
 
     return @problems;
