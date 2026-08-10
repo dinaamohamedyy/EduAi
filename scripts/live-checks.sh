@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+#
+# Every check that needs a running WordPress, in one command.
+#
+#     bash scripts/live-checks.sh              # the free harnesses
+#     bash scripts/live-checks.sh --spend      # …and the one that costs money
+#     bash scripts/live-checks.sh --help
+#
+# WHY THIS EXISTS. Seven harnesses cover the things CI cannot reach — the
+# answer key never leaving the server, a download URL failing for the student
+# it was not minted for, a model's plausible lie not minting marks. None can be
+# a CI check: they need a live site and a database, which the lint job has
+# neither of. So they protect nobody unless a human runs them, and "run the
+# live checks" was seven separate invocations to remember. A person under
+# deadline remembers zero of seven as easily as one.
+#
+# This is the single source of truth for what the seven are and how each is
+# invoked. `.github/workflows/nightly.yml` composes a stack and calls this
+# script rather than re-listing them: two lists drift, and the drift stays
+# invisible until a nightly runs six of seven and reports green.
+#
+# TWO GUARDS, ENFORCED RATHER THAN DOCUMENTED:
+#
+#   Spend.    Only roundtrip.php makes real model calls; it is behind --spend.
+#             The other harnesses stub the provider at pre_http_request AND use
+#             a placeholder key, so they neither spend nor need a real one.
+#   Mutation. These create fixtures, a test administrator, exam rows and
+#             attempts. Fine locally, wrong anywhere real — so a non-localhost
+#             target is REFUSED, not warned about. The operator who most needs
+#             that guard is the one not reading this header.
+#
+# AND TWO THINGS IT PROVES ABOUT ITSELF before believing any verdict: that the
+# stack is actually up, and that it is serving the *current* code rather than a
+# stale container. Four separate instrument failures on this project were tools
+# reporting confidently about a state they had never established.
+
+set -uo pipefail
+cd "$(dirname "$0")/.." || exit 1
+
+URL="http://localhost:8080"
+SPEND=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --spend) SPEND=1; shift ;;
+    --url)   URL="${2:-}"; shift 2 ;;
+    --help|-h)
+      sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) printf 'unknown option: %s (try --help)\n' "$1"; exit 2 ;;
+  esac
+done
+
+pass=0; fail=0; skipped=0
+declare -a SKIPPED=()
+
+say()  { printf '%s\n' "$*"; }
+ok()   { pass=$((pass+1));    printf 'ok      %s\n' "$1"; }
+bad()  { fail=$((fail+1));    printf 'NOT OK  %s\n' "$1"; [ -n "${2:-}" ] && printf '          %s\n' "$2"; }
+skip() { skipped=$((skipped+1)); SKIPPED+=("$1"); printf 'skip    %s\n          %s\n' "$1" "$2"; }
+
+# --- guard: mutation ---------------------------------------------------------
+# Fail closed. A warning here would be read past by exactly the person about to
+# create a test administrator on a production site.
+
+case "$URL" in
+  http://localhost:*|http://127.0.0.1:*|https://localhost:*|https://127.0.0.1:*) ;;
+  *)
+    say "REFUSING to run against $URL"
+    say ""
+    say "These harnesses create users, exams, attempts and study materials, and the"
+    say "visual pass switches themes. That is fine on a local stack and wrong"
+    say "anywhere a real person might be looking. There is deliberately no flag to"
+    say "override this."
+    exit 2 ;;
+esac
+
+# --- guard: is the stack actually up, serving current code? ------------------
+
+say "target: $URL"
+
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL/" || echo 000)"
+
+if [ "$code" != "200" ]; then
+  say "stack is not answering (HTTP $code) — starting it"
+  MSYS_NO_PATHCONV=1 docker compose up -d >/dev/null 2>&1
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL/" || echo 000)"
+    [ "$code" = "200" ] && break
+    curl -s -o /dev/null --max-time 5 "$URL/" >/dev/null 2>&1
+  done
+fi
+
+if [ "$code" != "200" ]; then
+  say "NOT OK  the stack never came up (HTTP $code) — nothing below would mean anything"
+  exit 1
+fi
+
+# "Up" is not "serving the code in this working tree". A container holding a
+# stale theme answers 200 and passes every check about a version of the site
+# nobody is editing. Derive the expected version rather than pinning a literal:
+# a hard-coded one rots the first time anyone bumps it, which happened here
+# between a version being suggested and the assertion being written.
+version="$(sed -n "s/.*SCHOLARIS_VERSION', *'\([^']*\)'.*/\1/p" wp-content/themes/scholaris/functions.php | head -1)"
+home="$(curl -s --max-time 15 "$URL/")"
+
+if [ -z "$version" ]; then
+  skip "instrument: serving-current-code" "could not read SCHOLARIS_VERSION from functions.php"
+elif printf '%s' "$home" | grep -q "main.css?ver=$version"; then
+  ok "instrument: the stack is serving the current theme (ver=$version)"
+else
+  # Stop, do not merely report. A stale container answers 200 and every harness
+  # below would then pass — about code nobody is editing. Seven greens under one
+  # red is read as green, so this has to be fatal in the same way "the stack
+  # never came up" is: there is no useful verdict to be had from here.
+  say "NOT OK  instrument: the stack is serving stale code"
+  say "          functions.php declares $version but the page does not load main.css?ver=$version"
+  say "          Nothing below would be about the code in this working tree, so the run stops."
+  say "          docker compose restart wordpress   (or docker compose up -d --force-recreate)"
+  exit 1
+fi
+
+say ""
+
+# --- the harnesses -----------------------------------------------------------
+# One list. The nightly workflow calls this script rather than repeating it.
+
+run_wp() {                      # name, file, description
+  local name="$1" file="$2"
+  if MSYS_NO_PATHCONV=1 docker compose --profile tools run --rm cli \
+       wp eval-file "/scripts/$file" --allow-root >/tmp/lc.$$ 2>&1; then
+    ok "$name"
+  else
+    bad "$name" "$(grep -E '^(FAIL|no assertions|.*Error)' /tmp/lc.$$ | head -2 | tr '\n' ' ')"
+  fi
+  rm -f /tmp/lc.$$
+}
+
+run_wp "grade-adversarial  docs/06 §5.2, a model's lie cannot mint marks" grade-adversarial.php
+run_wp "projection-leak    docs/07 §1, the answer key never reaches the browser" projection-leak.php
+run_wp "submit-contract    docs/07 §3, a full-credit short is not shown as wrong" submit-contract.php
+run_wp "rate-limit         the assistant's quota is per user, not shared" rate-limit.php
+
+if bash scripts/download-gate.sh >/tmp/lc.dg.$$ 2>&1; then
+  ok "download-gate      a link copied from one student fails for another"
+else
+  bad "download-gate      a link copied from one student fails for another" \
+      "$(grep -E '^FAIL' /tmp/lc.dg.$$ | head -2 | tr '\n' ' ')"
+fi
+rm -f /tmp/lc.dg.$$
+
+if [ "$SPEND" -eq 1 ]; then
+  if MSYS_NO_PATHCONV=1 docker compose --profile tools run --rm cli \
+       wp eval-file /scripts/roundtrip.php --allow-root >/tmp/lc.rt.$$ 2>&1; then
+    ok "roundtrip          a real deck through a real model, end to end"
+    grep -E '^5\. cost' /tmp/lc.rt.$$ | sed 's/^/          /'
+  else
+    bad "roundtrip          a real deck through a real model, end to end" \
+        "$(grep -E 'FAILED|Rate limit' /tmp/lc.rt.$$ | head -1)"
+  fi
+  rm -f /tmp/lc.rt.$$
+else
+  skip "roundtrip" "spends credit on real model calls — pass --spend to include it"
+fi
+
+if command -v node >/dev/null 2>&1; then
+  if node scripts/ui-geometry.mjs --url "$URL" >/tmp/lc.ui.$$ 2>&1; then
+    ok "ui-geometry        signed-in layout, headless, asserts its own scroll"
+  else
+    bad "ui-geometry        signed-in layout, headless, asserts its own scroll" \
+        "$(grep -iE 'fail' /tmp/lc.ui.$$ | head -2 | tr '\n' ' ')"
+  fi
+  rm -f /tmp/lc.ui.$$
+else
+  skip "ui-geometry" "needs node, which is not on this machine — it runs in CI"
+fi
+
+# Human-run by design, not by omission: it needs a browser, and its tool checks
+# want running twice, under the real theme and a stock one. Announced so that
+# "everything ran" is never read off a summary that quietly excluded it.
+skip "visual-checks" "human-run by design — paste scripts/visual-checks.js into a browser signed in as an admin, on each tool page, under both themes"
+
+# --- summary -----------------------------------------------------------------
+# What did not run is printed as loudly as what failed. "Ran six of seven" must
+# never be able to read as green.
+
+say ""
+if [ "$skipped" -gt 0 ]; then
+  say "did not run (${skipped}):"
+  for s in "${SKIPPED[@]}"; do say "  - $s"; done
+  say ""
+fi
+
+if [ "$fail" -gt 0 ]; then
+  say "$fail failed, $pass passed, $skipped not run"
+  exit 1
+fi
+
+say "$pass passed, 0 failed, $skipped not run"
+[ "$skipped" -gt 0 ] && say "(a clean run is not a complete one — see the list above)"
+exit 0
