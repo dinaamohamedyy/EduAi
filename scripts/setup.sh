@@ -133,6 +133,19 @@ make_page() {
 	ok "/$slug/ already exists as page $id$note — left untouched"
 }
 
+# Titles converge on every run (nav labels are spec — docs/06 names the tabs),
+# while content stays create-only: titles are ours, page bodies may hold edits.
+retitle_page() {
+	local slug="$1" title="$2" id current
+	id=$($WP post list --post_type=page --name="$slug" --field=ID | head -1)
+	[ -z "$id" ] && return 0
+	current=$($WP post get "$id" --field=post_title)
+	if [ "$current" != "$title" ]; then
+		$WP post update "$id" --post_title="$title" >/dev/null
+		ok "retitled /$slug/ to \"$title\""
+	fi
+}
+
 make_page "Home" "home" "Welcome to $SITE_TITLE."
 make_page "Library" "library" "[scholaris_library per_page=\"12\" filters=\"yes\"]"
 # /dashboard/ belongs to Tutor LMS, which creates it on activation before this
@@ -146,9 +159,18 @@ make_page "Privacy Policy" "privacy" "How student data and AI conversations are 
 # panel shortcode today; AiCalc and PrepareME get placeholder copy until their
 # shortcodes land — the back end swaps the content, the slug and menu slot are
 # already right.
-make_page "Q&A" "ask" "[eduai_panel height=\"600\" tabs=\"chat\"]"
+make_page "Q&A" "ask" "[eduai_panel tabs=\"chat\" page=\"1\"]"
 make_page "AiCalc" "calc" "[eduai_calc]"
 make_page "PrepareME" "prepare" "[eduai_prepare]"
+
+# Converge the nav-facing titles (make_page above is create-only, so a page
+# created under an older title keeps it forever otherwise — the live site
+# showed "Summarise a Lecture" in the nav for exactly this reason).
+retitle_page "summarise" "Summarise"
+retitle_page "calc" "AiCalc"
+retitle_page "ask" "Q&A"
+retitle_page "prepare" "PrepareME"
+retitle_page "progress" "My Progress"
 
 # Auth pages. Content stays empty: the theme routes wp_login_url()/
 # wp_registration_url()/wp_lostpassword_url() to these slugs and applies the

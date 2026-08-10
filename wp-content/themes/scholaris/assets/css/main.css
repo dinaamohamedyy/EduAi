@@ -454,6 +454,10 @@ body.admin-bar .site-header { top: var(--wp-admin--admin-bar--height, 32px); }
 .nav a {
   display: block; padding: 0.5em 0.75em; border-radius: var(--radius-xs);
   color: hsl(var(--text-muted)); font-weight: 500; font-size: var(--step-0); text-decoration: none;
+  /* Multi-word labels ("My Progress") must never wrap inside their own box —
+     flex min-content shrinking splits them onto two lines long before the row
+     runs out of room. The row either fits, or the toggle takes over. */
+  white-space: nowrap;
   transition: color var(--dur-fast), background-color var(--dur-fast), box-shadow var(--dur-fast);
 }
 .nav a:hover { color: hsl(var(--text)); background: hsl(var(--bg-sunken) / 0.7); }
