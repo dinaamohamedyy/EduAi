@@ -163,16 +163,36 @@ else
   skip "roundtrip" "spends credit on real model calls — pass --spend to include it"
 fi
 
-if command -v node >/dev/null 2>&1; then
-  if node scripts/ui-geometry.mjs --url "$URL" >/tmp/lc.ui.$$ 2>&1; then
+# ui-geometry.mjs resolves a browser itself, and throws if it finds none. That
+# throw would surface here as a FAILING layout check, which is the worst
+# available shape: a red pointing at the wrong thing. "Cannot run" and "ran and
+# found a defect" are different states, so resolve the browser first and skip
+# loudly when there is none. UI_BROWSER is the documented override, so setting
+# it is also how a caller pins a specific binary.
+find_browser() {
+  [ -n "${UI_BROWSER:-}" ] && { printf '%s' "$UI_BROWSER"; return 0; }
+  for c in google-chrome google-chrome-stable chromium-browser chromium msedge microsoft-edge; do
+    p="$(command -v "$c" 2>/dev/null)" && [ -n "$p" ] && { printf '%s' "$p"; return 0; }
+  done
+  for p in "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+           "/c/Program Files/Microsoft/Edge/Application/msedge.exe"; do
+    [ -x "$p" ] && { printf '%s' "$p"; return 0; }
+  done
+  return 1
+}
+
+if ! command -v node >/dev/null 2>&1; then
+  skip "ui-geometry" "needs node, which is not on this machine — it runs in CI"
+elif ! browser="$(find_browser)"; then
+  skip "ui-geometry" "no Chromium-family browser found — set UI_BROWSER=/path/to/chrome (the harness needs one; this is not a layout failure)"
+else
+  if UI_BROWSER="$browser" node scripts/ui-geometry.mjs --url "$URL" >/tmp/lc.ui.$$ 2>&1; then
     ok "ui-geometry        signed-in layout, headless, asserts its own scroll"
   else
     bad "ui-geometry        signed-in layout, headless, asserts its own scroll" \
-        "$(grep -iE 'fail' /tmp/lc.ui.$$ | head -2 | tr '\n' ' ')"
+        "$(grep -iE 'fail|Error' /tmp/lc.ui.$$ | head -2 | tr '\n' ' ')"
   fi
   rm -f /tmp/lc.ui.$$
-else
-  skip "ui-geometry" "needs node, which is not on this machine — it runs in CI"
 fi
 
 # Human-run by design, not by omission: it needs a browser, and its tool checks
