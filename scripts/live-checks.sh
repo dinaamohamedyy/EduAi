@@ -33,6 +33,20 @@
 # stack is actually up, and that it is serving the *current* code rather than a
 # stale container. Four separate instrument failures on this project were tools
 # reporting confidently about a state they had never established.
+#
+# ON INTERMITTENT FAILURES SEEN LOCALLY. `download-gate` and `ui-geometry` have
+# each gone red once on a wrapper run, passed when run directly, and passed on
+# every run since — neither reproducible. Both are harnesses that create a
+# fixture user and then sign in as it, and several sessions share this machine's
+# stack, so contention over users, sessions or the active theme is the leading
+# hypothesis. It is a hypothesis, not a diagnosis.
+#
+# The nightly is the one place it cannot happen: a fresh stack, one job, nobody
+# else touching it. So a flake here is not evidence of a flake in CI, and a red
+# on a shared developer machine is worth re-running once before it is chased.
+# That is the only case on this project where "run it again" is legitimate, and
+# it is legitimate precisely because the environment, not the product, is what
+# differs.
 
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -181,23 +195,17 @@ find_browser() {
   for c in google-chrome google-chrome-stable chromium-browser chromium msedge microsoft-edge; do
     p="$(command -v "$c" 2>/dev/null)" && [ -n "$p" ] && { printf '%s' "$p"; return 0; }
   done
-  # The Windows fallback is written MSYS-style because that is the only form
-  # this shell can test with [ -x ]. But the consumer is Node, which wants a
-  # native path — so convert before handing it over. Same family as
-  # MSYS_NO_PATHCONV for docker but not curl, and TEMP being undefined on
-  # Linux: a path form that is valid in one context and meaningless in the
-  # next. It spawns either way on this machine, which is exactly why it is
-  # worth normalising rather than trusting.
+  # MSYS-style, and handed to Node as-is. A conversion to C:/… lived here
+  # briefly, guarding a hazard that turned out not to exist: ui-geometry.mjs
+  # spawns with `spawn`, which resolves this form fine. (The report that it
+  # did not came from a reproduction using `spawnSync`, which resolves
+  # Windows paths differently — a test that resembled the real invocation
+  # rather than being it.) Removed rather than kept "just in case": code
+  # defending against a disproven failure reads like evidence that the
+  # failure is real.
   for p in "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
            "/c/Program Files/Microsoft/Edge/Application/msedge.exe"; do
-    if [ -x "$p" ]; then
-      if command -v cygpath >/dev/null 2>&1; then
-        cygpath -m "$p"
-      else
-        printf '%s' "$p" | sed 's|^/\([a-zA-Z]\)/|\1:/|'
-      fi
-      return 0
-    fi
+    [ -x "$p" ] && { printf '%s' "$p"; return 0; }
   done
   return 1
 }
