@@ -22,7 +22,8 @@ get_header();
 			}
 			?>
 		</h1>
-		<p class="sl-single__meta">
+		<?php // .sl-intro, not .sl-single__meta: this paragraph sits outside every sl- wrapper, so it must be its own scope root (see the alias block in library.css). ?>
+		<p class="sl-intro">
 			<?php esc_html_e( 'Lecture slides, notes, past papers and reading — filter by subject or search the whole collection.', 'scholaris-library' ); ?>
 		</p>
 	</div>

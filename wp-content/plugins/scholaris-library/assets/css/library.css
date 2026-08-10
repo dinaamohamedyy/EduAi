@@ -5,13 +5,16 @@
 
    Token migration (docs/09 §3): spacing, type and radius literals resolve
    through the alias block below. The aliases MUST live on the same
-   five-selector list — putting one on :root or on a subset means it resolves
-   in some contexts and silently falls back in others, per page. Remaining
-   raw values are the §3.2 exemptions: sub-0.25rem optical gaps, 50%/999px
-   intent, and mono meta labels at ≤0.7rem.
+   scoping list — putting one on :root or on a subset means it resolves
+   in some contexts and silently falls back in others, per page. Every class
+   on the list is a root the templates actually emit; a token-based rule on
+   an element OUTSIDE all of them silently loses every token (custom
+   properties inherit down, never up — the archive intro shipped that way).
+   Remaining raw values are the §3.2 exemptions: sub-0.25rem optical gaps,
+   50%/999px intent, and mono meta labels at ≤0.7rem.
    ========================================================================== */
 
-.sl-library, .sl-history, .sl-dashboard, .sl-single, .sl-notice {
+.sl-library, .sl-history, .sl-dashboard, .sl-single, .sl-notice, .sl-intro {
   --sl-brand: var(--brand, 161 45% 25%);
   --sl-brand-strong: var(--brand-strong, 162 50% 18%);
   --sl-accent: var(--accent, 33 58% 42%);
@@ -87,6 +90,14 @@
 .sl-badge--pass { background: hsl(var(--sl-success) / 0.1); color: hsl(var(--sl-success)); border-color: hsl(var(--sl-success) / 0.35); }
 .sl-badge--fail { background: hsl(var(--sl-danger) / 0.1); color: hsl(var(--sl-danger)); border-color: hsl(var(--sl-danger) / 0.35); }
 .sl-badge--warn { background: hsl(var(--sl-warning) / 0.12); color: hsl(var(--sl-warning)); border-color: hsl(var(--sl-warning) / 0.4); }
+
+/* Archive intro paragraph — its own scope root: it renders in the page hero,
+   outside every other sl- wrapper, so it must carry the tokens itself. */
+.sl-intro {
+  color: hsl(var(--sl-muted));
+  font-size: var(--sl-step-0);
+  margin: var(--sl-space-2xs) 0 0;
+}
 
 .sl-notice {
   text-align: center;
