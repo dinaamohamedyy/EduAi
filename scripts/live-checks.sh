@@ -181,9 +181,23 @@ find_browser() {
   for c in google-chrome google-chrome-stable chromium-browser chromium msedge microsoft-edge; do
     p="$(command -v "$c" 2>/dev/null)" && [ -n "$p" ] && { printf '%s' "$p"; return 0; }
   done
+  # The Windows fallback is written MSYS-style because that is the only form
+  # this shell can test with [ -x ]. But the consumer is Node, which wants a
+  # native path — so convert before handing it over. Same family as
+  # MSYS_NO_PATHCONV for docker but not curl, and TEMP being undefined on
+  # Linux: a path form that is valid in one context and meaningless in the
+  # next. It spawns either way on this machine, which is exactly why it is
+  # worth normalising rather than trusting.
   for p in "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
            "/c/Program Files/Microsoft/Edge/Application/msedge.exe"; do
-    [ -x "$p" ] && { printf '%s' "$p"; return 0; }
+    if [ -x "$p" ]; then
+      if command -v cygpath >/dev/null 2>&1; then
+        cygpath -m "$p"
+      else
+        printf '%s' "$p" | sed 's|^/\([a-zA-Z]\)/|\1:/|'
+      fi
+      return 0
+    fi
   done
   return 1
 }
