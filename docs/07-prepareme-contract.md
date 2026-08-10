@@ -286,3 +286,66 @@ temperature 0 with the maths-and-science agent's prompt.
 
 The exact path does not consume rate limit — it costs nothing to serve. The
 model path shares the chat bucket.
+
+---
+
+## 8. `POST /eduai/v1/summarize` — Summarise
+
+Predates this document and was undocumented until the tab was built. It is here
+rather than in a file of its own for the reason §7 gives: one route, one place.
+
+**Request** — `multipart/form-data`.
+
+| Field | |
+|---|---|
+| `file` | PDF, PPTX, DOCX, TXT or MD, 20 MB max. Optional if `text` is given. |
+| `text` | Pasted lecture text, at least 80 characters. Optional if `file` is given. |
+| `style` | `detailed` (default), `brief`, `exam`, `critical`. |
+
+**Response 200**
+
+```jsonc
+{
+  "summary": "## Overview\n…",   // markdown
+  "html":    "<h3>Overview</h3>…", // sanitised by EduAI_REST::to_html()
+  "label":   "photosynthesis-lecture.pptx",
+  "style":   "brief"
+}
+```
+
+`label` is the uploaded filename, or empty for pasted text — the client supplies
+its own wording in that case.
+
+### What the server does with a deck
+
+Extraction is `EduAI_PDF::extract($path, $ext)`, and the **extension must be
+passed explicitly**: an upload arrives at `/tmp/phpXXXX.tmp` and the path says
+nothing about the format. Getting this wrong is not a visible failure — it
+silently returns an empty string, which is how DOCX summarising was broken for
+a long time while every test still passed.
+
+A PPTX is read **slide by slide in slide order, with the speaker notes**, and
+the notes are located through `ppt/slides/_rels/slideN.xml.rels` rather than by
+matching numbers: a deck where only slides 2 and 5 carry notes stores them as
+`notesSlide1` and `notesSlide2`, so a numeric guess attaches them to the wrong
+slides. The notes matter — they are usually where the lecturer wrote the
+sentence the bullet only hints at, and summaries visibly draw on them.
+
+### Errors worth handling by name
+
+| Status | When |
+|---|---|
+| 400 | Neither a file nor 80+ characters of text |
+| 413 | Over 20 MB |
+| 415 | Unsupported type; legacy `.doc`/`.ppt`; or a scanned PDF on a provider that cannot read documents |
+| 422 | Readable file, no text in it — an image-only deck. The message tells the student to export to PDF |
+| 429 | Shares the chat rate-limit bucket |
+
+Every message is already written for a student rather than a developer, so a
+client should surface `message` verbatim rather than substituting its own.
+
+### Cost
+
+There is no deterministic path. Unlike AiCalc, **every summary calls the
+model** — the strongest tier at temperature 0.2, since a whole lecture needs the
+context window and real synthesis. A page cannot be demonstrated without a key.

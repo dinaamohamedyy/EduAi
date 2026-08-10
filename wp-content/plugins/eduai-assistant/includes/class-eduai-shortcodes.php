@@ -92,6 +92,39 @@ class EduAI_Shortcodes {
 			return self::login_card();
 		}
 
+		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
+		wp_enqueue_script( 'eduai-summarise', EDUAI_URL . 'assets/js/summarise.js', array(), EDUAI_VERSION, true );
+
+		wp_localize_script( 'eduai-summarise', 'EduAISumConfig', array(
+			'root'        => esc_url_raw( rest_url( EduAI_REST::NS ) ),
+			'nonce'       => wp_create_nonce( 'wp_rest' ),
+			'loggedIn'    => is_user_logged_in(),
+			'maxUploadMb' => 20,
+			'i18n'        => array(
+				'dropFile'         => __( 'Drop a lecture here, or click to choose', 'eduai' ),
+				'reading'          => __( 'Reading…', 'eduai' ),
+				'summarising'      => __( 'Summarising…', 'eduai' ),
+				// Naming the stage matters: extraction of a long deck happens
+				// before the model is called at all, and silence there reads
+				// as a hang.
+				'readingNote'      => __( 'Reading the document on the server — slides and speaker notes first.', 'eduai' ),
+				'summarisingNote'  => __( 'Writing the notes. A long lecture takes a little while.', 'eduai' ),
+				'needSource'       => __( 'Attach a file, or paste at least a paragraph of the lecture.', 'eduai' ),
+				'tooBig'           => __( 'That file is larger than %d MB. Split it, or paste the part you need.', 'eduai' ),
+				'error'            => __( 'Something went wrong. Please try again.', 'eduai' ),
+				'loginPrompt'      => __( 'Please sign in to use the summariser.', 'eduai' ),
+				'pastedText'       => __( 'Pasted lecture text', 'eduai' ),
+				'copy'             => __( 'Copy', 'eduai' ),
+				'copied'           => __( 'Copied', 'eduai' ),
+				'styles'           => array(
+					'detailed' => __( 'Full study notes', 'eduai' ),
+					'brief'    => __( 'Quick summary', 'eduai' ),
+					'exam'     => __( 'Exam preparation', 'eduai' ),
+					'critical' => __( 'Critical review', 'eduai' ),
+				),
+			),
+		) );
+
 		ob_start();
 		include EDUAI_DIR . 'templates/summarizer.php';
 		return (string) ob_get_clean();

@@ -516,3 +516,100 @@
 }
 .eduai-calc__working { padding: 0.5rem 0; }
 .eduai-calc__foot { margin: 0; font-size: 0.75rem; color: hsl(var(--eduai-muted)); }
+
+/* ---------------------------------------------------------- Summarise ---- */
+/* A page, not a tab inside a widget (docs/06 §2.1). The drop zone leads
+   because attaching a lecture is the common path; pasting is the fallback. */
+.eduai-sum { display: grid; gap: 0.9rem; max-width: 52rem; }
+.eduai-sum__form { display: grid; gap: 0.75rem; }
+.eduai-sum__drop {
+  display: grid; justify-items: center; gap: 0.5rem;
+  padding: 1.8rem 1rem; text-align: center; cursor: pointer;
+  color: hsl(var(--eduai-muted)); font-size: 0.9rem;
+  border: 2px dashed hsl(var(--eduai-border)); border-radius: 14px;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+.eduai-sum__drop:hover,
+.eduai-sum__drop.is-over,
+.eduai-sum__drop:focus-visible {
+  outline: none;
+  border-color: hsl(var(--eduai-brand));
+  background: hsl(var(--eduai-brand) / 0.05);
+  color: hsl(var(--eduai-brand-strong));
+}
+.eduai-sum__drop.has-file {
+  border-style: solid;
+  border-color: hsl(var(--eduai-accent));
+  color: hsl(var(--eduai-accent));
+}
+.eduai-sum__hint {
+  margin: -0.35rem 0 0; font-size: 0.75rem; line-height: 1.5;
+  color: hsl(var(--eduai-muted));
+}
+.eduai-sum__or {
+  position: relative; text-align: center;
+  font-size: 0.75rem; color: hsl(var(--eduai-muted));
+}
+.eduai-sum__or::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%;
+  border-top: 1px solid hsl(var(--eduai-border));
+}
+.eduai-sum__or span {
+  position: relative; padding: 0 0.7rem; background: hsl(var(--eduai-bg));
+}
+.eduai-sum textarea {
+  width: 100%; padding: 0.7rem 0.85rem; resize: vertical;
+  font: inherit; font-size: 0.92rem; color: hsl(var(--eduai-text));
+  background: hsl(var(--eduai-bg));
+  border: 1px solid hsl(var(--eduai-border)); border-radius: 12px;
+}
+.eduai-sum textarea:focus {
+  outline: none; border-color: hsl(var(--eduai-brand));
+  box-shadow: 0 0 0 3px hsl(var(--eduai-brand) / 0.18);
+}
+.eduai-sum__row { display: flex; gap: 0.5rem; }
+.eduai-sum__row select {
+  flex: 1; min-width: 0; padding: 0.6rem 0.7rem;
+  font: inherit; font-size: 0.9rem; color: hsl(var(--eduai-text));
+  background: hsl(var(--eduai-bg));
+  border: 1px solid hsl(var(--eduai-border)); border-radius: 12px;
+}
+.eduai-sum__working { display: grid; gap: 0.4rem; justify-items: center; padding: 1.2rem; }
+.eduai-sum__working p { margin: 0; font-size: 0.8rem; color: hsl(var(--eduai-muted)); }
+.eduai-sum__card {
+  padding: 1.1rem 1.2rem; border-radius: 14px;
+  background: hsl(var(--eduai-surface));
+  border: 1px solid hsl(var(--eduai-border));
+  border-left: 4px solid hsl(var(--eduai-accent));
+}
+.eduai-sum__head {
+  display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
+  padding-bottom: 0.6rem; margin-bottom: 0.6rem;
+  border-bottom: 1px dashed hsl(var(--eduai-border));
+}
+.eduai-sum__head strong { font-size: 0.95rem; overflow-wrap: anywhere; }
+.eduai-sum__style {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 0.12rem 0.55rem; border-radius: 999px;
+  background: hsl(var(--eduai-accent) / 0.15); color: hsl(var(--eduai-accent));
+}
+.eduai-sum__body > :first-child { margin-top: 0; }
+.eduai-sum__body > :last-child { margin-bottom: 0; }
+.eduai-sum__body h3 { font-size: 1rem; margin: 1.1rem 0 0.4rem; }
+.eduai-sum__body h4 { font-size: 0.9rem; margin: 0.9rem 0 0.3rem; }
+.eduai-sum__body ul, .eduai-sum__body ol { padding-left: 1.2rem; }
+.eduai-sum__body li { margin-bottom: 0.25rem; }
+.eduai-sum__body pre {
+  background: hsl(var(--eduai-sunken) / 0.8); padding: 0.7rem; border-radius: 8px;
+  overflow-x: auto; font-family: var(--eduai-mono); font-size: 0.82rem;
+}
+.eduai-sum__tools { display: flex; gap: 0.3rem; margin-top: 0.9rem; }
+.eduai-sum__tools button {
+  border: 1px solid hsl(var(--eduai-border)); background: transparent;
+  color: hsl(var(--eduai-muted)); font: inherit; font-size: 0.72rem;
+  padding: 0.18rem 0.6rem; border-radius: 999px; cursor: pointer;
+}
+.eduai-sum__tools button:hover {
+  color: hsl(var(--eduai-brand-strong)); border-color: hsl(var(--eduai-brand));
+}
+.eduai-sum__foot { margin: 0; font-size: 0.75rem; color: hsl(var(--eduai-muted)); }

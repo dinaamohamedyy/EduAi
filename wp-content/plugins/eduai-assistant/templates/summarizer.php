@@ -1,16 +1,75 @@
 <?php
 /**
- * Standalone summariser, rendered by [eduai_summarizer].
- * Reuses the app shell but opens straight on the summary tab.
+ * Summarise — the lecture summariser page, rendered by [eduai_summarizer].
+ *
+ * This used to render the whole chat panel forced onto its summary tab: a
+ * feature living inside a widget that also carried a chat log, an agent picker
+ * and a microphone it never used. docs/06 §2.1 calls the move to a page "a move,
+ * not a rewrite" — the endpoint is untouched, only the surface changed.
+ *
+ * The shortcode name is unchanged so anything already embedding
+ * [eduai_summarizer] keeps working.
  *
  * @package EduAI
  */
 
 defined( 'ABSPATH' ) || exit;
 
-$eduai_inline = true;
-$eduai_atts   = array( 'height' => 460 );
+$eduai_sum_id = 'eduai-sum-' . wp_unique_id();
 ?>
-<div class="eduai-standalone" data-eduai-default-tab="summary">
-	<?php include EDUAI_DIR . 'templates/panel.php'; ?>
+<div class="eduai-sum" id="<?php echo esc_attr( $eduai_sum_id ); ?>" data-eduai-sum>
+
+	<form class="eduai-sum__form" data-eduai-sum-form>
+
+		<div class="eduai-sum__drop" data-eduai-sum-drop tabindex="0" role="button"
+			aria-label="<?php esc_attr_e( 'Choose a lecture file', 'eduai' ); ?>">
+			<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+				stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>
+			</svg>
+			<span data-eduai-sum-dropmsg><?php esc_html_e( 'Drop a lecture here, or click to choose', 'eduai' ); ?></span>
+			<input type="file" data-eduai-sum-file hidden
+				accept=".pdf,.pptx,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown">
+		</div>
+
+		<p class="eduai-sum__hint">
+			<?php
+			printf(
+				/* translators: %d: maximum upload size in megabytes */
+				esc_html__( 'PDF, PPTX, DOCX, TXT or MD, up to %d MB. Slide decks are read slide by slide, with the speaker notes — usually where the lecturer wrote the sentence the bullet only hints at.', 'eduai' ),
+				20
+			);
+			?>
+		</p>
+
+		<div class="eduai-sum__or"><span><?php esc_html_e( 'or paste the lecture', 'eduai' ); ?></span></div>
+
+		<label class="screen-reader-text" for="<?php echo esc_attr( $eduai_sum_id ); ?>-text">
+			<?php esc_html_e( 'Lecture text', 'eduai' ); ?>
+		</label>
+		<textarea id="<?php echo esc_attr( $eduai_sum_id ); ?>-text" data-eduai-sum-text rows="6"
+			placeholder="<?php esc_attr_e( 'Paste lecture notes, a transcript or slide text…', 'eduai' ); ?>"></textarea>
+
+		<div class="eduai-sum__row">
+			<label class="screen-reader-text" for="<?php echo esc_attr( $eduai_sum_id ); ?>-style">
+				<?php esc_html_e( 'What kind of summary?', 'eduai' ); ?>
+			</label>
+			<select id="<?php echo esc_attr( $eduai_sum_id ); ?>-style" data-eduai-sum-style>
+				<option value="detailed"><?php esc_html_e( 'Full study notes', 'eduai' ); ?></option>
+				<option value="brief"><?php esc_html_e( 'Quick summary', 'eduai' ); ?></option>
+				<option value="exam"><?php esc_html_e( 'Exam preparation', 'eduai' ); ?></option>
+				<option value="critical"><?php esc_html_e( 'Critical review', 'eduai' ); ?></option>
+			</select>
+
+			<button type="submit" class="eduai-btn eduai-btn--primary" data-eduai-sum-go>
+				<?php esc_html_e( 'Summarise', 'eduai' ); ?>
+			</button>
+		</div>
+	</form>
+
+	<div class="eduai-sum__out" data-eduai-sum-out hidden></div>
+
+	<p class="eduai-sum__foot">
+		<?php esc_html_e( 'The summary is written from your document alone. Check anything you plan to rely on against the original — it can miss things, and it will say so when the source is unclear.', 'eduai' ); ?>
+	</p>
 </div>
