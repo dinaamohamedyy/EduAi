@@ -137,6 +137,11 @@ class EduAI_Shortcodes {
 			return self::login_card();
 		}
 
+		// This used to work only because the floating widget enqueued chat.js on
+		// every page. The widget is retired (docs/06 §3), so the panel asks for
+		// its own assets like every other tab does.
+		EduAI_Assistant::enqueue_chat_assets();
+
 		ob_start();
 		$eduai_inline = true;
 		$eduai_atts   = $atts;

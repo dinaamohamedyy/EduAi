@@ -66,6 +66,8 @@ final class EduAI_Assistant {
 		EduAI_REST::init();
 		EduAI_Shortcodes::init();
 
+		$this->retire_floating_widget();
+
 		if ( is_admin() ) {
 			EduAI_Admin::init();
 		}
@@ -115,9 +117,29 @@ final class EduAI_Assistant {
 	 * Front-end assets. Only loaded when the widget can actually be shown.
 	 */
 	public function assets(): void {
-		if ( ! EduAI_Settings::widget_visible() ) {
+		// Only for the floating launcher now. [eduai_panel] enqueues these
+		// itself, because it used to rely on this running on every page — which
+		// stopped being true the moment the widget was retired.
+		if ( ! EduAI_Settings::launcher_visible() ) {
 			return;
 		}
+
+		self::enqueue_chat_assets();
+	}
+
+	/**
+	 * The chat bundle and its config.
+	 *
+	 * Public and idempotent so [eduai_panel] can ask for it directly rather
+	 * than depending on the launcher having already loaded it.
+	 */
+	public static function enqueue_chat_assets(): void {
+		static $done = false;
+
+		if ( $done ) {
+			return;
+		}
+		$done = true;
 
 		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
 		wp_enqueue_script( 'eduai-chat', EDUAI_URL . 'assets/js/chat.js', array(), EDUAI_VERSION, true );
@@ -207,10 +229,39 @@ final class EduAI_Assistant {
 	 * Floating launcher + panel markup, printed once in the footer.
 	 */
 	public function render_launcher(): void {
-		if ( ! EduAI_Settings::widget_visible() || ! EduAI_Settings::get( 'enable_floating', true ) ) {
+		if ( ! EduAI_Settings::launcher_visible() ) {
 			return;
 		}
 		include EDUAI_DIR . 'templates/widget.php';
+	}
+
+	/**
+	 * Turn the floating widget off on a site that already had it on.
+	 *
+	 * Flipping the default only helps a fresh install: an existing site has
+	 * `enable_floating` stored as true in its options and would keep showing a
+	 * launcher that now duplicates four top-level tabs — precisely the shape
+	 * the restructure removed.
+	 *
+	 * Migrating rather than leaving it is a deliberate choice. On every install
+	 * that exists today the stored `true` came from the default at save time,
+	 * not from an administrator deciding they wanted a launcher. Runs once, and
+	 * the setting stays in the UI, so anyone who genuinely wants it back is one
+	 * checkbox away.
+	 */
+	private function retire_floating_widget(): void {
+		if ( get_option( 'eduai_widget_retired' ) ) {
+			return;
+		}
+
+		update_option( 'eduai_widget_retired', 1, false );
+
+		$stored = get_option( EduAI_Settings::OPTION );
+
+		if ( is_array( $stored ) && ! empty( $stored['enable_floating'] ) ) {
+			$stored['enable_floating'] = false;
+			update_option( EduAI_Settings::OPTION, $stored );
+		}
 	}
 
 	/**

@@ -43,7 +43,9 @@ class EduAI_Settings {
 			'default_agent'    => EduAI_Agents::DEFAULT_ID,
 			'agent_picker'     => true,
 			'allow_general_knowledge' => true,
-			'enable_floating'  => true,
+			// Retired: the four AI tabs replaced it (docs/06 §3). Still a
+			// setting, so a site that genuinely wants a launcher can have one.
+			'enable_floating'  => false,
 			'enable_voice'     => true,
 			'enable_tts'       => true,
 			'voice_lang'       => 'en-US',
@@ -195,6 +197,19 @@ class EduAI_Settings {
 			return false;
 		}
 		return (bool) apply_filters( 'eduai_widget_visible', true );
+	}
+
+	/**
+	 * Should the floating launcher be printed at all?
+	 *
+	 * Separate from widget_visible(), which answers "may this user see the
+	 * assistant" and still governs the shortcodes. This answers the narrower
+	 * question the retired launcher asks, and it is the single place the
+	 * default lives — the old code passed its own `true` fallback at the call
+	 * site, so flipping the default in defaults() would have changed nothing.
+	 */
+	public static function launcher_visible(): bool {
+		return self::widget_visible() && (bool) self::get( 'enable_floating', false );
 	}
 
 	/**
@@ -502,7 +517,10 @@ class EduAI_Settings {
 				<table class="form-table" role="presentation">
 					<?php
 					$toggles = array(
-						'enable_floating' => array( __( 'Floating chat button on every page', 'eduai' ), '' ),
+						'enable_floating' => array(
+							__( 'Floating chat button on every page', 'eduai' ),
+							__( 'Retired — Summarise, AiCalc, Q&A and PrepareME are their own tabs now, so the launcher offered a second route to features that already have one. Off by default; turn it on if you want a launcher as well.', 'eduai' ),
+						),
 						'agent_picker'    => array( __( 'Let students choose the agent', 'eduai' ), __( 'Shows a small selector above the message box. Turn off to pin everyone to the default agent.', 'eduai' ) ),
 						'allow_general_knowledge' => array(
 							__( 'Answer beyond the course material', 'eduai' ),
