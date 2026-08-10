@@ -17,6 +17,64 @@ class EduAI_Shortcodes {
 		add_shortcode( 'eduai_panel', array( __CLASS__, 'panel' ) );
 		add_shortcode( 'eduai_summarizer', array( __CLASS__, 'summarizer' ) );
 		add_shortcode( 'eduai_calc', array( __CLASS__, 'calc' ) );
+		add_shortcode( 'eduai_prepare', array( __CLASS__, 'prepare' ) );
+	}
+
+	/**
+	 * PrepareME.
+	 *
+	 * @param array $atts Shortcode attributes.
+	 */
+	public static function prepare( $atts = array() ): string {
+		if ( EduAI_Settings::get( 'logged_in_only', true ) && ! is_user_logged_in() ) {
+			return self::login_card();
+		}
+
+		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
+		wp_enqueue_script( 'eduai-prepare', EDUAI_URL . 'assets/js/prepare.js', array(), EDUAI_VERSION, true );
+
+		wp_localize_script( 'eduai-prepare', 'EduAIPrepConfig', array(
+			'root'     => esc_url_raw( rest_url( EduAI_REST::NS ) ),
+			'nonce'    => wp_create_nonce( 'wp_rest' ),
+			'loggedIn' => is_user_logged_in(),
+			'i18n'     => array(
+				'dropFile'        => __( 'Drop a lecture here, or click to choose', 'eduai' ),
+				'needSource'      => __( 'Attach a lecture, or paste at least a paragraph of it.', 'eduai' ),
+				/* translators: %d: number of questions */
+				'generating'      => __( 'Reading the lecture and writing %d questions. This is the slowest step.', 'eduai' ),
+				'marking'         => __( 'Marking. Multiple choice is scored here; short answers go to the marker.', 'eduai' ),
+				/* translators: 1: question count 2: source name */
+				'paperMeta'       => __( '%1$d questions from %2$s. Nothing is marked until you submit.', 'eduai' ),
+				'pastedText'      => __( 'your pasted text', 'eduai' ),
+				/* translators: %d: marks available */
+				'marks'           => __( '%d marks', 'eduai' ),
+				/* translators: 1: answered 2: total */
+				'answered'        => __( '%1$d of %2$d answered', 'eduai' ),
+				/* translators: %d: number left blank */
+				'someBlank'       => __( '%d still blank — they will score zero.', 'eduai' ),
+				'mcq'             => __( 'multiple choice', 'eduai' ),
+				'short'           => __( 'short answer', 'eduai' ),
+				'notAnswered'     => __( 'not answered.', 'eduai' ),
+				/* translators: %s: option letter */
+				'youChose'        => __( 'you chose %s.', 'eduai' ),
+				/* translators: 1: option letter 2: option text */
+				'correctWas'      => __( 'Correct: %1$s. %2$s', 'eduai' ),
+				/* translators: %s: option letter */
+				'yourAnswerRight' => __( 'your answer %s is right.', 'eduai' ),
+				'markScheme'      => __( 'Mark scheme:', 'eduai' ),
+				'error'           => __( 'Something went wrong. Please try again.', 'eduai' ),
+				'loginPrompt'     => __( 'Please sign in to use PrepareME.', 'eduai' ),
+				'bands'           => array(
+					'easy'   => __( 'Easy', 'eduai' ),
+					'medium' => __( 'Medium', 'eduai' ),
+					'hard'   => __( 'Hard', 'eduai' ),
+				),
+			),
+		) );
+
+		ob_start();
+		include EDUAI_DIR . 'templates/prepare.php';
+		return (string) ob_get_clean();
 	}
 
 	/**

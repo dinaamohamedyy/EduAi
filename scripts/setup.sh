@@ -148,7 +148,7 @@ make_page "Privacy Policy" "privacy" "How student data and AI conversations are 
 # already right.
 make_page "Q&A" "ask" "[eduai_panel height=\"600\" tabs=\"chat\"]"
 make_page "AiCalc" "calc" "[eduai_calc]"
-make_page "PrepareME" "prepare" "PrepareME is being wired up: upload a lecture, sit an exam generated from it, and get it marked with corrections."
+make_page "PrepareME" "prepare" "[eduai_prepare]"
 
 # Auth pages. Content stays empty: the theme routes wp_login_url()/
 # wp_registration_url()/wp_lostpassword_url() to these slugs and applies the
@@ -241,7 +241,8 @@ $found = $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $tutor ) );
 echo ( $found === $tutor ) ? "  ok  table {$tutor}\n" : "  --  {$tutor} not there yet (created when Tutor LMS activates)\n";
 echo get_option( "users_can_register" ) ? "  ok  self-registration open\n" : "  !!  self-registration CLOSED\n";
 echo ( "student" === get_option( "default_role" ) ) ? "  ok  default role: student\n" : "  !!  default role is " . get_option( "default_role" ) . "\n";
-foreach ( array( "sign-in", "register", "reset-password", "dashboard", "library" ) as $slug ) {
+// "progress" is ours; checking "dashboard" would only verify the page Tutor LMS owns.
+foreach ( array( "sign-in", "register", "reset-password", "progress", "library" ) as $slug ) {
 	echo get_page_by_path( $slug ) ? "  ok  page /{$slug}/\n" : "  !!  MISSING page /{$slug}/\n";
 }
 exit( $fail );
@@ -265,7 +266,7 @@ cat <<EOF
   3. Settings → EduAI Assistant → "Rebuild index" to feed it to the assistant.
   4. Tutor LMS → Courses: create a course and a quiz.
   5. Open $SITE_URL/register/ and create a student account — you should land
-     on the dashboard signed in, with the "student" role.
+     on /progress/ signed in, with the "student" role.
   6. Ask the assistant a question.
 
 EOF

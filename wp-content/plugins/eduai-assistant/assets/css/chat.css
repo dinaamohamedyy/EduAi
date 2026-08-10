@@ -613,3 +613,122 @@
   color: hsl(var(--eduai-brand-strong)); border-color: hsl(var(--eduai-brand));
 }
 .eduai-sum__foot { margin: 0; font-size: 0.75rem; color: hsl(var(--eduai-muted)); }
+
+/* -------------------------------------------------------- PrepareME ------ */
+.eduai-prep { display: grid; gap: 1rem; max-width: 54rem; }
+.eduai-prep__flow {
+  display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+.eduai-prep__flow li {
+  padding: 0.7rem 0.85rem; border-radius: 12px;
+  background: hsl(var(--eduai-bg-subtle)); border: 1px solid hsl(var(--eduai-border));
+  font-size: 0.82rem; color: hsl(var(--eduai-muted));
+}
+.eduai-prep__flow b { display: block; color: hsl(var(--eduai-text)); margin-bottom: 0.15rem; }
+.eduai-prep__drop {
+  display: grid; justify-items: center; gap: 0.5rem;
+  padding: 1.6rem 1rem; text-align: center; cursor: pointer;
+  color: hsl(var(--eduai-muted)); font-size: 0.9rem;
+  border: 2px dashed hsl(var(--eduai-border)); border-radius: 14px;
+}
+.eduai-prep__drop:hover, .eduai-prep__drop.is-over, .eduai-prep__drop:focus-visible {
+  outline: none; border-color: hsl(var(--eduai-brand));
+  background: hsl(var(--eduai-brand) / 0.05); color: hsl(var(--eduai-brand-strong));
+}
+.eduai-prep__drop.has-file {
+  border-style: solid; border-color: hsl(var(--eduai-accent)); color: hsl(var(--eduai-accent));
+}
+.eduai-prep textarea {
+  width: 100%; padding: 0.7rem 0.85rem; resize: vertical; font: inherit; font-size: 0.92rem;
+  color: hsl(var(--eduai-text)); background: hsl(var(--eduai-bg));
+  border: 1px solid hsl(var(--eduai-border)); border-radius: 12px;
+}
+.eduai-prep textarea:focus {
+  outline: none; border-color: hsl(var(--eduai-brand));
+  box-shadow: 0 0 0 3px hsl(var(--eduai-brand) / 0.18);
+}
+.eduai-prep__len { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; font-size: 0.85rem; }
+.eduai-prep__len-label { font-weight: 600; }
+.eduai-prep__len-hint { color: hsl(var(--eduai-muted)); font-size: 0.78rem; }
+.eduai-prep__pick { display: inline-flex; border: 1px solid hsl(var(--eduai-border)); border-radius: 999px; overflow: hidden; }
+.eduai-prep__pick button {
+  border: 0; background: transparent; cursor: pointer; font: inherit; font-size: 0.85rem;
+  padding: 0.3rem 0.9rem; color: hsl(var(--eduai-muted));
+}
+.eduai-prep__pick button.is-on { background: hsl(var(--eduai-brand)); color: hsl(var(--eduai-on-brand)); }
+.eduai-prep__go { margin: 0; }
+.eduai-prep__working { display: grid; gap: 0.4rem; justify-items: center; padding: 1.1rem; }
+.eduai-prep__working p { margin: 0; font-size: 0.8rem; color: hsl(var(--eduai-muted)); }
+
+.eduai-prep__title { font-size: 1.25rem; margin: 0 0 0.2rem; }
+.eduai-prep__meta { margin: 0 0 1rem; font-size: 0.85rem; color: hsl(var(--eduai-muted)); }
+.eduai-prep__band {
+  margin: 1.4rem 0 0.6rem; font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: hsl(var(--eduai-muted));
+}
+.eduai-prep__q {
+  padding: 0.9rem 1rem; margin-bottom: 0.7rem; border-radius: 12px;
+  background: hsl(var(--eduai-surface)); border: 1px solid hsl(var(--eduai-border));
+}
+.eduai-prep__qhead { margin: 0 0 0.6rem; font-size: 0.94rem; }
+.eduai-prep__marks {
+  display: inline-block; margin-right: 0.4rem; padding: 0.1rem 0.5rem; border-radius: 999px;
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  background: hsl(var(--eduai-sunken)); color: hsl(var(--eduai-muted));
+}
+.eduai-prep__options { display: grid; gap: 0.3rem; }
+.eduai-prep__option {
+  display: flex; align-items: baseline; gap: 0.5rem; cursor: pointer;
+  padding: 0.45rem 0.6rem; border-radius: 9px; border: 1px solid transparent;
+  font-size: 0.9rem;
+}
+.eduai-prep__option:hover { background: hsl(var(--eduai-bg-subtle)); border-color: hsl(var(--eduai-border)); }
+.eduai-prep__letter { font-weight: 700; color: hsl(var(--eduai-muted)); min-width: 1.1em; }
+.eduai-prep__answer { font-size: 0.9rem; }
+.eduai-prep__bar {
+  display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;
+  padding-top: 0.8rem; border-top: 1px solid hsl(var(--eduai-border));
+}
+.eduai-prep__count { font-size: 0.85rem; color: hsl(var(--eduai-muted)); }
+.eduai-prep__warn { font-size: 0.82rem; color: hsl(33 70% 40%); }
+.eduai-prep__bar .eduai-btn { margin-left: auto; }
+
+.eduai-prep__score {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: 1rem 1.1rem; border-radius: 14px; margin-bottom: 0.8rem;
+  background: hsl(var(--eduai-surface)); border: 1px solid hsl(var(--eduai-border));
+}
+.eduai-prep__score b { font-size: 1.7rem; display: block; font-variant-numeric: tabular-nums; }
+.eduai-prep__score span { font-size: 0.85rem; color: hsl(var(--eduai-muted)); }
+.eduai-prep__pct {
+  margin-left: auto; padding: 0.25rem 0.8rem; border-radius: 999px;
+  font-weight: 700; font-size: 0.95rem;
+}
+.eduai-prep__pct.is-pass { background: hsl(var(--eduai-accent) / 0.15); color: hsl(var(--eduai-accent)); }
+.eduai-prep__pct.is-fail { background: hsl(0 70% 50% / 0.12); color: hsl(0 60% 42%); }
+.eduai-prep__bands { display: grid; gap: 0.35rem; margin-bottom: 1.2rem; }
+.eduai-prep__bandrow { display: flex; align-items: center; gap: 0.6rem; font-size: 0.82rem; }
+.eduai-prep__bandrow b { min-width: 4.5rem; text-transform: capitalize; font-weight: 600; }
+.eduai-prep__meter {
+  flex: 1; height: 7px; border-radius: 999px; overflow: hidden;
+  background: hsl(var(--eduai-sunken));
+}
+.eduai-prep__meter span { display: block; height: 100%; background: hsl(var(--eduai-accent)); }
+.eduai-prep__bandnum { font-variant-numeric: tabular-nums; color: hsl(var(--eduai-muted)); min-width: 3.5rem; text-align: right; }
+
+/* Three tones, not two: a short answer can be partly right, and full marks on
+   one must never be rendered with the "wrong" tone. */
+.eduai-prep__mark { margin: 0 0 0.4rem; font-weight: 600; font-size: 0.92rem; }
+.eduai-prep__mark span { font-weight: 400; color: hsl(var(--eduai-muted)); }
+.eduai-prep__mark.is-ok { color: hsl(var(--eduai-accent)); }
+.eduai-prep__mark.is-part { color: hsl(33 70% 40%); }
+.eduai-prep__mark.is-no { color: hsl(0 60% 45%); }
+.eduai-prep__yours {
+  margin: 0 0 0.4rem; padding: 0.5rem 0.7rem; border-radius: 9px;
+  background: hsl(var(--eduai-bg-subtle)); font-size: 0.88rem;
+}
+.eduai-prep__why { margin: 0 0 0.3rem; font-size: 0.85rem; color: hsl(var(--eduai-muted)); }
+.eduai-prep__scheme { margin: 0; font-size: 0.8rem; color: hsl(var(--eduai-muted)); }
+.eduai-prep__scheme b { color: hsl(var(--eduai-text)); }
+.eduai-prep__again { display: flex; gap: 0.5rem; margin: 1rem 0 0; }
