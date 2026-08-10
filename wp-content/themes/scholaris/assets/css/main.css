@@ -497,6 +497,14 @@ body.admin-bar .site-header { top: var(--wp-admin--admin-bar--height, 32px); }
 @media (max-width: 900px) {
   .nav-toggle { display: grid; }
   .nav {
+    /* Why `inset: var(--header-h) …` needs no admin-bar offset, measured
+       10 Aug 2026: .site-header's backdrop-filter makes the header the
+       CONTAINING BLOCK for this fixed panel, so the offset is relative to
+       the header's own box, not the viewport — the panel rides the header
+       wherever the admin bar pushes it (navTop = headerTop + var(--header-h),
+       verified signed-in at 46+72=118 and 32+72=104). If that backdrop-filter
+       is ever removed, this becomes viewport-relative and lands 32/46px too
+       high for signed-in users — re-run scripts/ui-geometry.mjs. */
     position: fixed; inset: var(--header-h) 0 auto 0;
     background: hsl(var(--surface)); border-bottom: 1px solid hsl(var(--border));
     box-shadow: var(--shadow-l); padding: var(--space-s);
