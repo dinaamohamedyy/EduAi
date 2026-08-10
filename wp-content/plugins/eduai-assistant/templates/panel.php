@@ -18,6 +18,17 @@ $eduai_inline = isset( $eduai_inline ) ? (bool) $eduai_inline : false;
 $eduai_agents        = EduAI_Agents::for_script();
 $eduai_default_agent = EduAI_Agents::default_id();
 $eduai_picker        = (bool) EduAI_Settings::get( 'agent_picker', true );
+
+/*
+ * Summarise now has its own top-level tab, so offering it again inside the chat
+ * panel on /ask/ recreates the "assistant as a widget with sub-options" model
+ * the product deliberately moved away from (docs/06 §1).
+ *
+ * The floating widget is the one place a combined panel still makes sense —
+ * it is a corner of someone else's page, not a destination — so it keeps both
+ * and this defaults to both. [eduai_panel tabs="chat"] is what /ask/ uses.
+ */
+$eduai_summary_tab = ! isset( $eduai_atts['tabs'] ) || 'chat' !== $eduai_atts['tabs'];
 ?>
 <div class="eduai-app<?php echo $eduai_inline ? ' eduai-app--inline' : ''; ?>"
 	id="<?php echo esc_attr( $eduai_id ); ?>"
@@ -48,14 +59,16 @@ $eduai_picker        = (bool) EduAI_Settings::get( 'agent_picker', true );
 		</div>
 	</header>
 
-	<div class="eduai-tabs" role="tablist">
-		<button type="button" class="eduai-tab is-active" role="tab" aria-selected="true" data-eduai-tab="chat">
-			<?php esc_html_e( 'Ask', 'eduai' ); ?>
-		</button>
-		<button type="button" class="eduai-tab" role="tab" aria-selected="false" data-eduai-tab="summary">
-			<?php esc_html_e( 'Summarise a lecture', 'eduai' ); ?>
-		</button>
-	</div>
+	<?php if ( $eduai_summary_tab ) : ?>
+		<div class="eduai-tabs" role="tablist">
+			<button type="button" class="eduai-tab is-active" role="tab" aria-selected="true" data-eduai-tab="chat">
+				<?php esc_html_e( 'Ask', 'eduai' ); ?>
+			</button>
+			<button type="button" class="eduai-tab" role="tab" aria-selected="false" data-eduai-tab="summary">
+				<?php esc_html_e( 'Summarise a lecture', 'eduai' ); ?>
+			</button>
+		</div>
+	<?php endif; ?>
 
 	<!-- ----------------------------------------------------------- chat tab -->
 	<div class="eduai-pane is-active" data-eduai-pane="chat">
@@ -108,6 +121,7 @@ $eduai_picker        = (bool) EduAI_Settings::get( 'agent_picker', true );
 	</div>
 
 	<!-- -------------------------------------------------------- summary tab -->
+	<?php if ( $eduai_summary_tab ) : ?>
 	<div class="eduai-pane" data-eduai-pane="summary">
 		<form class="eduai-summary" data-eduai-summary-form>
 			<div class="eduai-drop" data-eduai-drop tabindex="0" role="button"
@@ -147,4 +161,5 @@ $eduai_picker        = (bool) EduAI_Settings::get( 'agent_picker', true );
 
 		<div class="eduai-summary-result" data-eduai-summary-result hidden></div>
 	</div>
+	<?php endif; ?>
 </div>

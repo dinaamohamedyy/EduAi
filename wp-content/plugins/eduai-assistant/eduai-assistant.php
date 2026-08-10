@@ -53,6 +53,7 @@ final class EduAI_Assistant {
 		add_action( 'plugins_loaded', array( $this, 'boot' ) );
 		add_action( 'init', array( $this, 'load_textdomain' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
+		add_action( 'template_redirect', array( $this, 'redirect_superseded_pages' ) );
 		add_action( 'wp_footer', array( $this, 'render_launcher' ), 20 );
 		add_action( 'admin_notices', array( $this, 'setup_notice' ) );
 	}
@@ -161,6 +162,45 @@ final class EduAI_Assistant {
 				'copied'        => __( 'Copied', 'eduai' ),
 			),
 		) );
+	}
+
+	/**
+	 * Send superseded routes to the tab that replaced them.
+	 *
+	 * /assistant/ and /ask/ render the same shortcode, and only /ask/ is in the
+	 * nav — but /assistant/ predates the restructure, so links and bookmarks
+	 * point at it. Deleting the page would break those silently; a 301 keeps
+	 * them working and tells search engines which one is real.
+	 *
+	 * Only redirects when the destination actually exists, so a site that never
+	 * created /ask/ keeps serving /assistant/ rather than looping or 404ing.
+	 */
+	public function redirect_superseded_pages(): void {
+		if ( is_admin() || ! is_page() ) {
+			return;
+		}
+
+		/**
+		 * Filter the superseded-route map: old slug => new slug.
+		 *
+		 * @param array $map Slug pairs.
+		 */
+		$map = (array) apply_filters( 'eduai_superseded_pages', array( 'assistant' => 'ask' ) );
+
+		$slug = get_post_field( 'post_name', get_queried_object_id() );
+
+		if ( ! isset( $map[ $slug ] ) ) {
+			return;
+		}
+
+		$target = get_page_by_path( $map[ $slug ] );
+
+		if ( ! $target || 'publish' !== $target->post_status ) {
+			return;
+		}
+
+		wp_safe_redirect( get_permalink( $target ), 301 );
+		exit;
 	}
 
 	/**

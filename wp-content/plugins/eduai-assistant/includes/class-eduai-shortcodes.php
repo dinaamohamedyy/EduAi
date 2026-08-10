@@ -69,6 +69,10 @@ class EduAI_Shortcodes {
 		$atts = shortcode_atts( array(
 			'height' => '520',
 			'title'  => EduAI_Settings::get( 'assistant_name', __( 'Study Assistant', 'eduai' ) ),
+			// 'chat' drops the Summarise tab, for pages where Summarise is its
+			// own destination. Defaults to both so the widget and any existing
+			// embed are unaffected.
+			'tabs'   => 'all',
 		), (array) $atts, 'eduai_panel' );
 
 		if ( EduAI_Settings::get( 'logged_in_only', true ) && ! is_user_logged_in() ) {

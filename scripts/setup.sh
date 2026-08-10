@@ -121,7 +121,7 @@ make_page "Privacy Policy" "privacy" "How student data and AI conversations are 
 # panel shortcode today; AiCalc and PrepareME get placeholder copy until their
 # shortcodes land — the back end swaps the content, the slug and menu slot are
 # already right.
-make_page "Q&A" "ask" "[eduai_panel height=\"600\"]"
+make_page "Q&A" "ask" "[eduai_panel height=\"600\" tabs=\"chat\"]"
 make_page "AiCalc" "calc" "[eduai_calc]"
 make_page "PrepareME" "prepare" "PrepareME is being wired up: upload a lecture, sit an exam generated from it, and get it marked with corrections."
 
