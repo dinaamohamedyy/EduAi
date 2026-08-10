@@ -17,7 +17,7 @@ Seven tabs, all serving on the running stack at `http://localhost:8080`:
 | Summarise | `/summarise/` | Done, proven end to end against Groq |
 | AiCalc | `/calc/` | Done, proven end to end. **Needs no API key** for arithmetic |
 | Q&A | `/ask/` | Done — the existing chat panel, minus its duplicate Summarise tab |
-| PrepareME | `/prepare/` | Built and gate-tested. **Never run end to end** — see §3 |
+| PrepareME | `/prepare/` | Proven end to end against Groq from pasted text. **Not from an uploaded file** — see §3 |
 | My Progress | `/progress/` | Done. Not `/dashboard/` — that belongs to Tutor LMS |
 
 The floating assistant widget is retired. `[eduai_panel]` and
@@ -50,12 +50,22 @@ Everything below was executed, not inspected:
 
 ## 3. What is not proven, and must not be reported as done
 
-**PrepareME has never generated a real exam.** Upload a lecture → generate →
-answer → mark has not been run against Groq from the tab. The renderer is proven
-against fixtures in both directions and the server is proven by the tester's
-harnesses, but the round trip joins three owners' work — prompt, schema
-validation, renderer — and nobody has watched it happen. This is the single
-highest-value next action.
+**PrepareME's round trip is proven — from pasted text, not from a file.** The
+tester ran generate → answer → mark against live Groq after this was first
+written. Generation returned schema-valid JSON on the first call, the repair
+retry never fired, the 4/4/2 band mix came back as asked, and marking respected
+all four §5.2 rules. `answer_index` is genuinely 0-based, established the strong
+way: answering every MCQ with the paper's *own* key scored 7/7, which a 1-based
+paper could not do. Eleven seconds and ~6.6k tokens for a complete exam.
+
+**Extraction inside that round trip is still uncovered.** The run used pasted
+text, so the `notesSlide1`-belongs-to-slide-2 trap was never exercised on the
+PrepareME path. That is the half where failure is silent: the exam gets built
+from less than the deck contains and nothing downstream can tell. The deck is
+built and waiting at `scripts/roundtrip-deck.pptx` (543 chars extracted, three
+slides, note on slide 2). Note that `scripts/` is **not** mounted into
+`scholaris-wp` — only into the compose `cli` service — so a harness running
+there needs a `docker cp` first, or it silently falls back to pasted text.
 
 Also outstanding:
 
