@@ -52,3 +52,8 @@ Thumbs.db
 
 # Built by scripts/make-lecture-fixture.php — regenerate, do not commit the zip.
 scripts/*.pptx
+
+# Build output for static hosting (scripts/build-static-preview.sh).
+# Regenerated on demand; committing it would duplicate design/preview.html
+# and drift from it, which is how the zip snapshot went stale.
+/dist/

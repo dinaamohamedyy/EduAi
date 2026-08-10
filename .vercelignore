@@ -1,0 +1,42 @@
+# Safety net. The intended way to publish the design mock-up is:
+#
+#     bash scripts/build-static-preview.sh
+#     npx vercel deploy --prod dist/preview-site
+#
+# ...which uploads an isolated two-file directory. This file exists for the
+# case where someone runs `vercel` in the repository root instead.
+#
+# It matters because the Vercel CLI uploads the working directory and reads
+# THIS file, not .gitignore. The two files holding live API keys are gitignored,
+# which means every guard in this repo is blind to them here: check-no-secrets.pl
+# skips them by design, the pre-commit hook scans the git index, and CI scans a
+# git checkout. None of that protects an upload that never touches git.
+#
+# A key published this way is public the moment it uploads and must be rotated,
+# not deleted.
+
+# Live keys — the reason this file exists
+.env
+.env.*
+preview.html
+preview*.html
+*.key
+*.pem
+
+# WordPress source: PHP served by a static host is delivered as readable text,
+# so this would publish the application's source rather than run it.
+wp-content/
+php/
+scripts/
+tools/
+docs/
+design/
+.github/
+.githooks/
+*.zip
+
+# Noise
+node_modules/
+vendor/
+.git/
+*.log
