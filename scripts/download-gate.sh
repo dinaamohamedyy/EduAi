@@ -25,6 +25,15 @@ cd "$(dirname "$0")/.." || exit 1
 pass=0
 fail=0
 tmp="$(mktemp -d)"
+
+# Every consumer of $tmp below is Windows curl (cookie jars, response bodies),
+# and mktemp hands back an MSYS path. Normally Git Bash rewrites it on the way
+# across; with MSYS_NO_PATHCONV=1 set — which this project's notes require for
+# docker, so people do export it — it does not, curl cannot create the jar, and
+# the run dies at "could not sign in" with the real cause two layers down.
+# Convert once here rather than depending on a rescue we suppress elsewhere.
+# MSYS tools accept the drive-letter form too, so one path serves both.
+command -v cygpath >/dev/null 2>&1 && tmp="$(cygpath -m "$tmp")"
 trap 'rm -rf "$tmp"' EXIT
 
 say()  { printf '%s\n' "$*"; }

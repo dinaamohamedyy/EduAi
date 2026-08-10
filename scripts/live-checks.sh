@@ -93,15 +93,33 @@ esac
 
 say "target: $URL"
 
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL/" || echo 000)"
+# Never `curl … || echo 000`. A shell fallback *appends* to whatever the
+# command already printed rather than replacing it — and curl still prints the
+# status from -w when it exits non-zero. With MSYS_NO_PATHCONV=1 set (which
+# this project's notes require for docker, and which this file sets one screen
+# below) `/dev/null` goes untranslated, Windows curl fails the body write with
+# CURLE_WRITE_ERROR/23, and the capture becomes "200000". That never equals
+# 200, so a healthy stack is reported dead and nothing runs — the guard firing
+# correctly for a reason that is wrong. Validate the shape; do not trust the
+# exit code to mean the output is unusable.
+probe_status() {
+  local out
+  out="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1/" 2>/dev/null)"
+  case "$out" in
+    [0-9][0-9][0-9]) printf '%s' "$out" ;;
+    *)               printf '000'       ;;
+  esac
+}
+
+code="$(probe_status "$URL")"
 
 if [ "$code" != "200" ]; then
   say "stack is not answering (HTTP $code) — starting it"
   MSYS_NO_PATHCONV=1 docker compose up -d >/dev/null 2>&1
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL/" || echo 000)"
+    code="$(probe_status "$URL")"
     [ "$code" = "200" ] && break
-    curl -s -o /dev/null --max-time 5 "$URL/" >/dev/null 2>&1
+    sleep 2 2>/dev/null || true
   done
 fi
 
