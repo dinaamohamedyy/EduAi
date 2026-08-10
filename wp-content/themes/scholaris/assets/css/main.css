@@ -406,6 +406,30 @@ blockquote {
   -webkit-backdrop-filter: saturate(160%) blur(14px);
   border-bottom: 1px solid hsl(var(--border));
 }
+
+/* WordPress admin bar --------------------------------------------------------
+   Core's html-margin bump is disabled (functions.php) because root margin
+   shifts the sticky constraint rectangle — engine-dependent, and the cause of
+   a bar-height hole above the header on mobile after the bar scrolls away.
+   The theme spaces itself instead. Core serves the bar fixed at 32px above
+   782px and absolute at 46px at 782px and below, where it scrolls with the
+   page; core's own --wp-admin--admin-bar--height variable carries 32/46
+   across that same 782px breakpoint, so the offsets derive from it.
+   The mobile nav dropdown needs nothing: the header's backdrop-filter makes
+   it the containing block for the fixed dropdown, so it rides the header. */
+/* A spacer child, not body padding: padding would make body's content box
+   start below the bar, and a sticky element is confined to its containing
+   block — the header could then never pin higher than the bar height, which
+   is the exact mobile gap this exists to remove. */
+body.admin-bar::before {
+  content: ""; display: block;
+  height: var(--wp-admin--admin-bar--height, 32px);
+}
+body.admin-bar .site-header { top: var(--wp-admin--admin-bar--height, 32px); }
+@media (max-width: 782px) {
+  /* The absolute bar scrolls away; the pinned header belongs at the true top. */
+  body.admin-bar .site-header { top: 0; }
+}
 .site-header__inner {
   min-height: var(--header-h);
   display: flex; align-items: center; gap: var(--space-m);
@@ -600,6 +624,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: hsl(var(--brand)); }
 .auth {
   display: grid; grid-template-columns: 1fr;
   min-height: calc(100vh - var(--header-h));
+}
+/* Unreachable signed-in today (auth pages redirect), but the maths should not
+   depend on that policy: subtract the admin bar when it is present. */
+body.admin-bar .auth {
+  min-height: calc(100vh - var(--header-h) - var(--wp-admin--admin-bar--height, 32px));
 }
 @media (min-width: 900px) { .auth { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); } }
 

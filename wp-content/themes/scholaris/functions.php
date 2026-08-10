@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SCHOLARIS_VERSION', '1.0.0' );
+define( 'SCHOLARIS_VERSION', '1.0.2' );
 define( 'SCHOLARIS_DIR', get_template_directory() );
 define( 'SCHOLARIS_URI', get_template_directory_uri() );
 
@@ -36,6 +36,13 @@ function scholaris_setup(): void {
 
 	// Tutor LMS integration flags.
 	add_theme_support( 'tutor' );
+
+	// Admin bar: disable core's `html { margin-top: … !important }` bump and
+	// space the page in the theme's own CSS instead. Root-margin interacts
+	// with the sticky header differently per engine (it is what left a 46px
+	// hole above the header on mobile once the absolute bar scrolled away),
+	// so the offsets live in main.css §6 where the geometry is deterministic.
+	add_theme_support( 'admin-bar', array( 'callback' => '__return_false' ) );
 
 	register_nav_menus( array(
 		'primary' => __( 'Primary Menu', 'scholaris' ),
