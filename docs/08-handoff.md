@@ -34,11 +34,13 @@ Everything below was executed, not inspected:
 
 - **AiCalc** through `rest_do_request()`: `2+3*4=14`, `-3^2=-9`, `(-2)^2=4`,
   `2^3^2=512`, `0.1+0.2=0.3`, and symbolic input routing to the model.
-- **Summarise** with a real `.pptx` built for the test: extraction, then a live
-  summary naming thylakoid, Calvin, RuBisCO and NADPH. The deck's speaker notes
-  sat in `notesSlide1` while belonging to slide 2, so a numeric guess would
-  mis-attach them — and the summary's "one thing students usually get wrong"
-  came from the note, which appears nowhere on the slides.
+- **Summarise** with a real `.pptx`, built by `scripts/make-lecture-fixture.php`:
+  extraction, then a live summary naming thylakoid, Calvin, RuBisCO and NADPH.
+  The deck's speaker notes sit in `notesSlide1` while belonging to slide 2, so a
+  numeric guess mis-attaches them — and the summary's "one thing students
+  usually get wrong" came from the note, which appears nowhere on the slides.
+  The generator is committed rather than the deck: the traps are the point, and
+  a zip cannot be reviewed. Its header explains all three.
 - **PrepareME's renderer**, both ship gates, against the *shipped* markup
   emitted by `do_shortcode()` rather than a hand-copied replica.
 - **The database migration** for the exam tables, by watching them appear.
