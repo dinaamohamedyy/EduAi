@@ -718,12 +718,32 @@ sub check_admin_bar_offset {
 
     return @problems unless defined $block;
 
-    # The offsets must come from core's own variable. A literal works today and
-    # silently stops working at core's 782px breakpoint, where the bar becomes
-    # 46px — a second number to drift, which is the whole failure mode.
+    # The header offset specifically must come from core's own variable. A
+    # literal works today and silently stops working at core's 782px
+    # breakpoint, where the bar becomes 46px — a second number to drift, which
+    # is the whole failure mode this was written for.
+    #
+    # Look at the header rules themselves, not at the file. The first version
+    # of this asked whether the variable appeared anywhere inside any
+    # `admin-bar` block, and the `::before` spacer uses it too — so hard-coding
+    # `top: 32px` on the header passed, which is precisely the mobile bug the
+    # message claims to catch. "The theme mentions the variable somewhere" and
+    # "the header offset derives from it" are different assertions.
+    my @header_rules = $css =~ /(body\.admin-bar\s+\.site-header\s*\{[^\}]*\})/gs;
+
+    push @problems, "$MAINCSS has no body.admin-bar .site-header rule to offset the header with"
+        unless @header_rules;
+
+    my $derives = grep { /--wp-admin--admin-bar--height/ } @header_rules;
+
+    # `top: 0` is legitimate below 782px, where the bar is absolute and scrolls
+    # away — that rule is *supposed* to be a literal zero. Any other literal is
+    # a hand-maintained number.
+    my @literals = grep { !/--wp-admin--admin-bar--height/ && /top\s*:\s*(?!0\b)[\d.]+/ } @header_rules;
+
     push @problems,
-        "$MAINCSS offsets the admin bar with a literal rather than core's --wp-admin--admin-bar--height; that number has to be maintained by hand and is wrong on mobile"
-        unless $css =~ /admin-bar[^\{]*\{[^\}]*--wp-admin--admin-bar--height/s;
+        "$MAINCSS offsets the header with a literal rather than core's --wp-admin--admin-bar--height; that number is wrong at core's 782px breakpoint, where the bar becomes 46px"
+        if @header_rules && ( !$derives || @literals );
 
     # Disabling core's own html margin is what makes the theme's spacer the
     # single source of the offset. Without it both apply and the page gains a
