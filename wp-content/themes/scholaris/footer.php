@@ -38,7 +38,7 @@ defined( 'ABSPATH' ) || exit;
 				<h4><?php esc_html_e( 'Account', 'scholaris' ); ?></h4>
 				<ul>
 					<?php if ( is_user_logged_in() ) : ?>
-						<li><a href="<?php echo esc_url( home_url( '/dashboard/' ) ); ?>"><?php esc_html_e( 'My progress', 'scholaris' ); ?></a></li>
+						<li><a href="<?php echo esc_url( scholaris_progress_url() ); ?>"><?php esc_html_e( 'My progress', 'scholaris' ); ?></a></li>
 						<li><a href="<?php echo esc_url( wp_logout_url( home_url( '/' ) ) ); ?>"><?php esc_html_e( 'Sign out', 'scholaris' ); ?></a></li>
 					<?php else : ?>
 						<li><a href="<?php echo esc_url( wp_login_url() ); ?>"><?php esc_html_e( 'Sign in', 'scholaris' ); ?></a></li>

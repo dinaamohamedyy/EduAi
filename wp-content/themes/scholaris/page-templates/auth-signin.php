@@ -16,8 +16,9 @@ defined( 'ABSPATH' ) || exit;
 
 get_header();
 
-// Where to land after signing in: an explicit ?redirect_to= wins, else the dashboard.
-$scholaris_redirect = home_url( '/dashboard/' );
+// Where to land after signing in: an explicit ?redirect_to= wins, else the
+// student's progress page.
+$scholaris_redirect = scholaris_progress_url();
 if ( isset( $_GET['redirect_to'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	$requested = esc_url_raw( wp_unslash( $_GET['redirect_to'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	if ( $requested && str_starts_with( $requested, home_url() ) ) {

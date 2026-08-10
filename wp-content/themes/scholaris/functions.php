@@ -119,7 +119,7 @@ function scholaris_fallback_menu(): void {
 		'calc'      => __( 'AiCalc', 'scholaris' ),
 		'ask'       => __( 'Q&A', 'scholaris' ),
 		'prepare'   => __( 'PrepareME', 'scholaris' ),
-		'dashboard' => __( 'My Progress', 'scholaris' ),
+		'progress'  => __( 'My Progress', 'scholaris' ),
 	) as $slug => $label ) {
 		$page = get_page_by_path( $slug );
 		if ( $page ) {

@@ -94,6 +94,16 @@ ok "Theme active"
 # ---------------------------------------------------------------- pages ----
 say "Creating pages"
 
+# Create-only, deliberately: it never modifies an existing page, which is what
+# makes re-running this script safe on a live site.
+#
+# The cost of that is a silent collision. Tutor LMS creates /dashboard/ when it
+# activates — before this section runs — so "My Progress" was skipped, never
+# created, and eight links pointed at Tutor's empty page for weeks. The old
+# message was "✓ /dashboard/ already exists", which is true and tells you
+# nothing. A skip now names the page ID and says whether the shortcode we
+# expected is actually on it, so a collision reads as a collision on the day it
+# happens rather than after someone reads a 200 as working.
 make_page() {
 	local title="$1" slug="$2" content="$3"
 
@@ -105,14 +115,29 @@ make_page() {
 			--post_status=publish \
 			--post_content="$content" >/dev/null
 		ok "created /$slug/"
-	else
-		ok "/$slug/ already exists"
+		return
 	fi
+
+	local id shortcode note=""
+	id=$($WP post list --post_type=page --name="$slug" --field=ID | head -1)
+	shortcode=$(printf '%s' "$content" | grep -oE '^\[[a-z0-9_]+' | tr -d '[' || true)
+
+	if [ -n "$shortcode" ]; then
+		if $WP post get "$id" --field=content 2>/dev/null | grep -q "\[$shortcode"; then
+			note=" carrying [$shortcode]"
+		else
+			note=" WITHOUT [$shortcode] — another plugin may own this slug; that feature renders nowhere"
+		fi
+	fi
+
+	ok "/$slug/ already exists as page $id$note — left untouched"
 }
 
 make_page "Home" "home" "Welcome to $SITE_TITLE."
 make_page "Library" "library" "[scholaris_library per_page=\"12\" filters=\"yes\"]"
-make_page "My Progress" "dashboard" "[scholaris_dashboard]"
+# /dashboard/ belongs to Tutor LMS, which creates it on activation before this
+# section runs. Ours lives at /progress/ — see inc/template-tags.php.
+make_page "My Progress" "progress" "[scholaris_dashboard]"
 make_page "Study Assistant" "assistant" "[eduai_panel height=\"600\"]"
 make_page "Summarise" "summarise" "[eduai_summarizer]"
 make_page "Privacy Policy" "privacy" "How student data and AI conversations are handled."
@@ -179,7 +204,7 @@ add_menu_item() {
 # Home · Library · Summarise · AiCalc · Q&A · PrepareME · My Progress.
 # Material is reached through Library; /assistant/ keeps its page but stays
 # off the menu (the Q&A tab supersedes it).
-for slug in home library summarise calc ask prepare dashboard; do
+for slug in home library summarise calc ask prepare progress; do
 	add_menu_item "$slug"
 done
 

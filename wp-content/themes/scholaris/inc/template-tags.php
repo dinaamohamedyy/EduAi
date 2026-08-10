@@ -60,3 +60,35 @@ function scholaris_opt( string $key, string $fallback = '' ): string {
 function scholaris_has_shortcode( string $tag ): bool {
 	return shortcode_exists( $tag );
 }
+
+/**
+ * Where "My Progress" lives.
+ *
+ * This exists because the URL was hard-coded in eight places, all of them
+ * `/dashboard/` — and `/dashboard/` belongs to Tutor LMS, which creates that
+ * page when it activates, long before setup.sh reaches its page section.
+ * Create-only make_page() then skipped ours, so our progress page was never
+ * created and every one of those eight links pointed at Tutor's empty page.
+ * Registration and sign-in both landed students there. It returned 200
+ * throughout, which is why it went unnoticed.
+ *
+ * One resolver, so the ninth caller cannot reintroduce it.
+ *
+ * The fallback is deliberately home rather than /dashboard/: sending students
+ * back to Tutor's page is the bug being fixed, and it fails silently. Home is a
+ * worse landing but an honest one, and scripts/page-drift.php reports the cause.
+ */
+function scholaris_progress_url(): string {
+	$page = get_page_by_path( 'progress' );
+
+	$url = ( $page && 'publish' === $page->post_status )
+		? (string) get_permalink( $page )
+		: home_url( '/' );
+
+	/**
+	 * Filter the My Progress destination.
+	 *
+	 * @param string $url Resolved URL.
+	 */
+	return (string) apply_filters( 'scholaris_progress_url', $url );
+}

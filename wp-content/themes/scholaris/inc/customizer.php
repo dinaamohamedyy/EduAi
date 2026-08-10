@@ -26,7 +26,7 @@ function scholaris_customize_register( $wp_customize ): void {
 		'scholaris_hero_cta_text' => array( __( 'Primary button text', 'scholaris' ), __( 'Browse the library', 'scholaris' ), 'text' ),
 		'scholaris_hero_cta_url'  => array( __( 'Primary button URL', 'scholaris' ), '/library/', 'url' ),
 		'scholaris_hero_alt_text' => array( __( 'Secondary button text', 'scholaris' ), __( 'View my progress', 'scholaris' ), 'text' ),
-		'scholaris_hero_alt_url'  => array( __( 'Secondary button URL', 'scholaris' ), '/dashboard/', 'url' ),
+		'scholaris_hero_alt_url'  => array( __( 'Secondary button URL', 'scholaris' ), '/progress/', 'url' ),
 		'scholaris_footer_about'  => array( __( 'Footer description', 'scholaris' ), __( 'A learning platform for students: lecture material, self-assessment quizzes and an always-on study assistant.', 'scholaris' ), 'textarea' ),
 	);
 

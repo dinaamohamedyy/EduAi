@@ -8,7 +8,7 @@
  *
  *  - registration collects a full name and a password (chosen at signup,
  *    so no "check your e-mail for a link" dead end on hosts without mail),
- *  - new students are signed in immediately and land on the dashboard,
+ *  - new students are signed in immediately and land on their progress page,
  *  - validation failures bounce back to the themed pages as ?register=…
  *    and ?lostpw=… flags, which scholaris_auth_notices() renders,
  *  - a honeypot and per-IP rate limits keep drive-by bots off the forms,
@@ -423,7 +423,7 @@ add_action( 'register_new_user', function ( int $user_id ): void {
 
 /**
  * A student who just chose a password should not be told to go check e-mail.
- * Sign them in and put them on the dashboard. Runs late on the success hook
+ * Sign them in and put them on their progress page. Runs late on the success hook
  * and ends the request, so it works the same on every core version.
  *
  * @param int $user_id The new account.
@@ -448,7 +448,7 @@ function scholaris_authflow_register_success( int $user_id ): void {
 		 */
 		do_action( 'scholaris_student_registered', $user_id );
 
-		wp_safe_redirect( add_query_arg( 'welcome', '1', home_url( '/dashboard/' ) ) );
+		wp_safe_redirect( add_query_arg( 'welcome', '1', scholaris_progress_url() ) );
 		exit;
 	}
 

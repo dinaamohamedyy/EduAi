@@ -5,7 +5,7 @@
  * Posts to the native WordPress registration endpoint. The extra fields
  * (full name, password chosen at signup) are injected at the
  * `register_form` hook by inc/auth-flow.php, which also validates them,
- * signs the new student in and lands them on the dashboard. Without that
+ * signs the new student in and lands them on their progress page. Without that
  * file the form still works — core falls back to e-mailing a link to set
  * the password. See docs/05-frontend-handoff.md.
  *

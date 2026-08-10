@@ -58,7 +58,7 @@ defined( 'ABSPATH' ) || exit;
 			</button>
 
 			<?php if ( is_user_logged_in() ) : ?>
-				<a class="btn btn--ghost btn--sm hide-sm" href="<?php echo esc_url( scholaris_opt( 'scholaris_hero_alt_url', home_url( '/dashboard/' ) ) ); ?>">
+				<a class="btn btn--ghost btn--sm hide-sm" href="<?php echo esc_url( scholaris_opt( 'scholaris_hero_alt_url', scholaris_progress_url() ) ); ?>">
 					<?php esc_html_e( 'My progress', 'scholaris' ); ?>
 				</a>
 			<?php else : ?>

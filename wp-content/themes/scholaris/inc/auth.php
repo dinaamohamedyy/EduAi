@@ -84,7 +84,7 @@ add_action( 'template_redirect', function () {
 	}
 	foreach ( scholaris_auth_pages() as $page ) {
 		if ( is_page( $page['slug'] ) ) {
-			wp_safe_redirect( home_url( '/dashboard/' ) );
+			wp_safe_redirect( scholaris_progress_url() );
 			exit;
 		}
 	}

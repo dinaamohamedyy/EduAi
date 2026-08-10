@@ -26,7 +26,7 @@ $show_assistant = (bool) get_theme_mod( 'scholaris_show_assistant', true );
 					<?php scholaris_the_icon( 'book', 18 ); ?>
 					<?php echo esc_html( wp_strip_all_tags( scholaris_opt( 'scholaris_hero_cta_text', __( 'Browse the library', 'scholaris' ) ) ) ); ?>
 				</a>
-				<a class="btn btn--ghost btn--lg" href="<?php echo esc_url( scholaris_opt( 'scholaris_hero_alt_url', home_url( '/dashboard/' ) ) ); ?>">
+				<a class="btn btn--ghost btn--lg" href="<?php echo esc_url( scholaris_opt( 'scholaris_hero_alt_url', scholaris_progress_url() ) ); ?>">
 					<?php scholaris_the_icon( 'chart', 18 ); ?>
 					<?php echo esc_html( wp_strip_all_tags( scholaris_opt( 'scholaris_hero_alt_text', __( 'View my progress', 'scholaris' ) ) ) ); ?>
 				</a>
