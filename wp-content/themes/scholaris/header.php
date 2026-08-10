@@ -57,11 +57,16 @@ defined( 'ABSPATH' ) || exit;
 				<span data-icon="moon" hidden><?php scholaris_the_icon( 'moon', 18 ); ?></span>
 			</button>
 
-			<?php if ( is_user_logged_in() ) : ?>
-				<a class="btn btn--ghost btn--sm hide-sm" href="<?php echo esc_url( scholaris_opt( 'scholaris_hero_alt_url', scholaris_progress_url() ) ); ?>">
-					<?php esc_html_e( 'My progress', 'scholaris' ); ?>
-				</a>
-			<?php else : ?>
+			<?php
+			// Signed-in users get no header button: "My Progress" is the nav's
+			// seventh tab (docs/06 + owner ruling), and the duplicate ghost
+			// button cost ~130px of exactly the width that made the header
+			// overflow between 900 and ~1190 (measured 10 Aug 2026, both
+			// failure modes: horizontal document overflow and the row wrapping
+			// to 134px). Anonymous visitors keep "Sign in" — the nav has no
+			// auth tab, so it is an affordance, not a duplicate.
+			?>
+			<?php if ( ! is_user_logged_in() ) : ?>
 				<a class="btn btn--primary btn--sm hide-sm" href="<?php echo esc_url( wp_login_url() ); ?>">
 					<?php esc_html_e( 'Sign in', 'scholaris' ); ?>
 				</a>

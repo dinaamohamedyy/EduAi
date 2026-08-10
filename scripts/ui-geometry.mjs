@@ -24,8 +24,9 @@
  * Checks, all signed in:
  *   1. sticky header vs admin bar — desktop (fixed 32px) and mobile
  *      (absolute 46px, scrolls away), at top AND scrolled
- *   2. nav row integrity above the 900px toggle — one row, no internal
- *      label wrap (the min-content trap), clear of brand and actions
+ *   2. nav row integrity above the 1200px toggle, BOTH auth states — one
+ *      row, no internal label wrap (the min-content trap), clear of brand
+ *      and actions, no document overflow, single-row header height
  *   3. mobile nav panel rides the header (backdrop-filter containing block)
  */
 import { spawn, spawnSync } from 'node:child_process';
@@ -140,6 +141,30 @@ const edge = spawn(EDGE, [
   'about:blank',
 ], { stdio: 'ignore' });
 
+/* Nav-row probe used at every width, both auth states. The hOverflow and
+   headerH criteria exist because the first version of this check asserted
+   only clearances — and stayed green through a band where the header both
+   overflowed the document by 102px and wrapped to 134px tall. A fit
+   definition that does not include "the page does not scroll sideways and
+   the header is one row" is not a fit definition. */
+const NAV_PROBE = `(() => {
+  const links = Array.from(document.querySelectorAll('#primary-nav a'));
+  const tops = links.map(a => Math.round(a.getBoundingClientRect().top));
+  const hs = links.map(a => Math.round(a.getBoundingClientRect().height));
+  const nav = document.getElementById('primary-nav').getBoundingClientRect();
+  const brand = document.querySelector('.brand').getBoundingClientRect();
+  const actions = document.querySelector('.header-actions').getBoundingClientRect();
+  const hdr = document.querySelector('.site-header').getBoundingClientRect();
+  return { spread: Math.max(...tops) - Math.min(...tops),
+    tallest: Math.max(...hs),
+    clearBrand: Math.round(nav.left - brand.right),
+    clearActions: Math.round(actions.left - nav.right),
+    hOverflow: document.documentElement.scrollWidth - window.innerWidth,
+    headerH: Math.round(hdr.height) };
+})()`;
+const navFits = (p) => p.spread <= 4 && p.tallest < 60 && p.clearBrand >= 4 &&
+  p.clearActions >= 4 && p.hOverflow <= 0 && p.headerH <= 80;
+
 try {
   let ver = null;
   for (let i = 0; i < 40 && !ver; i++) {
@@ -150,11 +175,24 @@ try {
   const target = await json('/json/new?about:blank', 'PUT');
   await connect(target.webSocketDebuggerUrl);
   await send('Network.enable');
+  await send('Page.enable');
+
+  /* Anonymous nav-row pass FIRST (no cookie yet): post-button-removal the
+     anonymous header is the wider one (it carries Sign in), so it is the
+     binding case for the 1200 toggle. */
+  await setWidth(1205);
+  await navigate(BASE + '/?uigeom=0');
+  for (const w of [1205, 1300]) {
+    await setWidth(w);
+    const p = await evalIn(NAV_PROBE);
+    check(`anonymous nav at ${w}px: one row, no overflow, header ≤80`,
+      navFits(p), JSON.stringify(p));
+  }
+
   await send('Network.setCookie', {
     name: cookie.name, value: cookie.value,
     domain: new URL(BASE).hostname, path: '/',
   });
-  await send('Page.enable');
 
   await setWidth(1024);
   await navigate(BASE + '/?uigeom=1');
@@ -183,26 +221,14 @@ try {
     m.headerTop === 0 && m.barVisible === false,
     JSON.stringify(m));
 
-  /* 2. nav row integrity above the toggle */
-  await setWidth(1024);
+  /* 2. signed-in nav row integrity above the 1200 toggle */
+  await setWidth(1205);
   await navigate(BASE + '/?uigeom=3');
-  for (const w of [905, 1000, 1200]) {
+  for (const w of [1205, 1300, 1400]) {
     await setWidth(w);
-    const p = await evalIn(`(() => {
-      const links = Array.from(document.querySelectorAll('#primary-nav a'));
-      const tops = links.map(a => Math.round(a.getBoundingClientRect().top));
-      const hs = links.map(a => Math.round(a.getBoundingClientRect().height));
-      const nav = document.getElementById('primary-nav').getBoundingClientRect();
-      const brand = document.querySelector('.brand').getBoundingClientRect();
-      const actions = document.querySelector('.header-actions').getBoundingClientRect();
-      return { spread: Math.max(...tops) - Math.min(...tops),
-        tallest: Math.max(...hs),
-        clearBrand: Math.round(nav.left - brand.right),
-        clearActions: Math.round(actions.left - nav.right) };
-    })()`);
-    check(`nav at ${w}px: one row, no internal wrap, clearances ≥4px`,
-      p.spread <= 4 && p.tallest < 60 && p.clearBrand >= 4 && p.clearActions >= 4,
-      JSON.stringify(p));
+    const p = await evalIn(NAV_PROBE);
+    check(`signed-in nav at ${w}px: one row, no overflow, header ≤80`,
+      navFits(p), JSON.stringify(p));
   }
 
   /* 3. mobile nav panel rides the header */

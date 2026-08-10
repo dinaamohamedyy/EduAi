@@ -448,18 +448,16 @@ body.admin-bar .site-header { top: var(--wp-admin--admin-bar--height, 32px); }
   display: block; font-family: var(--font-mono); font-size: 0.62rem;
   color: hsl(var(--text-faint)); font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;
 }
-/* Hidden below the nav toggle: at phone widths the 48-char tagline wraps to
-   three lines and grows the header past its 72px min (measured 80px at 375).
-   Deliberately NOT white-space:nowrap above 900, and this is final, not
-   pending: the fit-floor was MEASURED 10 Aug 2026 (scripts/ui-geometry.mjs
-   pattern, signed in, nowrap injected) — the one-line 360px tagline beside
-   the seven-tab row fits at 1380 and breaks at 1370, failing by horizontal
-   document overflow (358px of it at 950). So nowrap above the toggle would
-   put a sideways-scrolling page on nearly every laptop. Between 900 and
-   ~1380 the tagline wraps to two lines and min-height absorbs it — that is
-   the designed behaviour, not a defect. Do not "complete" this fix by
-   adding the nowrap half. */
-@media (max-width: 900px) { .brand__tag { display: none; } }
+/* Hidden below the nav toggle (1200 — see the toggle media below for the
+   measurement): at phone widths the 48-char tagline wraps to three lines and
+   grows the header past its 72px min (measured 80px at 375). Above 1200 it
+   wraps to at most two lines, which min-height absorbs (header 73 at 1200,
+   one line from ~1380). Deliberately NOT white-space:nowrap anywhere, and
+   this is final: nowrap-injected, the one-line 360px tagline fits at 1380
+   and breaks at 1370 by horizontal document overflow — nowrap above the
+   toggle would put a sideways-scrolling page on most laptops. Do not
+   "complete" this fix by adding the nowrap half. */
+@media (max-width: 1200px) { .brand__tag { display: none; } }
 
 .nav { margin-left: auto; }
 .nav ul { list-style: none; display: flex; align-items: center; gap: var(--space-3xs); margin: 0; padding: 0; }
@@ -506,7 +504,14 @@ body.admin-bar .site-header { top: var(--wp-admin--admin-bar--height, 32px); }
 
 .nav-toggle { display: none; }
 
-@media (max-width: 900px) {
+/* 1200, not 900, and it is a measurement (10 Aug 2026, scripts pattern,
+   shipped CSS, both auth states): with seven tabs the desktop header is only
+   overflow-free AND single-row from 1150 up anonymous / 1060 signed-in —
+   below that it overflows the document horizontally (102px at 910 signed-in)
+   and wraps the row to 134px. 1200 = the 1150 floor + cross-platform
+   font-metric margin, aligned with --wrap. The old 900 predates the seventh
+   tab and survived on a fit check that never asserted document overflow. */
+@media (max-width: 1200px) {
   .nav-toggle { display: grid; }
   .nav {
     /* Why `inset: var(--header-h) …` needs no admin-bar offset, measured

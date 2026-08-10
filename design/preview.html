@@ -124,7 +124,7 @@ box-shadow:inset 0 0 0 1px hsl(var(--on-brand)/.14)}
 text-transform:uppercase;letter-spacing:.14em}
 /* Mirrors the theme: no tagline below the nav toggle (long site descriptions
    wrap to three lines on phones and grow the header past its min-height). */
-@media(max-width:900px){.brand__tag{display:none}}
+@media(max-width:1200px){.brand__tag{display:none}}
 .nav{margin-left:auto;display:flex;gap:.15rem}
 .nav button{border:0;background:none;font:inherit;font-weight:500;white-space:nowrap;color:hsl(var(--text-muted));
 padding:.5em .8em;border-radius:var(--r-xs);cursor:pointer;transition:all .15s}
@@ -371,9 +371,11 @@ background:hsl(var(--warning-soft));color:hsl(var(--warning));border:1px solid h
 padding-block:var(--s-l);font-size:.86rem;color:hsl(var(--on-ink)/.65);text-align:center}
 .ftr code{font-family:var(--font-mono);background:hsl(var(--on-ink)/.12);color:hsl(var(--on-ink)/.85);
 padding:.1em .35em;border-radius:4px}
-/* Mobile nav — mirrors the theme: hamburger + dropdown panel at 900px. */
+/* Mobile nav — mirrors the theme: hamburger + dropdown panel at 1200px
+   (measured 10 Aug 2026: with seven tabs the desktop header is only
+   overflow-free and single-row from 1150 up; 900 predated the seventh tab). */
 .nav-toggle{display:none}
-@media(max-width:900px){
+@media(max-width:1200px){
 .nav-toggle{display:grid}
 .nav{position:fixed;inset:70px 0 auto 0;background:hsl(var(--surface));
 border-bottom:1px solid hsl(var(--border));box-shadow:var(--sh-l);
