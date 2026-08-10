@@ -195,17 +195,29 @@ find_browser() {
   for c in google-chrome google-chrome-stable chromium-browser chromium msedge microsoft-edge; do
     p="$(command -v "$c" 2>/dev/null)" && [ -n "$p" ] && { printf '%s' "$p"; return 0; }
   done
-  # MSYS-style, and handed to Node as-is. A conversion to C:/… lived here
-  # briefly, guarding a hazard that turned out not to exist: ui-geometry.mjs
-  # spawns with `spawn`, which resolves this form fine. (The report that it
-  # did not came from a reproduction using `spawnSync`, which resolves
-  # Windows paths differently — a test that resembled the real invocation
-  # rather than being it.) Removed rather than kept "just in case": code
-  # defending against a disproven failure reads like evidence that the
-  # failure is real.
+  # Written MSYS-style because that is the only form `[ -x ]` can test, and
+  # converted before it leaves, because Node cannot spawn it:
+  #
+  #   node spawning "/c/…/msedge.exe" directly            → ENOENT
+  #   UI_BROWSER="/c/…" node …        → Node receives     → C:/…
+  #   MSYS_NO_PATHCONV=1 UI_BROWSER="/c/…" node …         → /c/…  → crash
+  #
+  # Unconverted it works only because Git Bash silently rewrites the value on
+  # its way into a Windows binary. Depending on that is unwise here of all
+  # places: this same file sets MSYS_NO_PATHCONV=1 on every docker call one
+  # screen down, so the project already suppresses that rescue deliberately in
+  # some contexts and would be relying on it in others. Convert at the source
+  # and the value is correct however it is passed on.
   for p in "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
            "/c/Program Files/Microsoft/Edge/Application/msedge.exe"; do
-    [ -x "$p" ] && { printf '%s' "$p"; return 0; }
+    if [ -x "$p" ]; then
+      if command -v cygpath >/dev/null 2>&1; then
+        cygpath -m "$p"
+      else
+        printf '%s' "$p" | sed 's|^/\([a-zA-Z]\)/|\1:/|'
+      fi
+      return 0
+    fi
   done
   return 1
 }
