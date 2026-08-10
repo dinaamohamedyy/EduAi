@@ -30,6 +30,7 @@
  *   3. mobile nav panel rides the header (backdrop-filter containing block)
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 function argOf(flag, dflt) {
@@ -37,8 +38,27 @@ function argOf(flag, dflt) {
   return i >= 0 && args[i + 1] ? args[i + 1] : dflt;
 }
 const BASE = argOf('--url', 'http://localhost:8080').replace(/\/$/, '');
-const EDGE = argOf('--edge', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe');
 const PORT = Number(argOf('--port', '9345'));
+
+/* Browser resolution is this script's job, not the caller's — the wrapper
+   (live-checks.sh) invokes us with no path, on Windows dev boxes AND ubuntu
+   CI runners, and a hardcoded default fails on whichever it wasn't written
+   on. Order: explicit flag, UI_BROWSER env, the Windows Edge install, then
+   whatever Chromium the PATH offers. The --edge flag name is historical;
+   any Chromium-family binary works. */
+function findBrowser() {
+  const cli = argOf('--edge', null);
+  if (cli) return cli;
+  if (process.env.UI_BROWSER) return process.env.UI_BROWSER;
+  const winEdge = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+  if (existsSync(winEdge)) return winEdge;
+  for (const name of ['google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium']) {
+    const r = spawnSync('which', [name], { encoding: 'utf8' });
+    if (r.status === 0 && r.stdout.trim()) return r.stdout.trim();
+  }
+  throw new Error('no Chromium-family browser found — pass --edge <path> or set UI_BROWSER');
+}
+const EDGE = findBrowser();
 
 /* ---------------------------------------------------------------- cookie -- */
 function mintCookie() {

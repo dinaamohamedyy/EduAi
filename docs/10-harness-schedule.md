@@ -142,6 +142,11 @@ seven. Front end also owns the `ui-geometry.mjs` parametrisation; back end
 owns the spend budget line. Nothing here touches the AI engineer's
 territory.
 
-Status: nightly tier approved and `nightly.yml` landed 10 Aug 2026 — red by
-design until the wrapper exists (the workflow's first step asserts it,
-loudly). Decisions 2 and 3 remain with the owner.
+Status: nightly tier approved; `nightly.yml` landed 10 Aug 2026, and the
+tester's `live-checks.sh` (6f7189b) landed the same evening. The exact call
+path the nightly uses — wrapper, no arguments, free set — was validated end
+to end against the local stack: 7 passed, 0 failed, the spend and human-run
+exclusions announced rather than silent. `ui-geometry.mjs` self-locates its
+browser (Windows Edge or the runner's Chrome), so the same wrapper line
+works on both. The nightly is expected green on its first scheduled run.
+Decisions 2 and 3 remain with the owner.
