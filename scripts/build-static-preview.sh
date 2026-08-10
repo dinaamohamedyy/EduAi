@@ -72,36 +72,41 @@ rm -rf "$out"
 mkdir -p "$out"
 cp "$src" "$out/index.html"
 
-# Static host config. No build step, no framework: serve the files as they are.
-cat > "$out/vercel.json" <<'JSON'
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "cleanUrls": true,
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
-      ]
-    }
-  ]
-}
-JSON
-
-ok "index.html + vercel.json written"
+# Deliberately the ONLY file. Serving config lives in the repo-root vercel.json,
+# because that is the one Vercel reads for a Git-integration build; a copy in
+# here would be served as a public file and confuse the next reader about which
+# one is in effect.
+ok "index.html written"
 
 say "Refusing to ship a key"
 
 # Explicit path => check-no-secrets.pl applies NO exemptions. That matters: the
 # preview.html exemption exists for a developer's working tree and must never
 # apply to something about to be made public.
-if ! perl "$repo/scripts/check-no-secrets.pl" "$out" >/dev/null 2>&1; then
-	printf '\n' >&2
-	perl "$repo/scripts/check-no-secrets.pl" "$out" >&2 || true
-	printf '\n' >&2
-	die "a key reached the build output — nothing has been deployed"
+#
+# Perl is present locally and in GitHub Actions, but this also runs inside
+# Vercel's build container, where it is not guaranteed. Falling back silently
+# to "no check" would make this guard vacuous exactly where it is hardest to
+# notice, so the fallback is a real scan and its absence is fatal, never
+# skipped.
+if command -v perl >/dev/null 2>&1; then
+	if ! perl "$repo/scripts/check-no-secrets.pl" "$out" >/dev/null 2>&1; then
+		printf '\n' >&2
+		perl "$repo/scripts/check-no-secrets.pl" "$out" >&2 || true
+		printf '\n' >&2
+		die "a key reached the build output — nothing has been deployed"
+	fi
+	ok "no API key in the build output (check-no-secrets.pl)"
+else
+	# Same shapes the Perl scanner looks for. Length-bounded so the provider
+	# *detection patterns* in the page ("sk-ant-", /^gsk_/) do not self-match:
+	# the page legitimately contains those prefixes as string literals.
+	if grep -rqE "gsk_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|[0-9a-f]{32}\.[A-Za-z0-9]{16,}" "$out"; then
+		grep -rnE "gsk_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|[0-9a-f]{32}\.[A-Za-z0-9]{16,}" "$out" >&2 || true
+		die "a key reached the build output — nothing has been deployed"
+	fi
+	ok "no API key in the build output (grep fallback; perl unavailable)"
 fi
-ok "no API key in the build output"
 
 # Belt to the above braces: assert the literal line is empty, in case the
 # scanner's patterns ever drift behind a new provider's key shape.
@@ -110,18 +115,23 @@ if ! grep -qE "^var API_KEY = '';" "$out/index.html"; then
 fi
 ok "API_KEY line is empty"
 
-# The upload is the whole directory, so anything unexpected in it is a leak.
+# Everything in this directory becomes public, so anything unexpected in it is
+# a leak. One file, by design.
 count=$(find "$out" -type f | wc -l)
-[ "$count" -eq 2 ] || die "expected exactly 2 files in the output, found $count"
-ok "output contains exactly 2 files, both intended"
+[ "$count" -eq 1 ] || die "expected exactly 1 file in the output, found $count"
+ok "output contains exactly 1 file, the intended one"
 
 say "Done"
 cat <<EOF
-  Built: dist/preview-site/
-    index.html   the design mock-up (assistant / calculator / exams inert)
-    vercel.json  static config, noindex
+  Built: dist/preview-site/index.html — the design mock-up
+         (assistant / calculator / exams are inert in it)
 
-  Deploy it (this directory only — never the repo root):
+  Vercel's GitHub integration runs this automatically: repo-root vercel.json
+  sets buildCommand to this script and outputDirectory to dist/preview-site,
+  so only the built page is served — not wp-content, docs or scripts.
+
+  To publish by hand instead (this directory only, never the repo root, which
+  holds the gitignored preview.html with a live key in it):
 
     npx vercel deploy --prod dist/preview-site
 
