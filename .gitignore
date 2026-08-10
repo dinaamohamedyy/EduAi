@@ -49,3 +49,6 @@ Thumbs.db
 .vscode/
 *.sql
 *.sql.gz
+
+# Built by scripts/make-lecture-fixture.php — regenerate, do not commit the zip.
+scripts/*.pptx

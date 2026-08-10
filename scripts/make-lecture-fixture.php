@@ -4,15 +4,19 @@
  *
  *     php scripts/make-lecture-fixture.php [output.pptx]
  *
- * Needs only ext-zip — no WordPress, no plugin. Run it on the host, or inside
- * the container if you want the deck where PHP can reach it:
+ * With no argument it writes scripts/roundtrip-deck.pptx, which is where the
+ * round-trip harness looks. Needs only ext-zip — no WordPress, no plugin. If the
+ * host has no PHP, build it in the container and copy it back:
  *
  *     docker cp scripts/make-lecture-fixture.php scholaris-wp:/tmp/
- *     docker exec -i scholaris-wp php /tmp/make-lecture-fixture.php /tmp/lecture.pptx
+ *     docker exec -i scholaris-wp php /tmp/make-lecture-fixture.php /tmp/deck.pptx
+ *     docker cp scholaris-wp:/tmp/deck.pptx scripts/roundtrip-deck.pptx
  *
  * WHY A GENERATOR RATHER THAN A COMMITTED .pptx. A deck is a zip: opaque in
  * review, undiffable, and its traps invisible. Here the trap is the point, so it
- * has to be readable. Regenerating is deterministic — same bytes every run.
+ * has to be readable. Regenerating is deterministic — same bytes every run, so
+ * the .pptx itself is gitignored: build it once per working copy. A harness that
+ * cannot find it should say so loudly rather than quietly test something easier.
  *
  * THE TRAPS, AND WHAT EACH ONE CATCHES
  *
@@ -36,7 +40,7 @@
  * @package EduAI
  */
 
-$out = $argv[1] ?? __DIR__ . '/lecture-fixture.pptx';
+$out = $argv[1] ?? __DIR__ . '/roundtrip-deck.pptx';
 
 if ( ! class_exists( 'ZipArchive' ) ) {
 	fwrite( STDERR, "ext-zip is required\n" );
