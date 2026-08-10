@@ -70,6 +70,18 @@ defined( 'ABSPATH' ) || exit;
 				<a class="btn btn--primary btn--sm hide-sm" href="<?php echo esc_url( wp_login_url() ); ?>">
 					<?php esc_html_e( 'Sign in', 'scholaris' ); ?>
 				</a>
+			<?php else : ?>
+				<?php
+				// The account screen still needs a way in, but as an avatar at
+				// icon-button width — NOT the text button removed above. That one
+				// cost ~130px and overflowed the header between 900 and ~1190;
+				// this is the same footprint as the theme toggle beside it, and
+				// was checked at those widths rather than reasoned about.
+				?>
+				<a class="icon-btn icon-btn--avatar" href="<?php echo esc_url( scholaris_profile_url() ); ?>"
+					aria-label="<?php esc_attr_e( 'Your profile', 'scholaris' ); ?>">
+					<?php echo get_avatar( get_current_user_id(), 26, '', '', array( 'class' => 'header-avatar' ) ); ?>
+				</a>
 			<?php endif; ?>
 
 			<button class="icon-btn nav-toggle" type="button" aria-controls="primary-nav" aria-expanded="false"

@@ -484,3 +484,169 @@ function scholaris_authflow_lostpassword( WP_Error $errors ): void {
 	}
 }
 add_action( 'lostpassword_post', 'scholaris_authflow_lostpassword', 20 );
+
+/* ---------------------------------------------------------------------------
+ * Profile: the account screen at page-templates/profile.php
+ * ------------------------------------------------------------------------ */
+
+/**
+ * Where sign-in lives, optionally coming back here afterwards.
+ *
+ * Same resolver shape as scholaris_progress_url(): a page lookup with an honest
+ * fallback. wp_login_url() is the fallback rather than home, because a raw
+ * WordPress login form is ugly but functional, whereas home is a dead end for
+ * someone who clicked "sign in".
+ *
+ * @param string $redirect_to Absolute URL to return to. Ignored unless it is
+ *                            on this site — an open redirect on a login link is
+ *                            a phishing primitive.
+ */
+function scholaris_signin_url( string $redirect_to = '' ): string {
+	$page = get_page_by_path( 'sign-in' );
+
+	$url = ( $page && 'publish' === $page->post_status )
+		? (string) get_permalink( $page )
+		: wp_login_url();
+
+	if ( '' !== $redirect_to && str_starts_with( $redirect_to, home_url() ) ) {
+		$url = add_query_arg( 'redirect_to', rawurlencode( $redirect_to ), $url );
+	}
+
+	return (string) apply_filters( 'scholaris_signin_url', $url, $redirect_to );
+}
+
+/**
+ * Save the profile form. Runs on template_redirect so a failure can still
+ * redirect before any output.
+ *
+ * Two forms post here, told apart by scholaris_profile_action. Both carry the
+ * same nonce; neither trusts a user id from the request — the only account this
+ * can ever edit is the one in the current session.
+ */
+function scholaris_profile_save(): void {
+	if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) || ! isset( $_POST['scholaris_profile_action'] ) ) {
+		return;
+	}
+
+	if ( ! is_user_logged_in() ) {
+		return;
+	}
+
+	if ( ! isset( $_POST['scholaris_profile_nonce'] )
+		|| ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['scholaris_profile_nonce'] ) ), 'scholaris_profile' ) ) {
+		scholaris_profile_bounce( 'nonce' );
+	}
+
+	$user   = wp_get_current_user();
+	$action = sanitize_key( wp_unslash( $_POST['scholaris_profile_action'] ) );
+
+	if ( 'password' === $action ) {
+		$current = isset( $_POST['current_pass'] ) ? (string) wp_unslash( $_POST['current_pass'] ) : '';
+		$new     = isset( $_POST['new_pass'] ) ? (string) wp_unslash( $_POST['new_pass'] ) : '';
+		$repeat  = isset( $_POST['new_pass2'] ) ? (string) wp_unslash( $_POST['new_pass2'] ) : '';
+
+		// Session identity is not enough: it proves the browser, not the person.
+		if ( ! wp_check_password( $current, $user->user_pass, $user->ID ) ) {
+			scholaris_profile_bounce( 'badpass' );
+		}
+
+		if ( $new !== $repeat ) {
+			scholaris_profile_bounce( 'mismatch' );
+		}
+
+		if ( strlen( $new ) < 8 ) {
+			scholaris_profile_bounce( 'weak' );
+		}
+
+		wp_set_password( $new, $user->ID );
+
+		// wp_set_password() invalidates every session including this one, so
+		// sign the student straight back in. Without this a password change
+		// looks like being thrown out of the site for no reason.
+		wp_set_auth_cookie( $user->ID, false );
+		wp_set_current_user( $user->ID );
+
+		scholaris_profile_bounce( 'password' );
+	}
+
+	$first = isset( $_POST['first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['first_name'] ) ) : '';
+	$last  = isset( $_POST['last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['last_name'] ) ) : '';
+	$email = isset( $_POST['user_email'] ) ? sanitize_email( wp_unslash( $_POST['user_email'] ) ) : '';
+
+	if ( '' === $email || ! is_email( $email ) ) {
+		scholaris_profile_bounce( 'bademail' );
+	}
+
+	$owner = email_exists( $email );
+
+	if ( $owner && (int) $owner !== $user->ID ) {
+		scholaris_profile_bounce( 'takenemail' );
+	}
+
+	$display = trim( $first . ' ' . $last );
+
+	$updated = wp_update_user( array(
+		'ID'           => $user->ID,
+		'first_name'   => $first,
+		'last_name'    => $last,
+		'user_email'   => $email,
+		// Falls back to the login rather than to an empty string: a blank
+		// display name renders as an empty greeting everywhere it is used.
+		'display_name' => '' !== $display ? $display : $user->user_login,
+	) );
+
+	scholaris_profile_bounce( is_wp_error( $updated ) ? 'failed' : 'saved' );
+}
+add_action( 'template_redirect', 'scholaris_profile_save' );
+
+/**
+ * Redirect back to the profile with a flag, ending the request.
+ *
+ * POST-redirect-GET: without it a refresh re-submits, and a re-submitted
+ * password change fails confusingly because the current password has changed.
+ *
+ * @param string $flag One of the keys scholaris_profile_notices() renders.
+ */
+function scholaris_profile_bounce( string $flag ): void {
+	$url = add_query_arg( 'profile', $flag, get_permalink() ?: home_url( '/profile/' ) );
+
+	wp_safe_redirect( $url );
+	exit;
+}
+
+/**
+ * Render the outcome of the last save. Templates call this above their forms.
+ */
+function scholaris_profile_notices(): void {
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only flag.
+	if ( ! isset( $_GET['profile'] ) ) {
+		return;
+	}
+
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only flag.
+	$flag = sanitize_key( wp_unslash( $_GET['profile'] ) );
+
+	$map = array(
+		'saved'      => array( 'success', __( 'Your details have been saved.', 'scholaris' ) ),
+		'password'   => array( 'success', __( 'Your password has been changed. You are still signed in.', 'scholaris' ) ),
+		'badpass'    => array( 'error', __( 'That is not your current password.', 'scholaris' ) ),
+		'mismatch'   => array( 'error', __( 'The two new passwords do not match.', 'scholaris' ) ),
+		'weak'       => array( 'error', __( 'Please choose a password of at least eight characters.', 'scholaris' ) ),
+		'bademail'   => array( 'error', __( 'That does not look like a valid e-mail address.', 'scholaris' ) ),
+		'takenemail' => array( 'error', __( 'Another account already uses that e-mail address.', 'scholaris' ) ),
+		'nonce'      => array( 'error', __( 'That form expired. Please try again.', 'scholaris' ) ),
+		'failed'     => array( 'error', __( 'We could not save your details. Please try again.', 'scholaris' ) ),
+	);
+
+	if ( ! isset( $map[ $flag ] ) ) {
+		return;
+	}
+
+	list( $tone, $message ) = $map[ $flag ];
+
+	printf(
+		'<div class="notice notice--%s">%s</div>',
+		esc_attr( $tone ),
+		esc_html( $message )
+	);
+}

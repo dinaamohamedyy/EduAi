@@ -836,3 +836,54 @@ body.admin-bar .auth {
 .reveal { opacity: 0; transform: translateY(14px); transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out); }
 .reveal.is-visible { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; } }
+
+/* ------------------------------------------------------------- profile ---- */
+/* The account screen. Exists so students are never sent to wp-admin, which is
+   a different product wearing a different typeface. */
+.profile { display: grid; gap: var(--space-l); }
+
+.profile__head {
+  display: flex; align-items: center; gap: var(--space-m); flex-wrap: wrap;
+  padding-bottom: var(--space-m);
+  border-bottom: 1px solid hsl(var(--border));
+}
+.profile__avatar { border-radius: 50%; flex: none; }
+.profile__name { margin: 0; font-size: var(--step-2); }
+.profile__mail { margin: 2px 0 0; color: hsl(var(--text-muted)); }
+.profile__since { margin: 2px 0 0; color: hsl(var(--text-muted)); font-size: var(--step--1); }
+
+.profile__section { display: grid; gap: var(--space-s); }
+.profile__section h3 { margin: 0; font-size: var(--step-1); }
+.profile__section--quiet { border-top: 1px solid hsl(var(--border)); padding-top: var(--space-m); }
+.profile__section--quiet p { margin: 0; display: flex; gap: var(--space-2xs); flex-wrap: wrap; }
+
+.profile__stats { display: flex; flex-wrap: wrap; gap: var(--space-s); }
+.profile__stat {
+  flex: 1 1 6rem; display: grid; gap: 2px;
+  padding: var(--space-s);
+  background: hsl(var(--bg-subtle));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-m);
+}
+.profile__statnum {
+  font-family: var(--font-display);
+  font-size: var(--step-2); font-weight: 600; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.profile__statlabel { font-size: var(--step--1); color: hsl(var(--text-muted)); }
+
+.profile__actions { margin: 0; display: flex; gap: var(--space-2xs); flex-wrap: wrap; }
+
+/* Disabled inputs must read as "not editable", not as "broken" — the hint
+   underneath says why, so the styling only needs to stop inviting a click. */
+.profile .field input:disabled {
+  background: hsl(var(--bg-sunken));
+  color: hsl(var(--text-muted));
+  cursor: not-allowed;
+}
+.field__hint { margin: var(--space-3xs) 0 0; font-size: var(--step--1); color: hsl(var(--text-muted)); }
+
+/* Avatar as an icon button: same 34px box as the theme toggle, so adding it
+   costs the header nothing at the widths where it used to overflow. */
+.icon-btn--avatar { padding: 0; overflow: hidden; }
+.icon-btn--avatar .header-avatar { display: block; width: 26px; height: 26px; border-radius: 50%; }

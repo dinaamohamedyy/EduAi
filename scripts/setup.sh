@@ -181,6 +181,11 @@ make_page "Sign in" "sign-in" ""
 make_page "Create account" "register" ""
 make_page "Reset password" "reset-password" ""
 
+# The account screen. Deliberately a themed page rather than wp-admin/profile.php:
+# that form is a different product wearing a different typeface, and students
+# who land on it think they have left the site.
+make_page "Profile" "profile" ""
+
 set_page_template() {
 	local slug="$1" tpl="$2" id
 	id=$($WP post list --post_type=page --name="$slug" --field=ID | head -1)
@@ -192,6 +197,7 @@ set_page_template() {
 set_page_template "sign-in" "page-templates/auth-signin.php"
 set_page_template "register" "page-templates/auth-register.php"
 set_page_template "reset-password" "page-templates/auth-reset.php"
+set_page_template "profile" "page-templates/profile.php"
 
 # Static front page
 HOME_ID=$($WP post list --post_type=page --name=home --field=ID | head -1)

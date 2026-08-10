@@ -102,6 +102,9 @@ class EduAI_REST {
 			'methods'             => WP_REST_Server::READABLE,
 			'callback'            => array( __CLASS__, 'exam_get' ),
 			'permission_callback' => array( __CLASS__, 'can_use' ),
+			'args'                => array(
+				'retake' => array( 'type' => 'boolean', 'default' => false ),
+			),
 		) );
 	}
 
@@ -421,6 +424,18 @@ class EduAI_REST {
 			return new WP_REST_Response( $out, 200 );
 		}
 
+		// Retake: the same paper, blank. Deliberately the SAME projection a
+		// never-attempted exam gets — for_client() redacts, so sitting a paper
+		// once cannot be turned into a way to read its answer key by asking for
+		// it again. The previous attempt stays in the table; store_attempt()
+		// inserts, so a retake adds a row rather than overwriting the mark.
+		if ( $request['retake'] ) {
+			$out              = EduAI_Exams::for_client( $exam, false );
+			$out['attempted'] = true;
+			$out['retake']    = true;
+			return new WP_REST_Response( $out, 200 );
+		}
+
 		$out              = EduAI_Exams::attempt_for_client( $exam, $attempts[0] );
 		$out['questions'] = EduAI_Exams::redact( $exam['questions'] );
 		$out['attempted'] = true;
@@ -605,7 +620,17 @@ class EduAI_REST {
 			return $limited;
 		}
 
-		$system = EduAI_Agents::system_prompt( 'stem-solver' );
+		// The house rules already carry a Notation section, but it sits a long
+		// way up a long prompt and a maths-tuned model reaches for LaTeX by
+		// reflex — observed emitting \(f(x)=x^{3}\) for a plain derivative.
+		// to_html() has no LaTeX handling, so that reaches the student as
+		// literal backslashes and braces. On a surface where every single reply
+		// is mathematics, the rule is worth restating last, where it lands.
+		$system = EduAI_Agents::system_prompt( 'stem-solver' )
+			. "\n\nNOTATION — this overrides any formatting habit:"
+			. "\n- Plain text only. NO LaTeX: no \\( \\), no \\[ \\], no $…$, no \\frac, no \\times, no ^{ } braces."
+			. "\n- Write powers as x^2, roots as sqrt(x), fractions as (a+b)/c, products as 3 x 10^8."
+			. "\n- Put a multi-line derivation in a fenced code block so the alignment survives.";
 
 		$result = EduAI_Claude::message(
 			array( array( 'role' => 'user', 'content' => $input ) ),
@@ -932,10 +957,90 @@ class EduAI_REST {
 	}
 
 	/**
+	 * Turn LaTeX maths into the plain notation this renderer can actually show.
+	 *
+	 * There is no MathJax on the page and no LaTeX handling in to_html(), so
+	 * `\(f(x)=x^{3}\)` reaches a student as literal backslashes and braces. The
+	 * house rules forbid LaTeX and the AiCalc prompt forbids it again in
+	 * capitals, and a maths-tuned model still reaches for it by reflex — asked
+	 * to differentiate x^3 it emitted `\(x^{3}\)` under both. Prompting is a
+	 * request; this is the guarantee, and it sits in to_html() so every surface
+	 * that renders model output gets it rather than AiCalc alone.
+	 *
+	 * Deliberately small: unwrap the delimiters, convert the handful of commands
+	 * that actually turn up in student-level maths, and leave anything unknown
+	 * alone. Half-translated notation is worse than none, so this never guesses.
+	 *
+	 * @param string $text Raw model output.
+	 */
+	public static function plain_maths( string $text ): string {
+		// Fenced blocks are NOT exempt. The house rules ask for a multi-line
+		// derivation in a fence, so a fence is exactly where a model puts its
+		// densest LaTeX — exempting them protected the worst case. Nothing
+		// below touches whitespace or line structure, so the alignment a fence
+		// exists to preserve survives the rewrite.
+
+		// Innermost-first, repeated: \frac{a^{2}}{b} has nested braces, and a
+		// single pass of a non-nesting pattern would leave the outer command
+		// behind. Three passes covers any nesting depth a student-level
+		// expression reaches; anything deeper is left alone rather than
+		// half-converted.
+		for ( $pass = 0; $pass < 3; $pass++ ) {
+			$before = $text;
+
+			// Superscripts and subscripts first, so they stop being braces that
+			// block the structural patterns below. x^{3} is x^3, but x^{n+1}
+			// keeps brackets or it stops meaning the same thing.
+			$text = preg_replace( '/([\^_])\{(\w)\}/', '$1$2', $text ) ?? $text;
+			$text = preg_replace( '/([\^_])\{([^{}]*)\}/', '$1($2)', $text ) ?? $text;
+
+			$text = preg_replace( '/\\\\(?:d?frac|tfrac)\s*\{([^{}]*)\}\s*\{([^{}]*)\}/', '($1)/($2)', $text ) ?? $text;
+			$text = preg_replace( '/\\\\sqrt\s*\{([^{}]*)\}/', 'sqrt($1)', $text ) ?? $text;
+			$text = preg_replace( '/\\\\(?:text|mathrm|mathbf|operatorname)\s*\{([^{}]*)\}/', '$1', $text ) ?? $text;
+
+			if ( $before === $text ) {
+				break;
+			}
+		}
+
+		// Degrees arrive as a superscripted command, so the caret has to go with
+		// it or "90 °C" comes out as "90 ^°C".
+		$text = str_replace( array( '^\\circ', '^{\\circ}' ), '\\circ', $text );
+
+		$symbols = array(
+			'\\times' => ' x ', '\\cdot' => '·', '\\div' => ' ÷ ',
+			'\\leq' => ' <= ', '\\geq' => ' >= ', '\\neq' => ' != ',
+			'\\approx' => ' ~ ', '\\pm' => ' +/- ', '\\infty' => 'infinity',
+			'\\circ' => '°', '\\degree' => '°',
+			'\\alpha' => 'alpha', '\\beta' => 'beta', '\\theta' => 'theta',
+			'\\lambda' => 'lambda', '\\mu' => 'mu', '\\pi' => 'pi',
+			'\\omega' => 'omega', '\\Delta' => 'delta', '\\sum' => 'sum',
+			'\\int' => 'integral', '\\partial' => 'd',
+			'\\left' => '', '\\right' => '',
+			'\\,' => ' ', '\\;' => ' ', '\\!' => '', '\\quad' => '  ', '\\qquad' => '    ',
+		);
+		$text = strtr( $text, $symbols );
+
+		// Delimiters last, so the commands inside them were handled first.
+		$text = str_replace( array( '\\(', '\\)', '\\[', '\\]' ), '', $text );
+		$text = preg_replace( '/\\\\\s/', ' ', $text ) ?? $text;
+
+		// $$…$$ only. Single-$ maths is deliberately left alone: "costs $5 and
+		// $7 total" is a perfectly ordinary sentence in an economics lecture and
+		// unwrapping it silently deletes both currency signs, which is a worse
+		// and much harder-to-spot failure than leaving inline TeX intact. In
+		// practice these models emit \(…\), which is handled above and carries
+		// no such ambiguity.
+		$text = preg_replace( '/\$\$([^\n$]+)\$\$/', '$1', $text ) ?? $text;
+
+		return $text;
+	}
+
+	/**
 	 * Convert the model's Markdown into a safe HTML subset for the chat bubble.
 	 */
 	public static function to_html( string $markdown ): string {
-		$text = esc_html( $markdown );
+		$text = esc_html( self::plain_maths( $markdown ) );
 
 		// Lift fenced code blocks out of the string entirely. Replacing them in
 		// place did not protect them: every pass below still ran over the code,

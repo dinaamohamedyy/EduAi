@@ -3,7 +3,7 @@
  * Plugin Name:       EduAI Assistant
  * Plugin URI:        https://example.com/eduai-assistant
  * Description:       A Claude-powered study assistant for WordPress: answers student questions grounded in your own course material, summarises lecture PDFs and PowerPoint decks, switches between selectable agents, and supports voice input and spoken replies.
- * Version:           1.1.0
+ * Version:           1.1.2
  * Requires at least: 6.4
  * Requires PHP:      8.0
  * Author:            YZH Solution
@@ -17,7 +17,10 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'EDUAI_VERSION', '1.1.0' );
+// Bump on every chat.css change: assets are cache-keyed on ?ver=, and a fix
+// the server has but the browser does not is indistinguishable from no fix.
+// 1.1.1 alias-scope fix · 1.1.2 item-3 token migration.
+define( 'EDUAI_VERSION', '1.1.2' );
 define( 'EDUAI_FILE', __FILE__ );
 define( 'EDUAI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EDUAI_URL', plugin_dir_url( __FILE__ ) );
@@ -34,6 +37,7 @@ require_once EDUAI_DIR . 'includes/class-eduai-exams.php';
 require_once EDUAI_DIR . 'includes/class-eduai-rest.php';
 require_once EDUAI_DIR . 'includes/class-eduai-shortcodes.php';
 require_once EDUAI_DIR . 'includes/class-eduai-admin.php';
+require_once EDUAI_DIR . 'includes/class-eduai-students.php';
 
 /**
  * Plugin bootstrap.
@@ -70,6 +74,7 @@ final class EduAI_Assistant {
 
 		if ( is_admin() ) {
 			EduAI_Admin::init();
+			EduAI_Students::init();
 		}
 
 		$this->maybe_upgrade();
@@ -294,3 +299,71 @@ EduAI_Assistant::instance();
 
 register_activation_hook( __FILE__, array( 'EduAI_Assistant', 'install' ) );
 register_deactivation_hook( __FILE__, array( 'EduAI_Assistant', 'uninstall_hooks' ) );
+
+/**
+ * Where the Q&A page lives. This plugin owns /ask/ (setup.sh creates it with
+ * [eduai_panel]), so the resolver lives here — not in the theme, not in the
+ * library plugin. Consumers guard with function_exists() and OMIT their
+ * control when this plugin is absent: a missing button is honest, a button
+ * that navigates somewhere unrelated is not.
+ */
+function eduai_ask_url(): string {
+	$page = get_page_by_path( 'ask' );
+
+	$url = ( $page && 'publish' === $page->post_status )
+		? (string) get_permalink( $page )
+		: home_url( '/' );
+
+	/**
+	 * Filter the Q&A page destination.
+	 *
+	 * @param string $url Resolved URL.
+	 */
+	return (string) apply_filters( 'eduai_ask_url', $url );
+}
+
+/**
+ * Where the Summarise page lives. Same contract as eduai_ask_url().
+ */
+function eduai_summarise_url(): string {
+	$page = get_page_by_path( 'summarise' );
+
+	$url = ( $page && 'publish' === $page->post_status )
+		? (string) get_permalink( $page )
+		: home_url( '/' );
+
+	/**
+	 * Filter the Summarise page destination.
+	 *
+	 * @param string $url Resolved URL.
+	 */
+	return (string) apply_filters( 'eduai_summarise_url', $url );
+}
+
+/**
+ * Where PrepareME lives. Same contract as eduai_ask_url().
+ *
+ * @param int $exam_id Sit this stored exam again instead of generating a new
+ *                     one. The id is a hint to the page, never an authorisation:
+ *                     GET /exam/{id} still checks ownership, so a guessed id in
+ *                     the query string yields a 403, not someone else's paper.
+ */
+function eduai_prepare_url( int $exam_id = 0 ): string {
+	$page = get_page_by_path( 'prepare' );
+
+	$url = ( $page && 'publish' === $page->post_status )
+		? (string) get_permalink( $page )
+		: home_url( '/' );
+
+	if ( $exam_id > 0 ) {
+		$url = add_query_arg( 'exam', $exam_id, $url );
+	}
+
+	/**
+	 * Filter the PrepareME page destination.
+	 *
+	 * @param string $url     Resolved URL.
+	 * @param int    $exam_id Exam to retake, or 0.
+	 */
+	return (string) apply_filters( 'eduai_prepare_url', $url, $exam_id );
+}

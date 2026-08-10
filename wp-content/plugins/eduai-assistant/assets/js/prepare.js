@@ -178,6 +178,44 @@
 			.finally(function () { self.busy = false; self.generate.disabled = false; });
 	};
 
+	/* -------------------------------------------------------------- retake */
+
+	/* Sit a stored paper again, from ?exam=<id> on the URL.
+
+	   retake=1 makes the server hand back the blank redacted paper rather than
+	   the last attempt's marked results, which is what a bare GET returns once
+	   an exam has been sat. The id is only a hint: ownership is checked
+	   server-side, so a guessed id gets a 403 rather than someone else's paper,
+	   and the message is shown on the setup stage where the student can still
+	   generate a new one. */
+	Prepare.prototype.loadExam = function (examId) {
+		var self = this;
+
+		this.busy = true;
+		this.note(this.setupOut, 'eduai-prep__working',
+			'<div class="eduai-typing"><span></span><span></span><span></span></div><p>' +
+			esc(T.loadingPaper) + '</p>');
+
+		fetch(CFG.root + '/exam/' + encodeURIComponent(examId) + '?retake=1', {
+			method: 'GET',
+			credentials: 'same-origin',
+			headers: { 'X-WP-Nonce': CFG.nonce }
+		})
+			.then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
+			.then(function (r) {
+				if (!r.ok || !r.data || !r.data.questions) {
+					self.note(self.setupOut, 'eduai-error', esc((r.data && r.data.message) || T.error));
+					return;
+				}
+				self.setupOut.innerHTML = '';
+				self.exam = r.data;
+				self.renderPaper(r.data);
+				self.show('paper');
+			})
+			.catch(function () { self.note(self.setupOut, 'eduai-error', esc(T.error)); })
+			.finally(function () { self.busy = false; });
+	};
+
 	/* --------------------------------------------------------------- paper */
 
 	Prepare.prototype.renderPaper = function (exam) {
@@ -300,22 +338,30 @@
 		var self = this;
 		var pass = resp.percent >= 50;
 
+		// The theme's ledger tile (ported as .eduai-stat): tabular figures
+		// satisfy the float ship gate by construction. Pass/fail colour goes
+		// on the note, not the value — a red score reads as an error state
+		// rather than a result.
 		var html =
-			'<div class="eduai-prep__score">' +
-				'<div><b>' + num(resp.score) + ' / ' + num(resp.total) + '</b>' +
-				'<span>' + esc(self.exam.title || '') + '</span></div>' +
-				'<span class="eduai-prep__pct ' + (pass ? 'is-pass' : 'is-fail') + '">' +
-				esc(resp.percent) + '%</span>' +
+			'<div class="eduai-stat">' +
+				'<span class="eduai-stat__label">' + esc(T.score) + '</span>' +
+				'<span class="eduai-stat__value">' + num(resp.score) + ' / ' + num(resp.total) + '</span>' +
+				'<span class="eduai-stat__note ' + (pass ? 'is-pass' : 'is-fail') + '">' +
+					esc(resp.percent) + '%' + (self.exam.title ? ' · ' + esc(self.exam.title) : '') +
+				'</span>' +
 			'</div>';
 
 		html += '<div class="eduai-prep__bands">';
 		['easy', 'medium', 'hard'].forEach(function (b) {
 			var d = (resp.bands || {})[b];
 			if (!d || !d.of) { return; }
+			var ratio = d.awarded / d.of;
+			// Meter tones read as: comfortable / needs work / in trouble.
+			var tone = ratio >= 0.7 ? 'pass' : (ratio >= 0.4 ? 'mid' : 'fail');
 			html += '<div class="eduai-prep__bandrow">' +
 				'<b>' + esc(T.bands[b] || b) + '</b>' +
-				'<span class="eduai-prep__meter"><span style="width:' +
-					Math.round((d.awarded / d.of) * 100) + '%"></span></span>' +
+				'<span class="eduai-meter" data-tone="' + tone + '"><span style="width:' +
+					Math.round(ratio * 100) + '%"></span></span>' +
 				'<span class="eduai-prep__bandnum">' + num(d.awarded) + ' / ' + num(d.of) + '</span>' +
 			'</div>';
 		});
@@ -386,10 +432,21 @@
 			(tail ? ' <span>— ' + tail + '</span>' : '') + '</p>';
 	}
 
+	/* ?exam=<id> — the retake link from My Progress. Parsed off location rather
+	   than localised into CFG because the same page serves both entry points:
+	   with the parameter it is a retake, without it a fresh generation. */
+	function retakeId() {
+		var m = /[?&]exam=(\d+)/.exec(window.location.search || '');
+		return m ? parseInt(m[1], 10) : 0;
+	}
+
 	function init() {
+		var id = retakeId();
+
 		document.querySelectorAll('[data-eduai-prep]').forEach(function (node) {
 			if (node.__eduaiPrep) { return; }
 			node.__eduaiPrep = new Prepare(node);
+			if (id > 0) { node.__eduaiPrep.loadExam(id); }
 		});
 	}
 

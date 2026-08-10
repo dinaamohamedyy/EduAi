@@ -18,6 +18,37 @@ class EduAI_Shortcodes {
 		add_shortcode( 'eduai_summarizer', array( __CLASS__, 'summarizer' ) );
 		add_shortcode( 'eduai_calc', array( __CLASS__, 'calc' ) );
 		add_shortcode( 'eduai_prepare', array( __CLASS__, 'prepare' ) );
+		add_shortcode( 'eduai_progress', array( __CLASS__, 'progress' ) );
+	}
+
+	/**
+	 * PrepareME history: every paper this student has sat, with a retake link.
+	 *
+	 * Read-only, so it enqueues no script — the retake button is a link to
+	 * PrepareME carrying the exam id, not a fetch. A page that only lists past
+	 * results has no reason to ship the exam runtime.
+	 *
+	 * @param array $atts Shortcode attributes.
+	 */
+	public static function progress( $atts = array() ): string {
+		$atts = shortcode_atts( array( 'limit' => 20 ), (array) $atts, 'eduai_progress' );
+
+		if ( ! is_user_logged_in() ) {
+			return self::login_card(
+				__( 'Sign in to see your results', 'eduai' ),
+				__( 'Every practice paper you sit is kept here, with its mark and the option to sit it again.', 'eduai' )
+			);
+		}
+
+		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
+
+		$eduai_user_id = get_current_user_id();
+		$eduai_stats   = EduAI_Exams::stats_for_user( $eduai_user_id );
+		$eduai_history = EduAI_Exams::history_for_user( $eduai_user_id, (int) $atts['limit'] );
+
+		ob_start();
+		include EDUAI_DIR . 'templates/progress.php';
+		return (string) ob_get_clean();
 	}
 
 	/**
@@ -27,7 +58,10 @@ class EduAI_Shortcodes {
 	 */
 	public static function prepare( $atts = array() ): string {
 		if ( EduAI_Settings::get( 'logged_in_only', true ) && ! is_user_logged_in() ) {
-			return self::login_card();
+			return self::login_card(
+				__( 'Sign in to use PrepareME', 'eduai' ),
+				__( 'Upload a lecture, sit an exam generated from it, and get it marked with corrections.', 'eduai' )
+			);
 		}
 
 		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
@@ -43,6 +77,7 @@ class EduAI_Shortcodes {
 				/* translators: %d: number of questions */
 				'generating'      => __( 'Reading the lecture and writing %d questions. This is the slowest step.', 'eduai' ),
 				'marking'         => __( 'Marking. Multiple choice is scored here; short answers go to the marker.', 'eduai' ),
+				'loadingPaper'    => __( 'Fetching that paper again. Same questions, answers cleared.', 'eduai' ),
 				/* translators: 1: question count 2: source name */
 				'paperMeta'       => __( '%1$d questions from %2$s. Nothing is marked until you submit.', 'eduai' ),
 				'pastedText'      => __( 'your pasted text', 'eduai' ),
@@ -62,6 +97,7 @@ class EduAI_Shortcodes {
 				/* translators: %s: option letter */
 				'yourAnswerRight' => __( 'your answer %s is right.', 'eduai' ),
 				'markScheme'      => __( 'Mark scheme:', 'eduai' ),
+				'score'           => __( 'Score', 'eduai' ),
 				'error'           => __( 'Something went wrong. Please try again.', 'eduai' ),
 				'loginPrompt'     => __( 'Please sign in to use PrepareME.', 'eduai' ),
 				'bands'           => array(
@@ -88,7 +124,10 @@ class EduAI_Shortcodes {
 	 */
 	public static function calc( $atts = array() ): string {
 		if ( EduAI_Settings::get( 'logged_in_only', true ) && ! is_user_logged_in() ) {
-			return self::login_card();
+			return self::login_card(
+				__( 'Sign in to use the calculator', 'eduai' ),
+				__( 'Exact answers for arithmetic, computed in code — and worked, step-by-step solutions for everything else.', 'eduai' )
+			);
 		}
 
 		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
@@ -131,10 +170,16 @@ class EduAI_Shortcodes {
 			// own destination. Defaults to both so the widget and any existing
 			// embed are unaffected.
 			'tabs'   => 'all',
+			// page="1" sheds the widget shell: one scroll context, no head
+			// bar (docs/09 §4). Separate from tabs — different questions.
+			'page'   => '',
 		), (array) $atts, 'eduai_panel' );
 
 		if ( EduAI_Settings::get( 'logged_in_only', true ) && ! is_user_logged_in() ) {
-			return self::login_card();
+			return self::login_card(
+				__( 'Sign in to ask the assistant', 'eduai' ),
+				__( 'Ask anything about your course material — answers cite the documents they came from.', 'eduai' )
+			);
 		}
 
 		// This used to work only because the floating widget enqueued chat.js on
@@ -156,7 +201,10 @@ class EduAI_Shortcodes {
 	 */
 	public static function summarizer( $atts = array() ): string {
 		if ( EduAI_Settings::get( 'logged_in_only', true ) && ! is_user_logged_in() ) {
-			return self::login_card();
+			return self::login_card(
+				__( 'Sign in to use the summariser', 'eduai' ),
+				__( 'Turn a lecture — PDF, slides or notes — into study notes in the style you need.', 'eduai' )
+			);
 		}
 
 		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
@@ -198,15 +246,37 @@ class EduAI_Shortcodes {
 	}
 
 	/**
-	 * Prompt anonymous visitors to sign in.
+	 * Prompt anonymous visitors to sign in — each tool names itself and says
+	 * what is behind the door, because for most visitors this card is the
+	 * first thing they ever see of the product. A route to register rides
+	 * along when registration is open: a first-time visitor has no account
+	 * yet, so sign-in alone is the wrong single door.
+	 *
+	 * @param string $title Card heading, e.g. "Sign in to use PrepareME".
+	 * @param string $lead  One sentence on what this tool does.
 	 */
-	private static function login_card(): string {
+	private static function login_card( string $title, string $lead ): string {
+		// The card is the whole page for a signed-out visitor, and .eduai-card
+		// is styled in chat.css — which nothing else enqueues on this path.
+		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
+
+		$register = '';
+
+		if ( get_option( 'users_can_register' ) ) {
+			$register = sprintf(
+				' <a class="eduai-btn" href="%s">%s</a>',
+				esc_url( wp_registration_url() ),
+				esc_html__( 'Create an account', 'eduai' )
+			);
+		}
+
 		return sprintf(
-			'<div class="eduai-card eduai-login"><h3>%s</h3><p>%s</p><a class="eduai-btn eduai-btn--primary" href="%s">%s</a></div>',
-			esc_html__( 'Sign in to use the assistant', 'eduai' ),
-			esc_html__( 'The study assistant is available to registered students.', 'eduai' ),
+			'<div class="eduai-card eduai-login"><h3>%s</h3><p>%s</p><p class="eduai-login__actions"><a class="eduai-btn eduai-btn--primary" href="%s">%s</a>%s</p></div>',
+			esc_html( $title ),
+			esc_html( $lead ),
 			esc_url( wp_login_url( get_permalink() ?: home_url( '/' ) ) ),
-			esc_html__( 'Sign in', 'eduai' )
+			esc_html__( 'Sign in', 'eduai' ),
+			$register
 		);
 	}
 }

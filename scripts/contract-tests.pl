@@ -40,6 +40,8 @@ my $FIXTURE = "wp-content/plugins/eduai-assistant/fixtures/exam-sample.json";
 my $HANDOFF = "docs/05-frontend-handoff.md";
 my $HOSTING = "docs/03-hosting-deployment.md";
 my $MAINCSS = "wp-content/themes/scholaris/assets/css/main.css";
+my $CHATCSS = "wp-content/plugins/eduai-assistant/assets/css/chat.css";
+my $TEMPLATES = "wp-content/plugins/eduai-assistant/templates";
 my $THEMEFN = "wp-content/themes/scholaris/functions.php";
 my $TESTPG  = "tools/agent-test.html";
 my $PREVIEW = "design/preview.html";
@@ -61,6 +63,7 @@ my @checks = (
     [ 'aicalc-label-parity'    => \&check_calc_labels ],
     [ 'abspath-tripwire-order' => \&check_abspath_tripwires ],
     [ 'admin-bar-offset'       => \&check_admin_bar_offset ],
+    [ 'template-root-tokens'   => \&check_template_root_tokens ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1147,4 +1150,88 @@ sub check_abspath_tripwires {
         unless $examined;
 
     return @err;
+}
+
+# Every template root that styles itself with --eduai-* must appear in the
+# token declaration list at the top of chat.css.
+#
+# chat.css says so in a comment, and says "that bug shipped once" — a root
+# missing from the list gets no custom properties at all, so every rule built on
+# one computes to nothing. The failure is quiet in the worst way: a primary
+# button's background falls to transparent while its text, inherited from the
+# theme body, still looks deliberate. Until now that rule was prose with nothing
+# enforcing it, which is the same shape as the guards in docs/08 §4.
+#
+# The test is not "is every block in the list". Blocks nested inside another
+# root inherit its properties, and .eduai-dock legitimately styles nothing with
+# tokens — it is a fixed-position wrapper whose child .eduai-app is the themed
+# element. So a root is required to be in the list only when some rule whose
+# SUBJECT is that block, or a BEM child of it, actually reads a --eduai-*
+# value. Matching on the subject rather than anywhere in the selector is what
+# keeps `.eduai-dock .eduai-app { ... var(--eduai-radius-l) ... }` from being
+# blamed on the dock.
+sub check_template_root_tokens {
+    my $css = slurp($CHATCSS);
+    my @problems;
+
+    # The declaration list: every selector before the block that defines the
+    # properties. Anchored on --eduai-brand because that is the first token and
+    # the one every other rule ultimately depends on.
+    my ($selectors) = $css =~ /((?:^\s*\.[\w-]+\s*,\s*\n)+^\s*\.[\w-]+\s*)\{[^\}]*--eduai-brand:/m;
+
+    unless ( defined $selectors ) {
+        return ("$CHATCSS has no --eduai-brand declaration block — the token list this check reads is gone");
+    }
+
+    my %declared = map { $_ => 1 } $selectors =~ /\.([\w-]+)/g;
+
+    opendir( my $dh, File::Spec->catdir( $root, $TEMPLATES ) )
+        or return ("cannot read $TEMPLATES");
+    my @templates = sort grep { /\.php$/ } readdir($dh);
+    closedir($dh);
+
+    return ("$TEMPLATES contains no templates — this check would pass vacuously")
+        unless @templates;
+
+    for my $file (@templates) {
+        my $markup = slurp("$TEMPLATES/$file");
+
+        # The root is the first eduai- class in the file: these templates all
+        # open with their root element.
+        my ($block) = $markup =~ /class="(eduai-[a-z]+)/;
+
+        next unless defined $block;
+
+        # Rules whose subject is this block or a BEM child of it. The subject is
+        # the last compound in the selector, so split on commas, then take what
+        # follows the final descendant combinator.
+        my $uses_tokens = 0;
+
+        while ( $css =~ /([^\{\}]+)\{([^\}]*)\}/g ) {
+            my ( $selector, $body ) = ( $1, $2 );
+
+            next unless $body =~ /var\(\s*--eduai-/;
+
+            for my $one ( split /,/, $selector ) {
+                $one =~ s/^\s+|\s+$//g;
+                my ($subject) = $one =~ /([^\s>+~]+)$/;
+                next unless defined $subject;
+
+                if ( $subject =~ /^\.\Q$block\E(?:__|--|[^\w-]|$)/ ) {
+                    $uses_tokens = 1;
+                    last;
+                }
+            }
+
+            last if $uses_tokens;
+        }
+
+        next unless $uses_tokens;
+
+        push @problems,
+            "$file has root .$block, whose rules read --eduai-* values, but .$block is missing from the token list in $CHATCSS — those rules will compute to nothing"
+            unless $declared{$block};
+    }
+
+    return @problems;
 }

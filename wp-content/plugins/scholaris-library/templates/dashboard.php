@@ -25,19 +25,38 @@ defined( 'ABSPATH' ) || exit;
 			</h2>
 			<p><?php esc_html_e( 'Here is where you stand, and what is new in the library.', 'scholaris-library' ); ?></p>
 		</div>
-		<div class="sl-dashboard__actions">
-			<button type="button" class="sl-btn sl-btn--primary" data-eduai-open>
-				<?php esc_html_e( 'Ask the assistant', 'scholaris-library' ); ?>
-			</button>
-			<button type="button" class="sl-btn sl-btn--ghost" data-eduai-open="summary">
-				<?php esc_html_e( 'Summarise a lecture', 'scholaris-library' ); ?>
-			</button>
-		</div>
+		<?php if ( function_exists( 'eduai_ask_url' ) ) : ?>
+			<?php // Assistant CTAs: omitted entirely when the plugin is absent — the dashboard works without it, these buttons do not. ?>
+			<div class="sl-dashboard__actions">
+				<a class="sl-btn sl-btn--primary" data-eduai-open
+					href="<?php echo esc_url( eduai_ask_url() ); ?>">
+					<?php esc_html_e( 'Ask the assistant', 'scholaris-library' ); ?>
+				</a>
+				<a class="sl-btn sl-btn--ghost" data-eduai-open="summary"
+					href="<?php echo esc_url( eduai_summarise_url() ); ?>">
+					<?php esc_html_e( 'Summarise a lecture', 'scholaris-library' ); ?>
+				</a>
+			</div>
+		<?php endif; ?>
 	</header>
 
 	<section class="sl-dashboard__section">
-		<h3><?php esc_html_e( 'Quiz history', 'scholaris-library' ); ?></h3>
-		<?php echo do_shortcode( '[scholaris_quiz_history limit="12" show_chart="yes"]' ); ?>
+		<h3><?php esc_html_e( 'Practice papers', 'scholaris-library' ); ?></h3>
+		<?php
+		// PrepareME is where students actually sit papers, so its attempts are
+		// the quiz history. The Tutor LMS table this section used to read has
+		// never held a row, and rendering it told a student who had sat two
+		// papers "No quiz attempts yet" — worse than showing nothing, because
+		// it reads as "your work was not recorded".
+		//
+		// Same function_exists() contract as the CTAs above: without the
+		// assistant plugin there is no PrepareME, so fall back to the LMS.
+		if ( shortcode_exists( 'eduai_progress' ) ) {
+			echo do_shortcode( '[eduai_progress limit="12"]' );
+		} else {
+			echo do_shortcode( '[scholaris_quiz_history limit="12" show_chart="yes"]' );
+		}
+		?>
 	</section>
 
 	<?php

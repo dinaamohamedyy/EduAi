@@ -94,6 +94,28 @@ function scholaris_progress_url(): string {
 }
 
 /**
+ * Where the account screen lives.
+ *
+ * Same resolver shape and same honest fallback as scholaris_progress_url().
+ * Never wp-admin/profile.php: sending a student to the WordPress admin is the
+ * bug page-templates/profile.php exists to fix.
+ */
+function scholaris_profile_url(): string {
+	$page = get_page_by_path( 'profile' );
+
+	$url = ( $page && 'publish' === $page->post_status )
+		? (string) get_permalink( $page )
+		: home_url( '/' );
+
+	/**
+	 * Filter the profile destination.
+	 *
+	 * @param string $url Resolved URL.
+	 */
+	return (string) apply_filters( 'scholaris_profile_url', $url );
+}
+
+/**
  * Where "ask the assistant" sends a student: the Q&A tab.
  *
  * Needed because retiring the floating widget (docs/06 §3) removed the thing

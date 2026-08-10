@@ -189,6 +189,144 @@ class EduAI_Exams {
 	}
 
 	/**
+	 * A student's own attempts, newest first, with the exam they belong to.
+	 *
+	 * Filtered on the ATTEMPT's user_id, not the exam's: the person who sat the
+	 * paper is who the mark belongs to. Attempts written against user 0 by the
+	 * generate()/grade() composition bug are therefore invisible here, which is
+	 * correct — nobody sat them.
+	 *
+	 * @param int $user_id Student.
+	 * @param int $limit   Cap.
+	 */
+	public static function history_for_user( int $user_id, int $limit = 20 ): array {
+		global $wpdb;
+
+		if ( $user_id <= 0 ) {
+			return array();
+		}
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				'SELECT a.id AS attempt_id, a.exam_id, a.score, a.total, a.created_at,
+						e.title, e.source_label
+				 FROM ' . self::attempts_table() . ' a
+				 INNER JOIN ' . self::exams_table() . ' e ON e.id = a.exam_id
+				 WHERE a.user_id = %d
+				 ORDER BY a.id DESC
+				 LIMIT %d',
+				$user_id,
+				max( 1, $limit )
+			),
+			ARRAY_A
+		);
+
+		return array_map(
+			static function ( array $row ): array {
+				$score = (float) $row['score'];
+				$total = (float) $row['total'];
+
+				return array(
+					'attempt_id'   => (int) $row['attempt_id'],
+					'exam_id'      => (int) $row['exam_id'],
+					'title'        => (string) $row['title'],
+					'source_label' => (string) $row['source_label'],
+					'score'        => $score,
+					'total'        => $total,
+					// Percent is derived here and nowhere else. A stored percent
+					// is a second source of truth that drifts from the marks,
+					// the same reason total() is computed rather than stored.
+					'percent'      => $total > 0 ? (int) round( $score / $total * 100 ) : 0,
+					'created_at'   => (string) $row['created_at'],
+				);
+			},
+			$rows ?: array()
+		);
+	}
+
+	/**
+	 * Headline numbers for one student: how many papers, the average, the best,
+	 * and when they last sat one.
+	 *
+	 * Averages the PERCENTAGES rather than dividing total score by total marks,
+	 * because papers differ in length: a 20-mark paper should not outweigh a
+	 * 10-mark one when the question is "how is this student doing".
+	 *
+	 * @param int $user_id Student.
+	 */
+	public static function stats_for_user( int $user_id ): array {
+		global $wpdb;
+
+		$empty = array( 'taken' => 0, 'average' => null, 'best' => null, 'last_at' => '' );
+
+		if ( $user_id <= 0 ) {
+			return $empty;
+		}
+
+		$row = $wpdb->get_row( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				'SELECT COUNT(*) AS taken,
+						AVG( CASE WHEN total > 0 THEN score / total * 100 END ) AS average,
+						MAX( CASE WHEN total > 0 THEN score / total * 100 END ) AS best,
+						MAX( created_at ) AS last_at
+				 FROM ' . self::attempts_table() . '
+				 WHERE user_id = %d',
+				$user_id
+			),
+			ARRAY_A
+		);
+
+		if ( ! $row || 0 === (int) $row['taken'] ) {
+			return $empty;
+		}
+
+		return array(
+			'taken'   => (int) $row['taken'],
+			'average' => null === $row['average'] ? null : (int) round( (float) $row['average'] ),
+			'best'    => null === $row['best'] ? null : (int) round( (float) $row['best'] ),
+			'last_at' => (string) $row['last_at'],
+		);
+	}
+
+	/**
+	 * The same aggregates for every student who has sat anything, keyed by user
+	 * id, for the teacher's tracking screen.
+	 *
+	 * Deliberately returns ONLY students who have attempts. The caller starts
+	 * from the user list and merges, so students who have sat nothing still
+	 * appear — with zeroes. Those are the ones a teacher most needs to see, and
+	 * a query driven from the attempts table can never surface them.
+	 */
+	public static function roster(): array {
+		global $wpdb;
+
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			'SELECT user_id,
+					COUNT(*) AS taken,
+					AVG( CASE WHEN total > 0 THEN score / total * 100 END ) AS average,
+					MAX( CASE WHEN total > 0 THEN score / total * 100 END ) AS best,
+					MAX( created_at ) AS last_at
+			 FROM ' . self::attempts_table() . '
+			 WHERE user_id > 0
+			 GROUP BY user_id',
+			ARRAY_A
+		);
+
+		$out = array();
+
+		foreach ( $rows ?: array() as $row ) {
+			$out[ (int) $row['user_id'] ] = array(
+				'taken'   => (int) $row['taken'],
+				'average' => null === $row['average'] ? null : (int) round( (float) $row['average'] ),
+				'best'    => null === $row['best'] ? null : (int) round( (float) $row['best'] ),
+				'last_at' => (string) $row['last_at'],
+			);
+		}
+
+		return $out;
+	}
+
+	/**
 	 * The shape a student may see before sitting the exam: no answer_index,
 	 * no expected answer, no explanation. `marks` stays so the form can show
 	 * each question's weight (MCQ is always 1).
@@ -431,8 +569,12 @@ class EduAI_Exams {
 		EduAI_Conversation::add( $user_id, 'exam', 'user', sprintf( '[Generate exam: %s]', $label ?: __( 'pasted text', 'eduai' ) ) );
 		EduAI_Conversation::add( $user_id, 'exam', 'assistant', $exam['title'], array(), $out['usage'] );
 
+		// user_id rides along so generate() and grade() compose: grade()
+		// logs against $exam['user_id'], and without this key a script
+		// chaining the two silently wrote attempts against user 0.
 		return array(
 			'id'           => $exam_id,
+			'user_id'      => $user_id,
 			'title'        => $exam['title'],
 			'source_label' => $label,
 			'questions'    => $exam['questions'],
