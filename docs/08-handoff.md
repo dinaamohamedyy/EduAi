@@ -17,8 +17,9 @@ Seven tabs, all serving on the running stack at `http://localhost:8080`:
 | Summarise | `/summarise/` | Done, proven end to end against Groq |
 | AiCalc | `/calc/` | Done, proven end to end. **Needs no API key** for arithmetic |
 | Q&A | `/ask/` | Done — the existing chat panel, minus its duplicate Summarise tab |
-| PrepareME | `/prepare/` | Proven end to end against Groq from pasted text. **Not from an uploaded file** — see §3 |
-| My Progress | `/progress/` | Done. Not `/dashboard/` — that belongs to Tutor LMS |
+| PrepareME | `/prepare/` | Proven end to end against Groq, from pasted text **and** from uploaded PPTX — see §3. Retakes from My Progress |
+| My Progress | `/progress/` | Done. Not `/dashboard/` — that belongs to Tutor LMS. Lists PrepareME attempts with marks and a retake link |
+| Profile | `/profile/` | Done. Themed account screen — students are never sent to wp-admin |
 
 The floating assistant widget is retired. `[eduai_panel]` and
 `[eduai_summarizer]` still work, because pages embed them.
@@ -58,14 +59,23 @@ all four §5.2 rules. `answer_index` is genuinely 0-based, established the stron
 way: answering every MCQ with the paper's *own* key scored 7/7, which a 1-based
 paper could not do. Eleven seconds and ~6.6k tokens for a complete exam.
 
-**Extraction inside that round trip is still uncovered.** The run used pasted
-text, so the `notesSlide1`-belongs-to-slide-2 trap was never exercised on the
-PrepareME path. That is the half where failure is silent: the exam gets built
-from less than the deck contains and nothing downstream can tell. The deck is
-built and waiting at `scripts/roundtrip-deck.pptx` (543 chars extracted, three
-slides, note on slide 2). Note that `scripts/` is **not** mounted into
+**Extraction inside that round trip is proven too**, by the database rather than
+by a harness. Exams 10 and 11 were generated from `scripts/roundtrip-deck.pptx`,
+and both contain questions about RuBisCO's **oxygenase activity** — a fact that
+appears in that deck's speaker notes and on none of its slides. So the notes were
+resolved through `ppt/slides/_rels/slide2.xml.rels`, survived extraction, and
+reached the generator. A numeric `slideN` → `notesSlideN` guess would have
+attached them to slide 1 or dropped them, and the questions could not exist.
+
+Exams 12, 41 and 42 were generated from the owner's own
+`Advanced-Ensemble-Models.pptx` with distinct content hashes, and ask about
+boosting, bagging and feature importance. Upload → generate → answer → mark has
+therefore run end to end on real lecture material, not only on a fixture.
+
+One trap for whoever runs the harness next: `scripts/` is **not** mounted into
 `scholaris-wp` — only into the compose `cli` service — so a harness running
-there needs a `docker cp` first, or it silently falls back to pasted text.
+there needs a `docker cp` first, or it silently falls back to pasted text. Exam
+13 is exactly that fallback, recorded in its own source label.
 
 Also outstanding:
 
