@@ -2,6 +2,13 @@
    Scholaris Library & Progress
    Inherits the Scholaris theme tokens; falls back to the same "modern
    academia" values (ink, paper, laurel, bronze) elsewhere.
+
+   Token migration (docs/09 §3): spacing, type and radius literals resolve
+   through the alias block below. The aliases MUST live on the same
+   five-selector list — putting one on :root or on a subset means it resolves
+   in some contexts and silently falls back in others, per page. Remaining
+   raw values are the §3.2 exemptions: sub-0.25rem optical gaps, 50%/999px
+   intent, and mono meta labels at ≤0.7rem.
    ========================================================================== */
 
 .sl-library, .sl-history, .sl-dashboard, .sl-single, .sl-notice {
@@ -23,14 +30,34 @@
   --sl-radius-s: var(--radius-s, 8px);
   --sl-serif: var(--font-display, "Fraunces", Georgia, serif);
   --sl-mono: var(--font-mono, "Spline Sans Mono", ui-monospace, Menlo, Consolas, monospace);
+
+  /* Space — mirrors the theme scale; falls back to the theme's own values */
+  --sl-space-3xs: var(--space-3xs, 0.25rem);
+  --sl-space-2xs: var(--space-2xs, 0.5rem);
+  --sl-space-xs: var(--space-xs, 0.75rem);
+  --sl-space-s: var(--space-s, 1rem);
+  --sl-space-m: var(--space-m, 1.5rem);
+  --sl-space-l: var(--space-l, 2rem);
+
+  /* Radius — completes the two aliases above */
+  --sl-radius-xs: var(--radius-xs, 4px);
+  --sl-radius-pill: var(--radius-pill, 999px);
+
+  /* Type — static fallbacks approximate the theme's fluid steps */
+  --sl-step--1: var(--step--1, 0.85rem);
+  --sl-step-0: var(--step-0, 1rem);
+  --sl-step-1: var(--step-1, 1.25rem);
+  --sl-step-2: var(--step-2, 1.5rem);
+  --sl-step-3: var(--step-3, 1.9rem);
+
   color: hsl(var(--sl-text));
 }
 
 /* ------------------------------------------------------------ primitives -- */
 .sl-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sl-space-2xs);
   padding: 0.6em 1.1em;
-  font: inherit; font-weight: 600; font-size: 0.92rem; line-height: 1.2;
+  font: inherit; font-weight: 600; font-size: var(--sl-step-0); line-height: 1.2;
   border: 1px solid transparent; border-radius: var(--sl-radius-s);
   cursor: pointer; text-decoration: none; white-space: nowrap;
   transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
@@ -41,14 +68,14 @@
 .sl-btn--ghost:hover { border-color: hsl(var(--sl-brand)); color: hsl(var(--sl-brand)); }
 .sl-btn--quiet { background: transparent; color: hsl(var(--sl-muted)); padding-inline: 0.4em; }
 .sl-btn--quiet:hover { color: hsl(var(--sl-brand)); }
-.sl-btn--sm { padding: 0.4em 0.8em; font-size: 0.84rem; }
+.sl-btn--sm { padding: 0.4em 0.8em; font-size: var(--sl-step--1); }
 .sl-btn--block { width: 100%; }
-.sl-btn + .sl-btn--block { margin-top: 0.5rem; }
+.sl-btn + .sl-btn--block { margin-top: var(--sl-space-2xs); }
 
 /* Hairline mono chips instead of pastel pills. */
 .sl-badge {
   display: inline-flex; align-items: center;
-  padding: 0.3em 0.6em; border-radius: 4px;
+  padding: 0.3em 0.6em; border-radius: var(--sl-radius-xs);
   font-family: var(--sl-mono);
   font-size: 0.66rem; font-weight: 600; line-height: 1.5;
   letter-spacing: 0.07em; text-transform: uppercase;
@@ -63,34 +90,34 @@
 
 .sl-notice {
   text-align: center;
-  padding: 2.5rem 1.5rem;
+  padding: var(--sl-space-l) var(--sl-space-m);
   border: 1px dashed hsl(var(--sl-border-strong));
   border-radius: var(--sl-radius);
   background: hsl(var(--sl-subtle) / 0.6);
 }
-.sl-notice h3 { margin: 0 0 0.4rem; }
-.sl-notice p { margin: 0 0 1rem; color: hsl(var(--sl-muted)); }
+.sl-notice h3 { margin: 0 0 var(--sl-space-2xs); }
+.sl-notice p { margin: 0 0 var(--sl-space-s); color: hsl(var(--sl-muted)); }
 
 /* --------------------------------------------------------------- filters -- */
 .sl-filters {
-  display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
-  padding: 0.9rem;
+  display: flex; flex-wrap: wrap; gap: var(--sl-space-2xs); align-items: center;
+  padding: var(--sl-space-xs);
   background: hsl(var(--sl-surface));
   border: 1px solid hsl(var(--sl-border));
   border-radius: var(--sl-radius-s);
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--sl-space-m);
 }
 .sl-filters__search {
   position: relative; flex: 1 1 260px;
   display: flex; align-items: center;
 }
-.sl-filters__search svg { position: absolute; left: 0.7rem; color: hsl(var(--sl-muted)); pointer-events: none; }
-.sl-filters__search input { padding-left: 2.4rem !important; }
+.sl-filters__search svg { position: absolute; left: var(--sl-space-xs); color: hsl(var(--sl-muted)); pointer-events: none; }
+.sl-filters__search input { padding-left: calc(var(--sl-space-m) + var(--sl-space-s)) !important; }
 
 .sl-filters input[type="search"],
 .sl-filters select {
-  padding: 0.55rem 0.75rem;
-  font: inherit; font-size: 0.9rem;
+  padding: var(--sl-space-2xs) var(--sl-space-xs);
+  font: inherit; font-size: var(--sl-step-0);
   color: hsl(var(--sl-text));
   background: hsl(var(--sl-subtle) / 0.7);
   border: 1px solid hsl(var(--sl-border));
@@ -103,11 +130,11 @@
   box-shadow: 0 0 0 3px hsl(var(--sl-accent) / 0.25);
 }
 
-.sl-count { font-family: var(--sl-mono); color: hsl(var(--sl-muted)); font-size: 0.78rem; letter-spacing: 0.04em; margin: 0 0 0.9rem; }
+.sl-count { font-family: var(--sl-mono); color: hsl(var(--sl-muted)); font-size: 0.7rem; letter-spacing: 0.04em; margin: 0 0 var(--sl-space-xs); }
 
 /* ------------------------------------------------------------------ grid -- */
 .sl-grid {
-  display: grid; gap: 1.25rem;
+  display: grid; gap: var(--sl-space-m);
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
 }
 
@@ -125,7 +152,9 @@
   box-shadow: 0 2px 4px hsl(30 22% 12% / 0.05), 0 10px 26px hsl(30 22% 12% / 0.09);
 }
 
-/* Document cover: ruled paper, a bronze margin line, a filetype stamp. */
+/* Document cover: ruled paper, a bronze margin line, a filetype stamp.
+   The 1.25rem/1.4rem figures below are background GEOMETRY (the ruled-line
+   pitch and margin position), not spacing — they stay literal by design. */
 .sl-card__thumb {
   display: grid; place-items: center;
   aspect-ratio: 16 / 10;
@@ -141,32 +170,32 @@
 .sl-card__thumb img { width: 100%; height: 100%; object-fit: cover; }
 .sl-card__ext {
   font-family: var(--sl-mono);
-  font-weight: 600; font-size: 0.78rem; letter-spacing: 0.14em;
+  font-weight: 600; font-size: var(--sl-step--1); letter-spacing: 0.14em;
   color: hsl(var(--sl-muted));
   background: hsl(var(--sl-surface));
   border: 1px solid hsl(var(--sl-border-strong));
-  padding: 0.4rem 0.85rem; border-radius: 3px;
+  padding: var(--sl-space-2xs) var(--sl-space-xs); border-radius: var(--sl-radius-xs);
   box-shadow: 0 1px 2px hsl(30 22% 12% / 0.05);
 }
 .sl-card:hover .sl-card__ext { color: hsl(var(--sl-brand)); border-color: hsl(var(--sl-brand) / 0.5); }
 
-.sl-card__body { padding: 1rem; flex: 1; }
-.sl-card__tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.5rem; }
-.sl-card__title { font-family: var(--sl-serif); font-size: 1.08rem; font-weight: 600; margin: 0 0 0.35rem; line-height: 1.25; letter-spacing: -0.01em; }
+.sl-card__body { padding: var(--sl-space-s); flex: 1; }
+.sl-card__tags { display: flex; flex-wrap: wrap; gap: var(--sl-space-3xs); margin-bottom: var(--sl-space-2xs); }
+.sl-card__title { font-family: var(--sl-serif); font-size: var(--sl-step-1); font-weight: 600; margin: 0 0 var(--sl-space-3xs); line-height: 1.25; letter-spacing: -0.01em; }
 .sl-card__title a { color: inherit; text-decoration: none; }
 .sl-card__title a:hover { color: hsl(var(--sl-brand)); }
-.sl-card__excerpt { margin: 0; font-size: 0.88rem; color: hsl(var(--sl-muted)); }
+.sl-card__excerpt { margin: 0; font-size: var(--sl-step--1); color: hsl(var(--sl-muted)); }
 
 .sl-card__foot {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-  padding: 0.6rem 1rem;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sl-space-2xs);
+  padding: var(--sl-space-2xs) var(--sl-space-s);
   border-top: 1px solid hsl(var(--sl-border));
   background: hsl(var(--sl-subtle) / 0.6);
 }
 .sl-card__meta { font-family: var(--sl-mono); font-size: 0.7rem; letter-spacing: 0.02em; color: hsl(var(--sl-muted)); }
 
 /* ------------------------------------------------------------ pagination -- */
-.sl-pagination ul { display: flex; flex-wrap: wrap; gap: 0.3rem; justify-content: center; list-style: none; margin: 2rem 0 0; padding: 0; }
+.sl-pagination ul { display: flex; flex-wrap: wrap; gap: var(--sl-space-3xs); justify-content: center; list-style: none; margin: var(--sl-space-l) 0 0; padding: 0; }
 .sl-pagination .page-numbers {
   display: grid; place-items: center; min-width: 40px; height: 40px; padding-inline: 0.6em;
   border: 1px solid hsl(var(--sl-border)); border-radius: var(--sl-radius-s);
@@ -177,84 +206,84 @@
 .sl-pagination .current { background: hsl(var(--sl-brand)); border-color: hsl(var(--sl-brand)); color: hsl(var(--sl-on-brand)); }
 
 /* ---------------------------------------------------------- single view --- */
-.sl-single { display: grid; gap: 2rem; grid-template-columns: 1fr; align-items: start; }
+.sl-single { display: grid; gap: var(--sl-space-l); grid-template-columns: 1fr; align-items: start; }
 @media (min-width: 960px) { .sl-single { grid-template-columns: minmax(0, 1fr) 320px; } }
 
-.sl-single__tags { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.6rem; }
-.sl-single__meta { color: hsl(var(--sl-muted)); font-size: 0.9rem; margin: 0.5rem 0 0; }
+.sl-single__tags { display: flex; flex-wrap: wrap; gap: var(--sl-space-3xs); margin-bottom: var(--sl-space-2xs); }
+.sl-single__meta { color: hsl(var(--sl-muted)); font-size: var(--sl-step-0); margin: var(--sl-space-2xs) 0 0; }
 
 .sl-viewer {
-  margin-top: 1.5rem;
+  margin-top: var(--sl-space-m);
   border: 1px solid hsl(var(--sl-border));
   border-radius: var(--sl-radius-s);
   overflow: hidden;
   background: hsl(var(--sl-surface));
 }
 .sl-viewer__bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
-  padding: 0.7rem 1rem;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sl-space-xs);
+  padding: var(--sl-space-xs) var(--sl-space-s);
   background: hsl(var(--sl-subtle) / 0.7);
   border-bottom: 1px solid hsl(var(--sl-border));
-  font-size: 0.88rem;
+  font-size: var(--sl-step--1);
 }
-.sl-viewer__bar strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--sl-mono); font-size: 0.8rem; font-weight: 600; }
+.sl-viewer__bar strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--sl-mono); font-size: var(--sl-step--1); font-weight: 600; }
 .sl-viewer__frame { display: block; width: 100%; height: min(75vh, 820px); border: 0; background: hsl(var(--sl-sunken)); }
-.sl-viewer__fallback { padding: 2.5rem 1.5rem; text-align: center; color: hsl(var(--sl-muted)); }
+.sl-viewer__fallback { padding: var(--sl-space-l) var(--sl-space-m); text-align: center; color: hsl(var(--sl-muted)); }
 
 .sl-panel {
-  padding: 1.25rem;
+  padding: var(--sl-space-m);
   background: hsl(var(--sl-surface));
   border: 1px solid hsl(var(--sl-border));
   border-radius: var(--sl-radius);
 }
-.sl-panel + .sl-panel { margin-top: 1.25rem; }
-.sl-panel h3 { font-family: var(--sl-serif); font-weight: 600; margin: 0 0 0.5rem; font-size: 1.08rem; letter-spacing: -0.01em; }
-.sl-panel p { margin: 0 0 1rem; font-size: 0.9rem; color: hsl(var(--sl-muted)); }
+.sl-panel + .sl-panel { margin-top: var(--sl-space-m); }
+.sl-panel h3 { font-family: var(--sl-serif); font-weight: 600; margin: 0 0 var(--sl-space-2xs); font-size: var(--sl-step-1); letter-spacing: -0.01em; }
+.sl-panel p { margin: 0 0 var(--sl-space-s); font-size: var(--sl-step-0); color: hsl(var(--sl-muted)); }
 
 .sl-recent { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }
 .sl-recent a {
   display: grid; gap: 0.1rem;
-  padding: 0.6rem 0.7rem; border-radius: var(--sl-radius-s);
+  padding: var(--sl-space-2xs) var(--sl-space-xs); border-radius: var(--sl-radius-s);
   text-decoration: none; color: inherit;
   transition: background-color 140ms ease;
 }
 .sl-recent a:hover { background: hsl(var(--sl-subtle)); }
-.sl-recent__title { font-weight: 600; font-size: 0.92rem; line-height: 1.35; }
+.sl-recent__title { font-weight: 600; font-size: var(--sl-step-0); line-height: 1.35; }
 .sl-recent__meta { font-family: var(--sl-mono); font-size: 0.7rem; color: hsl(var(--sl-muted)); }
 
 /* -------------------------------------------------------- quiz history --- */
 .sl-stats {
-  display: grid; gap: 1rem; margin-bottom: 1.5rem;
+  display: grid; gap: var(--sl-space-s); margin-bottom: var(--sl-space-m);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
 }
 /* Ledger tiles: heavy top rule, serif figure, mono label. */
 .sl-stat {
-  display: grid; gap: 0.25rem;
-  padding: 1rem 1.1rem;
+  display: grid; gap: var(--sl-space-3xs);
+  padding: var(--sl-space-s);
   background: hsl(var(--sl-surface));
   border: 1px solid hsl(var(--sl-border));
   border-top: 2px solid hsl(var(--sl-text) / 0.85);
   border-radius: var(--sl-radius-s);
 }
 .sl-stat__label { font-family: var(--sl-mono); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: hsl(var(--sl-muted)); }
-.sl-stat__value { font-family: var(--sl-serif); font-size: 1.9rem; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.sl-stat__note { font-size: 0.78rem; color: hsl(var(--sl-muted)); }
+.sl-stat__value { font-family: var(--sl-serif); font-size: var(--sl-step-3); font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.sl-stat__note { font-size: var(--sl-step--1); color: hsl(var(--sl-muted)); }
 .sl-tone-up { color: hsl(var(--sl-success)); font-weight: 600; }
 .sl-tone-down { color: hsl(var(--sl-danger)); font-weight: 600; }
 
 .sl-chart {
-  margin: 0 0 1.5rem;
-  padding: 1rem 1.1rem;
+  margin: 0 0 var(--sl-space-m);
+  padding: var(--sl-space-s);
   background: hsl(var(--sl-surface));
   border: 1px solid hsl(var(--sl-border));
   border-radius: var(--sl-radius-s);
 }
-.sl-chart figcaption { font-family: var(--sl-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: hsl(var(--sl-muted)); margin-bottom: 0.6rem; }
+.sl-chart figcaption { font-family: var(--sl-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: hsl(var(--sl-muted)); margin-bottom: var(--sl-space-2xs); }
 .sl-chart svg { width: 100%; height: 110px; overflow: visible; }
 .sl-chart__line { fill: none; stroke: hsl(var(--sl-brand)); stroke-width: 0.8; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .sl-chart__dot { stroke: hsl(var(--sl-brand)); stroke-width: 6; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .sl-chart__pass { stroke: hsl(var(--sl-accent) / 0.6); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-.sl-chart__axis { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.5rem; font-family: var(--sl-mono); font-size: 0.68rem; color: hsl(var(--sl-muted)); }
+.sl-chart__axis { display: flex; justify-content: space-between; gap: var(--sl-space-s); margin-top: var(--sl-space-2xs); font-family: var(--sl-mono); font-size: 0.68rem; color: hsl(var(--sl-muted)); }
 .sl-chart__axis span { max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .sl-table-wrap {
@@ -263,8 +292,8 @@
   border-radius: var(--sl-radius-s);
   background: hsl(var(--sl-surface));
 }
-.sl-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.sl-table th, .sl-table td { padding: 0.8rem 1rem; text-align: left; vertical-align: middle; }
+.sl-table { width: 100%; border-collapse: collapse; font-size: var(--sl-step-0); }
+.sl-table th, .sl-table td { padding: var(--sl-space-xs) var(--sl-space-s); text-align: left; vertical-align: middle; }
 .sl-table thead th {
   background: transparent;
   font-family: var(--sl-mono);
@@ -280,15 +309,15 @@
 .sl-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .sl-quiz-title { display: block; line-height: 1.3; }
-.sl-quiz-course { display: block; font-size: 0.76rem; font-weight: 400; color: hsl(var(--sl-muted)); }
+.sl-quiz-course { display: block; font-size: var(--sl-step--1); font-weight: 400; color: hsl(var(--sl-muted)); }
 
-.sl-score { display: flex; align-items: center; gap: 0.5rem; }
+.sl-score { display: flex; align-items: center; gap: var(--sl-space-2xs); }
 .sl-score strong { min-width: 3.4em; }
-.sl-marks { display: block; font-size: 0.74rem; color: hsl(var(--sl-muted)); margin-top: 0.15rem; }
+.sl-marks { display: block; font-size: var(--sl-step--1); color: hsl(var(--sl-muted)); margin-top: 0.15rem; }
 
 .sl-meter {
   position: relative; display: block;
-  width: 84px; height: 6px; border-radius: 999px;
+  width: 84px; height: 6px; border-radius: var(--sl-radius-pill);
   background: hsl(var(--sl-sunken)); overflow: hidden;
 }
 .sl-meter > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: hsl(var(--sl-brand)); }
@@ -296,27 +325,27 @@
 .sl-meter[data-tone="mid"] > span { background: hsl(var(--sl-warning)); }
 .sl-meter[data-tone="fail"] > span { background: hsl(var(--sl-danger)); }
 
-.sl-more { margin: 0.8rem 0 0; font-size: 0.82rem; color: hsl(var(--sl-muted)); text-align: center; }
+.sl-more { margin: var(--sl-space-xs) 0 0; font-size: var(--sl-step--1); color: hsl(var(--sl-muted)); text-align: center; }
 
 @media (max-width: 700px) { .sl-hide-sm { display: none !important; } }
 
 /* ------------------------------------------------------------ dashboard -- */
 .sl-dashboard__head {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 1rem;
-  padding: 1.5rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sl-space-s);
+  padding: var(--sl-space-m);
   background: hsl(var(--sl-surface));
   border: 1px solid hsl(var(--sl-border));
   border-left: 3px solid hsl(var(--sl-accent));
   border-radius: var(--sl-radius-s);
-  margin-bottom: 2rem;
+  margin-bottom: var(--sl-space-l);
 }
-.sl-dashboard__head h2 { font-family: var(--sl-serif); font-weight: 600; margin: 0 0 0.15rem; font-size: 1.5rem; letter-spacing: -0.01em; }
-.sl-dashboard__head p { margin: 0; color: hsl(var(--sl-muted)); font-size: 0.92rem; }
-.sl-dashboard__actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.sl-dashboard__head h2 { font-family: var(--sl-serif); font-weight: 600; margin: 0 0 0.15rem; font-size: var(--sl-step-2); letter-spacing: -0.01em; }
+.sl-dashboard__head p { margin: 0; color: hsl(var(--sl-muted)); font-size: var(--sl-step-0); }
+.sl-dashboard__actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--sl-space-2xs); }
 .sl-avatar { border-radius: 50%; }
 
-.sl-dashboard__section + .sl-dashboard__section { margin-top: 2.5rem; }
-.sl-dashboard__section > h3 { font-family: var(--sl-serif); font-weight: 600; margin: 0 0 1rem; font-size: 1.25rem; }
+.sl-dashboard__section + .sl-dashboard__section { margin-top: var(--sl-space-l); }
+.sl-dashboard__section > h3 { font-family: var(--sl-serif); font-weight: 600; margin: 0 0 var(--sl-space-s); font-size: var(--sl-step-1); }
 
 @media (max-width: 640px) {
   .sl-dashboard__actions { margin-left: 0; width: 100%; }
