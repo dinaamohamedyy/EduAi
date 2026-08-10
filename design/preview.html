@@ -122,8 +122,11 @@ box-shadow:inset 0 0 0 1px hsl(var(--on-brand)/.14)}
 .brand__name{font-family:var(--font-display);font-weight:600;font-size:1.2rem;letter-spacing:-.01em;line-height:1.1}
 .brand__tag{display:block;font-family:var(--font-mono);font-size:.6rem;color:hsl(var(--text-faint));
 text-transform:uppercase;letter-spacing:.14em}
+/* Mirrors the theme: no tagline below the nav toggle (long site descriptions
+   wrap to three lines on phones and grow the header past its min-height). */
+@media(max-width:900px){.brand__tag{display:none}}
 .nav{margin-left:auto;display:flex;gap:.15rem}
-.nav button{border:0;background:none;font:inherit;font-weight:500;color:hsl(var(--text-muted));
+.nav button{border:0;background:none;font:inherit;font-weight:500;white-space:nowrap;color:hsl(var(--text-muted));
 padding:.5em .8em;border-radius:var(--r-xs);cursor:pointer;transition:all .15s}
 .nav button:hover{color:hsl(var(--text));background:hsl(var(--bg-sunken)/.7)}
 .nav button.on{color:hsl(var(--text));background:transparent;font-weight:600;
@@ -720,8 +723,8 @@ color:hsl(var(--text-muted));font-weight:600}
         <div class="panel">
           <h3>Study this document</h3>
           <p>The assistant has already read this material — ask it anything about the content.</p>
-          <button class="btn btn--primary blk" data-go="home">Ask about this document</button>
-          <button class="btn btn--ghost blk" data-go="home">Summarise it for me</button>
+          <button class="btn btn--primary blk" data-go="qa">Ask about this document</button>
+          <button class="btn btn--ghost blk" data-go="summarise">Summarise it for me</button>
         </div>
         <div class="panel">
           <h3>Related material</h3>
@@ -2055,6 +2058,7 @@ function bindPrepare(){
   var total=client.questions.reduce(function(s,q){return s+q.marks;},0);
   document.getElementById('prepmeta').textContent=client.questions.length+' questions · '+total+' marks · answers are revealed when you submit';
   renderPaper(client);
+  report.innerHTML='';   // a stale attempt must not survive behind [hidden]
   setup.hidden=true;report.hidden=true;form.hidden=false;
   updateCount(client);
   window.scrollTo({top:0,behavior:'smooth'});
