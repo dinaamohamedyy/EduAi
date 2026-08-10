@@ -1,6 +1,10 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+# The output layer below encodes to UTF-8, so the literals in this file have to
+# be characters rather than bytes — without this, every em-dash in a message
+# gets encoded twice and prints as "â".
+use utf8;
 use File::Basename qw(dirname);
 use File::Spec;
 use JSON::PP ();
@@ -53,6 +57,7 @@ my @checks = (
     [ 'exam-route-parity'      => \&check_exam_routes ],
     [ 'fixture-inline-parity'  => \&check_fixture_inline ],
     [ 'aicalc-label-parity'    => \&check_calc_labels ],
+    [ 'abspath-tripwire-order' => \&check_abspath_tripwires ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -62,6 +67,7 @@ if ( grep { '--list' eq $_ } @ARGV ) {
 
 my $failed  = 0;
 my $skipped = 0;
+my $errored = 0;
 my @absent_local;
 
 for my $check (@checks) {
@@ -82,7 +88,16 @@ for my $check (@checks) {
             next;
         }
 
-        @problems = ("check itself blew up: $err");
+        # A check that died did not find a problem — it found nothing at all,
+        # because it never finished looking. That is missing coverage, and it
+        # must not read like an ordinary finding: `NOT OK` alongside a real
+        # failure invites someone to fix the reported line and move on, when
+        # what actually needs fixing is the check.
+        $errored++;
+        printf "ERROR   %s\n", $name;
+        print  "          the check itself failed to run, so nothing was verified\n";
+        print  "          $err\n";
+        next;
     }
 
     if (@problems) {
@@ -97,6 +112,14 @@ for my $check (@checks) {
 my $ran = scalar(@checks) - $skipped;
 
 print "\nnot compared (local-only, absent here): $_\n" for @absent_local;
+
+if ($errored) {
+    print "\n$errored of $ran checks could not run — that is missing coverage, not a pass.\n";
+    print "Fix the check itself before trusting this run";
+    print "; $failed other check(s) also failed" if $failed;
+    print ".\n";
+    exit 1;
+}
 
 if ($failed) {
     print "\n$failed of $ran checks failed";
@@ -188,6 +211,26 @@ sub first_diff {
             $i + 1, $got_label, $x, $want_label, $y );
     }
     return 'differ only in trailing whitespace';
+}
+
+# PHP source with comments blanked to spaces, preserving every byte offset so
+# positions computed from it still index the original file.
+#
+# Offsets matter here: check_abspath_tripwires() compares where a tripwire is
+# armed against where the require happens, and a file that merely *mentions*
+# register_shutdown_function in a docblock above the require would otherwise
+# read as compliant. Prose describing a guard is not a guard.
+sub php_code_only {
+    my ($src) = @_;
+
+    # Block comments, including docblocks. Newlines are kept so line numbers and
+    # offsets do not shift.
+    $src =~ s{/\*.*?\*/}{ my $m = $&; $m =~ s/[^\n]/ /g; $m }gse;
+
+    # Line comments, both spellings.
+    $src =~ s{(//|\#)[^\n]*}{ ' ' x length($&) }ge;
+
+    return $src;
 }
 
 # Body of a top-level `function NAME(...) { ... }`, closing brace at column 0.
@@ -956,6 +999,86 @@ sub check_calc_labels {
             $key, $plugin{$key}, $PREVIEW, $design{$key}
         );
     }
+
+    return @err;
+}
+
+# A standalone script that requires a plugin file guarded by
+# `defined( 'ABSPATH' ) || exit;` will terminate with status 0, printing
+# nothing, if that constant is missing. CI reads exit codes, so the step goes
+# green having tested nothing. This shape has now occurred twice —
+# redaction-guard.php and calc-parity.php — so it is a class, not two bugs.
+#
+# The guard is a register_shutdown_function tripwire armed BEFORE the require.
+# Ordering is the entire property: armed afterwards it can never fire, because
+# nothing after the require runs when the early exit happens. A check that only
+# asks whether the file mentions register_shutdown_function anywhere passes that
+# broken shape, so this compares byte offsets.
+sub check_abspath_tripwires {
+    my $dir = File::Spec->catdir( $root, 'scripts' );
+
+    opendir( my $dh, $dir ) or die "cannot read scripts/: $!";
+    my @php = sort grep { /[.]php$/ } readdir $dh;
+    closedir $dh;
+
+    my @err;
+    my $examined = 0;
+
+    for my $file (@php) {
+        # Comments blanked, offsets preserved. Scanning raw source counted a
+        # docblock that merely mentioned register_shutdown_function as an armed
+        # tripwire, and matched the word "require" in prose — both found by
+        # mutation-testing this check against a deliberately broken fixture.
+        my $src = php_code_only( slurp("scripts/$file") );
+
+        # Offsets of every tripwire arming, collected once from a copy. A nested
+        # m//g over the same scalar shares pos() with the loop below and resets
+        # it on every pass, which never terminates.
+        my @armed;
+        my $scan = $src;
+        while ( $scan =~ /register_shutdown_function/g ) {
+            push @armed, $-[0];
+        }
+
+        # Every require/require_once with a single-quoted path.
+        while ( $src =~ /\brequire(?:_once)?\b[^;]*?'([^']+)'/g ) {
+            my $target = $1;
+            my $at     = $-[0];
+
+            # Resolve relative to scripts/ and skip anything not on disk.
+            my $path = $target;
+            $path =~ s{^__DIR__\s*[.]\s*}{};
+            $path =~ s{^/}{};
+            my $full = File::Spec->catfile( $dir, split m{/}, $path );
+            next unless -f $full;
+
+            open( my $fh, '<:encoding(UTF-8)', $full ) or next;
+            my $body = do { local $/; <$fh> };
+            close $fh;
+
+            # Only files that can exit on require are at risk.
+            next unless $body =~ /defined[(]\s*'ABSPATH'\s*[)]\s*[|][|]\s*exit/;
+
+            $examined++;
+
+            my $armed = -1;
+            for my $pos (@armed) {
+                $armed = $pos if $pos < $at && $pos > $armed;
+            }
+
+            if ( $armed < 0 ) {
+                my $any = ( $src =~ /register_shutdown_function/ ) ? 'only after it' : 'not at all';
+                push @err,
+                    "scripts/$file requires $path, which exits on a missing ABSPATH, "
+                    . "but arms no shutdown tripwire before that require ($any) — "
+                    . 'the script would exit 0 printing nothing and CI would read it as a pass';
+            }
+        }
+    }
+
+    # A sweep that examined nothing is not a passing check.
+    push @err, 'no scripts/*.php requires an ABSPATH-guarded file — this check examined nothing'
+        unless $examined;
 
     return @err;
 }
