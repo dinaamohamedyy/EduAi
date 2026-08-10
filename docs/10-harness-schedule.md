@@ -129,7 +129,19 @@ theme-switch pings from today are already the working protocol.
    that decision exists. State-creating harnesses (rate-limit,
    download-gate) stay off production permanently.
 
-Ownership if approved: front end writes `nightly.yml`, the wrapper, and the
-`ui-geometry.mjs` parametrisation; the tester owns the assertions
-themselves and the red/green criteria, as now; back end owns the spend
-budget line. Nothing in this proposal touches the AI engineer's territory.
+Ownership (revised by the Tech Manager on approval, 10 Aug 2026): **the
+tester writes `scripts/live-checks.sh`** — they own the harnesses, their
+prerequisites (fixtures, `ui-admin`, the cookie mint), and the two guards
+that must live in one place: free set by default with `--spend` for the
+model pair, and *refusing* rather than warning when the target is not
+localhost. The front end writes `nightly.yml`, which composes the stack and
+**calls the wrapper rather than re-listing the harnesses** — one source of
+truth for what the harnesses are and how each is invoked, so the wrapper
+and the workflow cannot drift apart into a nightly that quietly runs six of
+seven. Front end also owns the `ui-geometry.mjs` parametrisation; back end
+owns the spend budget line. Nothing here touches the AI engineer's
+territory.
+
+Status: nightly tier approved and `nightly.yml` landed 10 Aug 2026 — red by
+design until the wrapper exists (the workflow's first step asserts it,
+loudly). Decisions 2 and 3 remain with the owner.

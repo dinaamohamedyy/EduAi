@@ -1,0 +1,75 @@
+name: Nightly live-stack harnesses
+
+# The live-stack harnesses used to run when someone remembered — and the
+# admin-bar bug shipped while all of them were green in memory only. This
+# workflow composes a FRESH stack every night and runs the free set, which
+# also exercises setup.sh convergence from scratch on every run (docs/10 §2):
+# the setup-versus-running-site drift that bit this project four times stops
+# being a discipline problem and becomes a mechanical one.
+#
+# The harness list lives in scripts/live-checks.sh (tester-owned, docs/10 §4)
+# and deliberately NOT here: two lists drift, and a nightly that quietly runs
+# six of seven harnesses is this project's signature failure in a new costume.
+# This workflow composes the stack and calls the one source of truth.
+#
+# No secrets, no model spend: the wrapper's default set stubs every model
+# call. The spend pair (grade-adversarial, roundtrip) is a separate, gated
+# decision that belongs to the owner — docs/10 §3 and §6.
+
+on:
+  schedule:
+    - cron: '17 1 * * *'   # 01:17 UTC — off the top-of-hour rush
+  workflow_dispatch:
+
+# Never cancel a nightly mid-run; a second trigger waits its turn.
+concurrency:
+  group: nightly-live-stack
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: Compose the stack, run the free harness set
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      # Red, loudly, if the wrapper is missing. It is the tester's to write;
+      # until it lands this job is deliberately red — a silent skip here
+      # would be the exact reported-nothing-read-as-green failure this
+      # workflow exists to end.
+      - name: Assert the harness wrapper exists
+        run: |
+          if [ ! -f scripts/live-checks.sh ]; then
+            echo "::error::scripts/live-checks.sh is missing — the harness list lives there (docs/10 §4, tester-owned). This nightly stays red until it lands."
+            exit 1
+          fi
+
+      - name: Compose the stack
+        run: docker compose up -d
+
+      - name: Wait for WordPress to answer
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ || true)
+            if [ "$code" = "200" ] || [ "$code" = "302" ]; then
+              echo "WordPress answered with $code"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::WordPress never answered on :8080"
+          docker compose logs --tail 50 wordpress
+          exit 1
+
+      # Convergence is under test here too, not just a prerequisite: this is
+      # the from-scratch path that used to run only when someone remembered.
+      - name: Bootstrap the site (setup.sh)
+        run: docker compose --profile tools run --rm cli bash /scripts/setup.sh
+
+      - name: Run the free harness set
+        run: bash scripts/live-checks.sh
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose logs --tail 100
