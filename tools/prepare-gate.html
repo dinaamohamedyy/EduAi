@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PrepareME ship gates</title>
+<style>
+  body { font: 14px/1.6 system-ui, sans-serif; margin: 20px; }
+  .pass { color: #157347; } .fail { color: #b32d2e; font-weight: 700; }
+  pre { background: #f4f4f5; padding: 8px; overflow-x: auto; font-size: 12px; }
+  #results { border-top: 1px solid #ccc; margin-top: 16px; padding-top: 12px; }
+</style>
+</head>
+<body>
+<h1>PrepareME ship gates — the real tab's renderer</h1>
+
+<!--__TEMPLATE__-->
+
+<div id="results"></div>
+
+<script>
+/*
+ * The paper the server sends: answers withheld. Correct options are spread
+ * across ALL FOUR indices including 0 — never-zero would catch a stuck default
+ * but lose the 0-vs-1-based catch, and including zero gets both.
+ */
+var PAPER = {
+  exam_id: 12,
+  title: 'Photosynthesis — Week 3',
+  source_label: 'week-3.pptx',
+  questions: [
+    { id: 1, band: 'easy',   type: 'mcq',   marks: 1, question: 'Where do the light reactions occur?',
+      options: ['Thylakoid membrane', 'Stroma', 'Cytosol', 'Nucleus'] },
+    { id: 2, band: 'easy',   type: 'mcq',   marks: 1, question: 'Which gas is released?',
+      options: ['Nitrogen', 'Oxygen', 'Methane', 'Argon'] },
+    { id: 3, band: 'easy',   type: 'short', marks: 2, question: 'State what a Fourier series does.' },
+    { id: 4, band: 'medium', type: 'mcq',   marks: 1, question: 'Where does the Calvin cycle run?',
+      options: ['Thylakoid', 'Membrane', 'Stroma', 'Cell wall'] },
+    { id: 5, band: 'medium', type: 'mcq',   marks: 2, question: 'Which enzyme fixes CO2?',
+      options: ['Amylase', 'Lipase', 'Ligase', 'RuBisCO'] },
+    { id: 6, band: 'hard',   type: 'short', marks: 4, question: 'Explain the Gibbs phenomenon.' }
+  ]
+};
+
+/*
+ * The marked report. Deliberately contains:
+ *   - a FULL-MARKS short answer (id 3) with correct: null   <- the ship gate
+ *   - a partial short with a float mark (id 6, 2.5 of 4)
+ *   - MCQ right and wrong, and one unanswered
+ */
+var REPORT = {
+  attempt_id: 34,
+  score: 6.5,
+  total: 11,
+  percent: 59,
+  bands: {
+    easy:   { awarded: 4,   of: 4 },
+    medium: { awarded: 0,   of: 3 },
+    hard:   { awarded: 2.5, of: 4 }
+  },
+  results: [
+    { id: 1, type: 'mcq', band: 'easy', awarded: 1, of: 1, correct: true,
+      your_choice: 0, your_text: null, answer_index: 0,
+      expected: '', explanation: 'The thylakoid membrane holds the photosystems.', comment: '' },
+
+    { id: 2, type: 'mcq', band: 'easy', awarded: 1, of: 1, correct: true,
+      your_choice: 1, your_text: null, answer_index: 1,
+      expected: '', explanation: 'Water is split, releasing oxygen.', comment: '' },
+
+    /* THE GATE: full marks, correct === null. `if (r.correct)` stamps this ✗. */
+    { id: 3, type: 'short', band: 'easy', awarded: 2, of: 2, correct: null,
+      your_choice: null, your_text: 'It rewrites a periodic function as a sum of sines and cosines, each with its own frequency and weight.',
+      answer_index: null,
+      expected: 'says it rewrites a periodic function as sines and cosines (1); notes each has its own frequency and weight (1)',
+      explanation: '', comment: 'Both marks: the decomposition and the per-component weighting.' },
+
+    { id: 4, type: 'mcq', band: 'medium', awarded: 0, of: 1, correct: false,
+      your_choice: 0, your_text: null, answer_index: 2,
+      expected: '', explanation: 'The Calvin cycle runs in the stroma.', comment: '' },
+
+    { id: 5, type: 'mcq', band: 'medium', awarded: 0, of: 2, correct: false,
+      your_choice: null, your_text: null, answer_index: 3,
+      expected: '', explanation: 'RuBisCO catalyses carbon fixation.', comment: '' },
+
+    { id: 6, type: 'short', band: 'hard', awarded: 2.5, of: 4, correct: null,
+      your_choice: null, your_text: 'The partial sums overshoot near a jump.',
+      answer_index: null,
+      expected: 'describes the overshoot (1); gives roughly 9% (1); says more terms narrow but do not shrink it (1); attributes it to pointwise convergence (1)',
+      explanation: '', comment: 'You described the overshoot but did not give its size or the cause.' }
+  ]
+};
+
+window.EduAIPrepConfig = {
+  root: '/wp-json/eduai/v1',
+  nonce: 'n',
+  loggedIn: true,
+  i18n: {
+    dropFile: 'Drop a lecture here, or click to choose',
+    needSource: 'Attach a lecture, or paste at least a paragraph of it.',
+    generating: 'Reading the lecture and writing %d questions.',
+    marking: 'Marking.',
+    paperMeta: '%1$d questions from %2$s. Nothing is marked until you submit.',
+    pastedText: 'your pasted text',
+    marks: '%d marks',
+    answered: '%1$d of %2$d answered',
+    someBlank: '%d still blank — they will score zero.',
+    mcq: 'multiple choice',
+    short: 'short answer',
+    notAnswered: 'not answered.',
+    youChose: 'you chose %s.',
+    correctWas: 'Correct: %1$s. %2$s',
+    yourAnswerRight: 'your answer %s is right.',
+    markScheme: 'Mark scheme:',
+    error: 'Something went wrong.',
+    loginPrompt: 'Please sign in.',
+    bands: { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
+  }
+};
+
+window.fetch = function () {
+  return Promise.resolve({ ok: true, json: function () { return Promise.resolve({}); } });
+};
+</script>
+
+<!--__PREPAREJS__-->
+
+<script>
+(function () {
+  function run() {
+    var out = [];
+    function check(name, cond, extra) {
+      out.push('<div class="' + (cond ? 'pass' : 'fail') + '">' +
+        (cond ? 'ok   ' : 'FAIL ') + name + (extra ? ' — ' + extra : '') + '</div>');
+      return cond;
+    }
+
+    var root = document.querySelector('[data-eduai-prep]');
+    var inst = root.__eduaiPrep;
+    check('prepare.js initialised', !!inst);
+
+    /* ------------- GATE 1: the paper must not carry the answer key ------- */
+    inst.exam = PAPER;
+    inst.renderPaper(PAPER);
+    inst.show('paper');
+
+    var paperHtml = root.querySelector('[data-eduai-prep-stage="paper"]').innerHTML;
+
+    // eduai-prep__q is a substring of eduai-prep__qhead, so match the class attribute
+    // exactly rather than the prefix — the first version counted 12.
+    check('paper renders every question',
+      (paperHtml.match(/class="eduai-prep__q"/g) || []).length === 6,
+      'found ' + (paperHtml.match(/class="eduai-prep__q"/g) || []).length);
+    check('GATE 1: no answer_index in the paper DOM', paperHtml.indexOf('answer_index') === -1);
+    check('GATE 1: no mark scheme in the paper DOM', paperHtml.indexOf('Mark scheme') === -1 &&
+      paperHtml.indexOf('(1);') === -1);
+    check('GATE 1: no explanation text in the paper DOM',
+      paperHtml.indexOf('photosystems') === -1 && paperHtml.indexOf('carbon fixation') === -1);
+    check('paper groups by band', (paperHtml.match(/eduai-prep__band/g) || []).length === 3);
+
+    /* ------------- GATE 2: full-marks short must not read as wrong ------- */
+    inst.renderReport(REPORT);
+    inst.show('report');
+
+    var rep = root.querySelector('[data-eduai-prep-report]');
+    var cards = rep.querySelectorAll('.eduai-prep__q');
+
+    var q3 = cards[2];            // the full-marks short answer
+    var q3mark = q3.querySelector('.eduai-prep__mark');
+
+    check('GATE 2: full-marks short is NOT marked wrong',
+      q3mark.className.indexOf('is-no') === -1, 'class=' + q3mark.className);
+    check('GATE 2: full-marks short shows a tick, not a cross',
+      q3mark.textContent.indexOf('✓') > -1 && q3mark.textContent.indexOf('✗') === -1,
+      JSON.stringify(q3mark.textContent.trim()));
+    check('GATE 2: its comment is shown even at full marks',
+      q3.textContent.indexOf('Both marks') > -1);
+
+    var q6 = cards[5];            // partial short, float marks
+    var q6mark = q6.querySelector('.eduai-prep__mark');
+    check('partial short uses the partial tone',
+      q6mark.className.indexOf('is-part') > -1, 'class=' + q6mark.className);
+    check('float marks survive to the page (2.5 / 4)',
+      q6mark.textContent.indexOf('2.5 / 4') > -1, JSON.stringify(q6mark.textContent.trim()));
+
+    /* ------------- numbers ------------------------------------------------ */
+    check('score line shows 6.5 / 11', rep.textContent.indexOf('6.5 / 11') > -1);
+    check('percent matches Math.round(score/total*100)',
+      rep.textContent.indexOf('59%') > -1 && Math.round(6.5 / 11 * 100) === 59);
+
+    var bandSum = 4 + 0 + 2.5;
+    check('band subtotals sum to the score', bandSum === REPORT.score, bandSum + ' vs ' + REPORT.score);
+    check('band totals sum to the paper total', (4 + 3 + 4) === REPORT.total);
+
+    /* ------------- MCQ correctness still reads from `correct` ------------ */
+    var q1 = cards[0].querySelector('.eduai-prep__mark');
+    var q4 = cards[3].querySelector('.eduai-prep__mark');
+    var q5 = cards[4].querySelector('.eduai-prep__mark');
+    check('MCQ right is ticked', q1.className.indexOf('is-ok') > -1);
+    check('MCQ wrong is crossed', q4.className.indexOf('is-no') > -1);
+    check('unanswered MCQ says so', cards[4].textContent.indexOf('not answered') > -1);
+    check('correct option is revealed after marking (index 3 = D)',
+      cards[4].textContent.indexOf('Correct: D') > -1, JSON.stringify(q5.textContent.trim()));
+    check('answers spread across all four indices',
+      JSON.stringify(REPORT.results.filter(function (r) { return r.type === 'mcq'; })
+        .map(function (r) { return r.answer_index; })) === '[0,1,2,3]');
+
+    var fails = out.filter(function (l) { return l.indexOf('FAIL') > -1; }).length;
+    out.push('<hr>' + (fails ? '<span class="fail">' + fails + ' failure(s)</span>'
+      : '<span class="pass">all gates pass</span>'));
+    document.getElementById('results').innerHTML = out.join('');
+    document.title = fails ? 'FAIL' : 'PASS';
+  }
+
+  if (document.readyState === 'complete') { setTimeout(run, 0); }
+  else { window.addEventListener('load', function () { setTimeout(run, 0); }); }
+}());
+</script>
+</body>
+</html>
