@@ -87,6 +87,35 @@ perl scripts/check-no-secrets.pl
 That must print `clean`. Do not use `git grep "sk-ant"` — it misses Groq
 (`gsk_`), Z.ai, and a filled-in `var API_KEY`, all of which the script catches.
 
+### Enable the pre-commit hook — once per clone
+
+CI is the wrong last line of defence for a public repository: it runs *after*
+the push, and the push is the irreversible act. By the time the lint job goes
+red the key is already readable and in the history for good. `.githooks/pre-commit`
+catches it while the mistake is still cheap, scanning the **staged** content
+(and inside any staged `.zip`) rather than the working tree — the working tree
+legitimately holds `preview.html` with a live key in it.
+
+Git does not share hooks between clones, so **it does nothing until you run
+this**, and a hook nobody enabled protects nobody:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Verify it is live before trusting it — a hook that silently does not run looks
+exactly like one finding nothing:
+
+```bash
+printf "var API_KEY = 'gsk_%s';\n" "TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST" > design/hooktest.html
+git add design/hooktest.html && git commit -m "must be blocked"
+git reset HEAD design/hooktest.html && rm design/hooktest.html
+```
+
+The commit must be refused with `COMMIT BLOCKED`. If it succeeds, `core.hooksPath`
+is not set, or the hook lost its executable bit (`git ls-files -s .githooks/pre-commit`
+must show mode `100755`, not `100644`).
+
 ---
 
 ## First deployment
@@ -238,6 +267,27 @@ Use FTPS, never plain FTP — plain FTP sends the password in clear text.
       *First deployment → Harden wp-config.php*), and Wordfence's own
       "How does Wordfence get IPs" setting matched to it — it resolves IPs
       independently and has the same shared-bucket failure mode
+- [ ] **Grading rules re-verified against a live stack** — run
+      `docker compose --profile tools run --rm cli wp eval-file /scripts/grade-adversarial.php --allow-root`
+      and confirm 12/12. It is the only thing checking that a model's plausible
+      lie cannot mint marks: `awarded` clamped to `[0, marks]`, the exam
+      winning an `of` disagreement, a skipped `short` scoring 0 and reported as
+      ungraded, a hallucinated `id` awarding nothing. **CI does not run this
+      and cannot** — it needs a running WordPress, which the lint job has no
+      install of. If it has not been run by hand since the marking path last
+      changed, those four rules are unverified.
+- [ ] **Answer key confirmed not to reach the browser** — run
+      `docker compose --profile tools run --rm cli wp eval-file /scripts/projection-leak.php --allow-root`
+      This is the server-side half of docs/07 §1: the request goes through
+      `rest_do_request`, so the real route, permission callback and
+      `EduAI_Exams::for_client()` projection all run, and the assertion is made
+      against the JSON that would actually go on the wire. **CI does not run
+      this and cannot**, for the same reason as the check above. Note that CI's
+      `redaction-guard.php` step covers only `EduAI_Exams::redact()` in
+      isolation — a leak introduced anywhere else on the route (a stray field
+      re-added after projection, a second endpoint) is invisible to it and
+      visible here. Anything the browser receives is one devtools Network tab
+      away from the student.
 - [ ] Test the whole student journey on a phone
 
 ---

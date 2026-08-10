@@ -181,6 +181,35 @@ Same gate as everything else: `can_use()` then `check_rate_limit()`. Generation
 is the most expensive call in the product — rate-limit it separately and more
 tightly than chat.
 
+### PrepareME cannot ship until this is re-run
+
+**The answer-leak check is only half-done, and the untested half is the half
+that ships.** `scripts/projection-leak.php` proves the **server** projection:
+`answer_index`, `expected` and `explanation` are absent from
+`GET /eduai/v1/exam/<id>`, as keys *and* as content, over the real route with a
+real `student`. That is verified — 12/12, including a control that first
+confirms the detector *can* find those answers in an unprojected exam, so an
+"absent" result can never come from a blind search.
+
+What is **not** verified is the client. The plugin has no exam template yet, so
+the `stripForClient`-and-DOM layer that will actually render a paper to a
+student does not exist to test. The demo in `design/preview.html` was checked
+and is clean, but it is not evidence about the shipped page: the demo
+necessarily holds the whole fixture — answers included — in a JavaScript global,
+because it has no server to project it. Different data source, different
+guarantee.
+
+So when the PrepareME tab is built, **re-run item 1 against the real page before
+it ships**: render a paper as a signed-in student and search the live form DOM,
+before submit, for `answer_index`, `expected`, `explanation`, the fixture's
+actual explanation text, and any `(1);` mark-scheme fragment. Search by content
+as well as by key name — a leak that renamed a field or inlined an answer into
+the question text passes a key-name check and still hands the student the paper.
+
+This is a ship gate, not a nice-to-have. A student who opens dev-tools on a
+leaking page gets full marks, and no static check anywhere in this repository
+can see it.
+
 ---
 
 ## 3. Retiring the widget

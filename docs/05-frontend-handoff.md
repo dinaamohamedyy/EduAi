@@ -323,8 +323,8 @@ shapes: `eduai_exam_rate` (429), `eduai_exam_json` / `eduai_exam_invalid` /
 **CI enforces all of this on every pull request**, not just on push to `main`,
 and pull requests stop at the checks without reaching the deploy step. So these
 are a merge gate now rather than a habit. Run them locally anyway — the loop is
-a second here and minutes there. The dev workstation has no PHP/Node/Docker,
-so before pushing:
+a second here and minutes there. The dev workstation has no PHP or Node of its
+own (Docker arrived later — see *On a live stack* below), so before pushing:
 
 - `perl scripts/php-sanity.pl` — brace/string/heredoc smoke test over every
   theme and plugin PHP file (CI still runs the real `php -l` on push).
@@ -333,7 +333,7 @@ so before pushing:
   document (`auth-flag-coverage`), model tiers in `EduAI_Claude::providers()`
   match both HTML pages (`provider-model-parity`), agent prompts/preview
   copies in sync, and more. Run it after touching either side of the seam.
-  In CI it reports **7 of 8 with one skipped**: `preview-copies-in-sync`
+  In CI **one check skips**: `preview-copies-in-sync`
   compares against the gitignored `preview.html`, which is not in the
   repository. The skip is printed on its own line rather than counted as a
   pass — a check that quietly compares nothing is worse than no check.
@@ -348,6 +348,34 @@ so before pushing:
   nothing on this workstation can run it.
 - Open `design/preview.html` and walk the auth screens; markup and class
   names mirror `page-templates/auth-*.php` one-to-one.
+
+## On a live stack
+
+Some things are only true of a running site, and the checks above cannot reach
+them. Since Docker landed, the stack runs locally: WordPress on
+<http://localhost:8080>, Mailpit on <http://localhost:8025>.
+
+- `docker compose --profile tools run --rm cli wp eval-file /scripts/grade-adversarial.php --allow-root`
+  — the four grading rules in `docs/06-eduai-rebuild.md` §5.2, tested
+  adversarially against the real marking path: `awarded` clamped to
+  `[0, marks]`, the exam winning when the model's `of` disagrees, a `short`
+  missing from the grade scoring 0 and reported as ungraded, and a
+  hallucinated `id` minting no marks. The crafted grade is injected at
+  `pre_http_request`, so no request leaves the container and no API credit is
+  spent, while `EduAI_Claude::message`, the JSON extraction, the schema
+  validation and `EduAI_Exams::grade` all run for real — the only faked
+  component is the model's reply, which is the one under suspicion.
+
+  **This is not a CI check and cannot become one.** It needs a running
+  WordPress; CI has PHP but no install. It is deliberately unwired, in the same
+  category as `php-sanity.pl`, and it only protects anyone if a human runs it
+  after touching the marking path. Do not record it anywhere as automated
+  coverage: the grading rules are guarded by this harness and by nothing else.
+
+  Its assertions are quoted from §5.2 itself rather than from what the code
+  currently returns. That distinction is the whole point — `calc-cases.json`
+  was generated from the implementation it tested and passed 31/31 while the
+  `-3^2` convention in it was wrong.
 
 The first real-WordPress run happens on Docker (any machine that has it) or
 straight on the host: `setup.sh` finishes by asserting the database state,

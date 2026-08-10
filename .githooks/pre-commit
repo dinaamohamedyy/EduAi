@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#
+# Refuse a commit that would publish an API key.
+#
+# The repository is PUBLIC. CI runs check-no-secrets.pl, but CI runs *after* the
+# push, and on a public repo the push is the irreversible act — by the time the
+# lint job goes red the key is already readable by anyone and is in the history
+# for good. Rotating it is then the only remedy. This hook is the last check
+# that happens while the mistake is still cheap.
+#
+# Enable once per clone (hooks are not shared by git itself):
+#
+#     git config core.hooksPath .githooks
+#
+# It scans the STAGED content, not the working tree. That distinction matters:
+# the working tree legitimately holds preview.html with a live key, and scanning
+# it would either cry wolf constantly or need an exemption that then hides the
+# real thing. The index is exactly what is about to become public.
+#
+# Bypass with `git commit --no-verify` only when you are certain, and never to
+# get past a real finding.
+
+set -uo pipefail
+
+repo="$(git rev-parse --show-toplevel)"
+scanner="$repo/scripts/check-no-secrets.pl"
+
+if [ ! -f "$scanner" ]; then
+	echo "pre-commit: cannot find scripts/check-no-secrets.pl — refusing to guess." >&2
+	echo "            Commit blocked. Use --no-verify only if you are sure." >&2
+	exit 1
+fi
+
+# Nothing staged (e.g. `git commit` with only a message change) — nothing to do.
+if git diff --cached --quiet 2>/dev/null; then
+	exit 0
+fi
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+# Export the index, not the worktree. autocrlf is forced off: the smudge filter
+# would otherwise produce a tree no Linux runner ever sees, and for this check
+# it only risks masking a match across a rewritten line ending.
+if ! git -c core.autocrlf=false checkout-index -a -f --prefix="$tmp/staged/" 2>/dev/null; then
+	echo "pre-commit: could not export the staged tree — refusing to report clean." >&2
+	exit 1
+fi
+
+# An explicit path means the scanner applies NO exemptions, which is what we
+# want here: preview.html and .env are exempt in a developer's working tree and
+# must never be exempt in something about to be committed.
+if ! perl "$scanner" "$tmp/staged" >/dev/null 2>&1; then
+	echo >&2
+	echo "COMMIT BLOCKED — a live key is in the staged content:" >&2
+	perl "$scanner" "$tmp/staged" >&2
+	echo >&2
+	echo "  This repository is public. Unstage the file, or clear the key," >&2
+	echo "  before committing. If it has already been pushed anywhere, rotate it." >&2
+	exit 1
+fi
+
+# Archives hide their contents from a byte scan: entries are compressed, so a
+# zip carrying a key looks identical to a clean one. Extract any staged archive
+# and scan that too — the same gap CI closes on the push side.
+staged_zips="$(git diff --cached --name-only --diff-filter=ACM | grep -i '\.zip$' || true)"
+
+for z in $staged_zips; do
+	[ -f "$tmp/staged/$z" ] || continue
+	out="$tmp/unzipped/$(basename "$z")"
+	mkdir -p "$out"
+
+	if ! command -v unzip >/dev/null 2>&1; then
+		echo "pre-commit: $z is staged but unzip is unavailable — cannot scan inside it." >&2
+		echo "            Commit blocked; regenerate the archive from a clean checkout." >&2
+		exit 1
+	fi
+
+	unzip -qq "$tmp/staged/$z" -d "$out" 2>/dev/null || true
+
+	if ! perl "$scanner" "$out" >/dev/null 2>&1; then
+		echo >&2
+		echo "COMMIT BLOCKED — a live key is inside the staged archive $z:" >&2
+		perl "$scanner" "$out" >&2
+		echo >&2
+		echo "  Rebuild the zip from a CLEAN CHECKOUT, never from a working copy —" >&2
+		echo "  a working copy holds preview.html with a real key in it." >&2
+		exit 1
+	fi
+done
+
+exit 0
