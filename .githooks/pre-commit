@@ -42,21 +42,55 @@ trap 'rm -rf "$tmp"' EXIT
 # Export the index, not the worktree. autocrlf is forced off: the smudge filter
 # would otherwise produce a tree no Linux runner ever sees, and for this check
 # it only risks masking a match across a rewritten line ending.
+#
+# mkdir first: some git versions will not create the --prefix directory itself,
+# and six sessions committing into one working copy makes any such race real
+# rather than theoretical. It cost one bogus "a live key is in the staged
+# content" already.
+mkdir -p "$tmp/staged"
+
 if ! git -c core.autocrlf=false checkout-index -a -f --prefix="$tmp/staged/" 2>/dev/null; then
 	echo "pre-commit: could not export the staged tree — refusing to report clean." >&2
+	exit 1
+fi
+
+# The export must have produced something. A scan of an empty or missing
+# directory is the vacuous case: it would either pass having read nothing, or
+# fail and be reported below as a key that does not exist.
+staged_count="$(find "$tmp/staged" -type f 2>/dev/null | wc -l)"
+
+if [ ! -d "$tmp/staged" ] || [ "$staged_count" -eq 0 ]; then
+	echo "pre-commit: staged tree exported to nothing ($tmp/staged) — refusing to report clean." >&2
+	echo "            This is the hook failing, not a key. Retry; if it persists, run" >&2
+	echo "            'perl scripts/check-no-secrets.pl' by hand before pushing." >&2
 	exit 1
 fi
 
 # An explicit path means the scanner applies NO exemptions, which is what we
 # want here: preview.html and .env are exempt in a developer's working tree and
 # must never be exempt in something about to be committed.
-if ! perl "$scanner" "$tmp/staged" >/dev/null 2>&1; then
+#
+# "The scanner exited non-zero" and "the scanner found a key" are NOT the same
+# thing, and conflating them is how this hook once announced a live key while
+# actually reporting its own export directory missing. That sends someone
+# hunting a key that does not exist and teaches them to reach for --no-verify,
+# which is the last habit this repository needs. So the output is captured and
+# the two cases are told apart before anything is claimed.
+if ! scan_out="$(perl "$scanner" "$tmp/staged" 2>&1)"; then
 	echo >&2
-	echo "COMMIT BLOCKED — a live key is in the staged content:" >&2
-	perl "$scanner" "$tmp/staged" >&2
-	echo >&2
-	echo "  This repository is public. Unstage the file, or clear the key," >&2
-	echo "  before committing. If it has already been pushed anywhere, rotate it." >&2
+	if printf '%s' "$scan_out" | grep -q 'SECRET FOUND'; then
+		echo "COMMIT BLOCKED — a live key is in the staged content:" >&2
+		printf '%s\n' "$scan_out" >&2
+		echo >&2
+		echo "  This repository is public. Unstage the file, or clear the key," >&2
+		echo "  before committing. If it has already been pushed anywhere, rotate it." >&2
+	else
+		echo "COMMIT BLOCKED — the secrets scan could not run, so nothing was checked:" >&2
+		printf '%s\n' "$scan_out" >&2
+		echo >&2
+		echo "  This is the hook failing, not a key in your changes. Blocking anyway," >&2
+		echo "  because a scan that did not run must never look like one that passed." >&2
+	fi
 	exit 1
 fi
 
