@@ -69,6 +69,8 @@ my @checks = (
     [ 'nowrap-asymmetry'       => \&check_nowrap_asymmetry ],
     [ 'preview-route-targets'  => \&check_preview_routes ],
     [ 'demo-notice-wording'    => \&check_demo_notice_wording ],
+    [ 'gated-screens-pinned'   => \&check_gated_screens ],
+    [ 'hidden-attribute-works' => \&check_hidden_attribute ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1485,5 +1487,88 @@ sub check_demo_notice_wording {
         "the mock's failed sign-in demo has drifted from the wording production shows.\n"
         . "          $AUTH: \"$want\"\n"
         . "          $PREVIEW: \"$got\""
+    );
+}
+
+# The mock's list of screens that imply a session, pinned.
+#
+# go() flips the demo's session on for these targets, so the header can never
+# offer "Sign in" while an account page is on screen. The membership rule is a
+# JS object literal, which means a third gated screen is added by remembering
+# to — and on 11 Aug "remembered" lost to "rendered" twice in one day.
+#
+# Pinned to exact equality rather than "contains": a new gated screen must go
+# red until someone reads this and moves the pin deliberately. That is the point
+# of the check, not a side effect of it.
+#
+# Plus one semantic anchor for the inverse mistake: a screen carrying a sign-out
+# control presumes an account, so it must be gated. That direction cannot be
+# caught by a pin, because the pin does not know what the screens contain.
+sub check_gated_screens {
+    my $html = slurp($PREVIEW);
+    my @problems;
+
+    my ($literal) = $html =~ /var\s+GATED\s*=\s*\{([^}]*)\}/;
+
+    return ("no GATED literal found in $PREVIEW — the session gate this check guards is gone, or has been renamed")
+        unless defined $literal;
+
+    my %declared = map { $_ => 1 } ( $literal =~ /([a-z][a-z0-9-]*)\s*:/g );
+    my %pinned   = ( dashboard => 1, profile => 1 );
+
+    my @added   = sort grep { !$pinned{$_} }   keys %declared;
+    my @removed = sort grep { !$declared{$_} } keys %pinned;
+
+    push @problems,
+        'GATED has gained ' . join( ', ', @added )
+        . " in $PREVIEW. If that screen really implies a session, move the pin in this check"
+        . ' — deliberately, having checked the header behaves on every route into it'
+        if @added;
+
+    push @problems,
+        'GATED has lost ' . join( ', ', @removed )
+        . " in $PREVIEW — that screen can now be reached while the header still offers \"Sign in\""
+        if @removed;
+
+    # Any screen containing a sign-out control must be gated.
+    while ( $html =~ /<div class="screen" id="s-([a-z0-9-]+)"(.*?)(?=<div class="screen"|<!-- =)/gs ) {
+        my ( $screen, $body ) = ( $1, $2 );
+        next unless $body =~ /id="[a-z-]*signout[a-z-]*"|>\s*Sign out\s*</i;
+        next if $declared{$screen};
+
+        push @problems,
+            "screen s-$screen carries a sign-out control but is not in GATED"
+            . ' — it presumes an account, so reaching it must imply a session';
+    }
+
+    return @problems;
+}
+
+# The hidden attribute must actually hide.
+#
+# `hidden` is only a UA-stylesheet `display:none`, and any author rule at equal
+# specificity beats it. `.btn{display:inline-flex}` therefore defeated it on the
+# header's session controls, and the mock shipped for one commit rendering
+# "Sign in", "Your account" and "Sign out" at once — while el.hidden toggled
+# exactly as designed, which is why the walk that verified the attribute passed.
+#
+# The file had already been bitten once and patched narrowly
+# (.preview-ribbon[hidden]); bd402aa generalised it. This keeps the general form
+# from being tidied away, and keeps !important on it: without that, the
+# attribute's promise depends on source order against every display rule.
+sub check_hidden_attribute {
+    my $html = slurp($PREVIEW);
+
+    # A bare [hidden] selector, not one scoped to a class — element-scoped
+    # patches are what this replaced.
+    return ()
+        if $html =~ /(?:^|[\s,{}])\[hidden\]\s*\{[^}]*display\s*:\s*none\s*!important/m;
+
+    my $narrow = $html =~ /[.#][a-z0-9_-]+\[hidden\]\s*\{/i ? ' (only element-scoped [hidden] patches remain, which is the shape that failed before)' : '';
+
+    return (
+        "$PREVIEW has no global [hidden]{display:none!important} rule$narrow"
+        . ' — the hidden attribute is only a UA-stylesheet rule and any author display rule outranks it,'
+        . ' so hidden elements will render'
     );
 }
