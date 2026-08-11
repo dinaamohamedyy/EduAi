@@ -187,14 +187,49 @@ with exactly these slugs and contents:
 |---|---|---|
 | Home | `home` | anything — the theme's `front-page.php` takes over |
 | Library | `library` | `[scholaris_library per_page="12" filters="yes"]` |
-| My Progress | `dashboard` | `[scholaris_dashboard]` |
-| Study Assistant | `assistant` | `[eduai_panel height="600"]` |
-| Summarise a Lecture | `summarise` | `[eduai_summarizer]` |
+| My Progress | `progress` | `[scholaris_dashboard]` |
+| Summarise | `summarise` | `[eduai_summarizer]` |
+| AiCalc | `calc` | `[eduai_calc]` |
+| Q&A | `ask` | `[eduai_panel tabs="chat" page="1"]` |
+| PrepareME | `prepare` | `[eduai_prepare]` |
+| Study Assistant | `assistant` | `[eduai_panel height="600"]` — superseded by Q&A; kept, off the menu, 301s to `/ask/` |
+| Privacy Policy | `privacy` | anything — WordPress's own seeded draft at `/privacy-policy/` is a different page and gets trashed |
 | Sign in | `sign-in` | empty — the theme applies `page-templates/auth-signin.php` by slug |
 | Create account | `register` | empty — `auth-register.php`; students choose a password and are signed straight in |
 | Reset password | `reset-password` | empty — `auth-reset.php`; e-mails the reset link |
+| Your account | `profile` | empty — `page-templates/profile.php` |
+
+**`progress`, not `dashboard`.** Tutor LMS creates `/dashboard/` on activation,
+before `setup.sh` reaches its page section, and `make_page` is create-only so it
+skips silently — `[scholaris_dashboard]` then renders on no page at all. This
+table said `dashboard` for long enough to cost days; the theme resolves it
+through `scholaris_progress_url()` and it should never be hard-coded.
 
 Then Settings → Reading → *Your homepage displays* → **A static page** → Home.
+
+### Which fields setup.sh owns, and which are yours
+
+Re-running `bash scripts/setup.sh` is safe and is the fix for most drift, but
+the three page fields are governed by different rules and it is worth knowing
+which before you edit one in wp-admin:
+
+| Field | Rule | Re-running setup.sh |
+|---|---|---|
+| Page **body** | create-only (`make_page`) | never touched once the page exists — your edits are safe |
+| Page **title** | converges (`retitle_page`) | **overwritten**; nav labels are spec, see docs/06 |
+| Page **lede** | converges (`set_lede`) | **overwritten** |
+
+The lede is the paragraph under the `h1` on the four tool pages. It is stored in
+WordPress's `post_excerpt`, so you can edit it at *Page → Excerpt* in wp-admin —
+but `set_lede` is unconditional, so the next run of `setup.sh` puts the repo's
+copy back. That is deliberate: convergence is what stops an installed site
+drifting away from a fresh one, and it is the same trade titles already make.
+**If a lede change should stick, change it in `setup.sh`.**
+
+`scripts/page-drift.php` reports both halves of this — a page with no lede at
+all is a failure (it renders as a bare heading over a shortcode, because
+`page.php` only emits the lede when `has_excerpt()`), and a lede that merely
+differs is a warning naming what the next run will overwrite.
 
 Registration is open by default (`users_can_register 1`) and new accounts get
 the **student** role (`default_role`), both set by `setup.sh`. Every "Sign in"

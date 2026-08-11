@@ -113,6 +113,60 @@ foreach ( $matches as $m ) {
 	}
 }
 
+/*
+ * The ledes, held to a STRICTER rule than page content, because setup.sh
+ * treats them differently.
+ *
+ * make_page is create-only, so a page body that has drifted is somebody
+ * editing copy in wp-admin — expected, and only ever a warning here. set_lede
+ * is the opposite: it converges on every run, the way retitle_page does. The
+ * script asserts ownership of this field, so a disagreement is not a matter of
+ * taste, it means the script has not been run since the lede was declared.
+ *
+ * That distinction is why this check was worth widening. It reported 0 drift
+ * while four pages were shipping a bare word over a shortcode, because it
+ * compared headings and page bodies and a lede is neither. The code was right
+ * and the criterion was narrow, which is the failure that survives longest:
+ * it produces a clean report, and a clean report reads as evidence.
+ *
+ * MISSING is a failure and DIFFERENT is a warning, mirroring the split above.
+ * A page with no lede at all renders bare, which is the bug. A page with a
+ * different one is readable — but the next run of setup.sh will overwrite it,
+ * so the warning says so rather than leaving the owner to discover it.
+ */
+preg_match_all(
+	'/^set_lede\s+"((?:[^"\\\\]|\\\\.)*)"\s+"((?:[^"\\\\]|\\\\.)*)"/m',
+	$script,
+	$lede_matches,
+	PREG_SET_ORDER
+);
+
+$lede_bare    = array();
+$lede_differs = array();
+
+foreach ( $lede_matches as $m ) {
+	$slug = $unescape( $m[1] );
+	$want = $unescape( $m[2] );
+
+	$page = get_page_by_path( $slug );
+
+	// Already reported as missing by the loop above; do not say it twice.
+	if ( ! $page || 'publish' !== $page->post_status ) {
+		continue;
+	}
+
+	$has = trim( (string) $page->post_excerpt );
+
+	if ( '' === $has ) {
+		$lede_bare[] = array( 'slug' => $slug, 'want' => $want );
+		continue;
+	}
+
+	if ( $has !== trim( $want ) ) {
+		$lede_differs[] = array( 'slug' => $slug, 'want' => $want, 'has' => $has );
+	}
+}
+
 /**
  * A one-line guess at who really owns a page we expected to own.
  *
@@ -139,7 +193,20 @@ function page_owner_hint( WP_Post $page ): string {
 printf( "pages declared in setup.sh: %d\n", count( $matches ) );
 printf( "  present on this site    : %d\n", $ok );
 printf( "  missing                 : %d\n", count( $missing ) );
-printf( "  content differs         : %d\n\n", count( $differs ) );
+printf( "  content differs         : %d\n", count( $differs ) );
+printf( "ledes declared in setup.sh: %d\n", count( $lede_matches ) );
+printf( "  missing from the site   : %d\n", count( $lede_bare ) );
+printf( "  differs                 : %d\n\n", count( $lede_differs ) );
+
+if ( $lede_differs ) {
+	print "lede differs (warning — set_lede converges, so the NEXT setup.sh run overwrites the site's):\n";
+	foreach ( $lede_differs as $d ) {
+		printf( "  /%s/\n", $d['slug'] );
+		printf( "      setup.sh: %s\n", substr( $d['want'], 0, 90 ) );
+		printf( "      site    : %s\n", substr( $d['has'], 0, 90 ) );
+	}
+	print "\n";
+}
 
 if ( $differs ) {
 	print "content differs (warning only — make_page is create-only, so an edited page is expected):\n";
@@ -168,5 +235,18 @@ if ( $missing ) {
 	exit( 1 );
 }
 
-print "no missing pages\n";
+if ( $lede_bare ) {
+	print "PAGES WITH NO LEDE — set_lede declares one, the site has none:\n";
+	foreach ( $lede_bare as $d ) {
+		printf( "  /%s/\n", $d['slug'] );
+		printf( "      should read: %s\n", substr( $d['want'], 0, 90 ) );
+	}
+	print "\n  These render as a bare heading over a shortcode: page.php only emits\n";
+	print "  the lede when has_excerpt() is true.\n";
+	print "\n  Fix: re-run scripts/setup.sh. set_lede converges on every run, so it\n";
+	print "  fills these in without touching anything else.\n";
+	exit( 1 );
+}
+
+print "no missing pages, no missing ledes\n";
 exit( 0 );
