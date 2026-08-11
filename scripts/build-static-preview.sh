@@ -78,6 +78,60 @@ cp "$src" "$out/index.html"
 # one is in effect.
 ok "index.html written"
 
+say "Stamping the build with its source commit"
+
+# Vercel builds `origin/main`, not anyone's working tree. Six sessions share one
+# working copy here, commits land irregularly and pushes lag further, so what is
+# deployed trails what is on disk by an unpredictable amount — it was six
+# commits once, and one commit plus nine uncommitted files an hour later. The
+# published mock then shows superseded copy while looking perfectly current,
+# which on this project is the expensive failure: the owner's first bug report
+# was against the mock believing it was the site.
+#
+# docs/03 tells the reader to compare HEAD, origin/main and git status before
+# trusting the URL. That works only if they remember. Stamping the commit into
+# the page makes it answerable from the page itself.
+if [ -n "${VERCEL_GIT_COMMIT_SHA:-}" ]; then
+	sha="$(printf '%s' "$VERCEL_GIT_COMMIT_SHA" | cut -c1-7)"   # set by Vercel
+elif command -v git >/dev/null 2>&1 && git -C "$repo" rev-parse --short HEAD >/dev/null 2>&1; then
+	sha="$(git -C "$repo" rev-parse --short HEAD)"
+else
+	sha="unknown"
+fi
+
+# An "unknown" stamp is the vacuous version of this feature: the meta tag is
+# present, the assertion passes, and the page answers "which commit?" with a
+# shrug — while looking like the mechanism works. Tolerable locally (a bare
+# export of the index is not a git repo and has no Vercel env), never on the
+# surface people actually read. Vercel sets both VERCEL and
+# VERCEL_GIT_COMMIT_SHA on a Git-integration build, so failing to resolve one
+# there means something changed and the stamp can no longer be trusted.
+if [ "$sha" = "unknown" ]; then
+	if [ -n "${VERCEL:-}" ]; then
+		die "building on Vercel but VERCEL_GIT_COMMIT_SHA is unset — refusing to publish a page that cannot say which commit it came from"
+	fi
+	printf '  \033[0;33m!!\033[0m no commit id available (not a git checkout, not Vercel) — stamping "unknown"\n' >&2
+fi
+
+built="$(date -u '+%Y-%m-%d %H:%MZ')"
+
+# Machine-readable, and the thing the assertion below checks.
+perl -i -pe "
+	if (!\$done && m{</head>}i) {
+		s{</head>}{  <meta name=\"built-from-commit\" content=\"$sha\">\n  <meta name=\"built-at\" content=\"$built\">\n</head>}i;
+		\$done = 1;
+	}
+" "$out/index.html"
+
+# Human-readable, in the browser tab. Best-effort: the front-end dev owns this
+# title and may reword it. Its absence is not worth failing a build over, but
+# the meta above is, so that is what gets asserted.
+perl -i -pe "s{<title>(.*?)</title>}{<title>\$1 · $sha</title>} if !\$t && m{<title>}i and \$t = 1" "$out/index.html"
+
+grep -q "built-from-commit\" content=\"$sha\"" "$out/index.html" \
+	|| die "could not stamp the source commit into the page"
+ok "stamped $sha ($built)"
+
 say "Refusing to ship a key"
 
 # Explicit path => check-no-secrets.pl applies NO exemptions. That matters: the
