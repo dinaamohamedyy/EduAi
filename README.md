@@ -87,9 +87,17 @@ dashboard, with a working chat panel demo.
 ### A library of study material
 
 Custom post type with subject and material-type taxonomies, PDF/DOCX upload,
-automatic page-count detection, per-document access control, and downloads
-served through a nonce-protected handler so file URLs cannot be shared outside
-the site. The single-material view embeds the PDF inline.
+automatic page-count detection, and downloads served through a nonce-protected
+handler so file URLs cannot be shared outside the site — a link copied from one
+student is refused for another, and refused signed out. The single-material view
+embeds the PDF inline.
+
+**Access is per document but binary**, and it is worth being exact because the
+phrase invites over-reading: each document is either `public` (anyone) or
+`members` (**any** signed-in account). There is no per-student, per-cohort or
+per-course restriction — `SL_Meta::can_download()` grants `members` to every
+logged-in user. If you need a document restricted to one cohort, that is a
+feature to build, not a setting to find.
 
 → `wp-content/plugins/scholaris-library/`
 
@@ -231,7 +239,9 @@ covers the paid upgrade path if you need every browser.
 | `[scholaris_quiz_history limit="10" show_chart="yes"]` | Attempts, scores, trend |
 | `[scholaris_dashboard]` | The full student view |
 
-Add `data-eduai-open` to any button to open the assistant from anywhere.
+To offer the assistant from anywhere, link to `/ask/` (Q&A) or `/summarise/` —
+in theme code via `scholaris_ask_url()`. The old `data-eduai-open` attribute
+died with the floating widget (docs/06 §3) and is now inert everywhere.
 
 ---
 
@@ -257,7 +267,14 @@ Add `data-eduai-open` to any button to open the assistant from anywhere.
   site-wide — see `docs/03-hosting-deployment.md`.
 - All REST routes verify a nonce and check capability; all output is escaped;
   all queries are prepared.
-- Downloads check the document's access level and a per-document nonce.
+- Downloads check the document's access level and a per-document nonce. Both
+  verified against a running site: a link copied from one student is refused for
+  another, a nonce minted for one document is refused on another, and a public
+  document still serves signed out. Access itself is binary — `public`, or any
+  signed-in account — not per student or per cohort.
+- The assistant's rate limit is keyed on the **user id**, so one student
+  exhausting their quota does not affect anyone else. Verified: 20 answered, the
+  21st refused, a second student unaffected, separate counters.
 - Chat logs are purged on a schedule you set, and deleted with the user.
 
 ---

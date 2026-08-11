@@ -210,6 +210,47 @@ This is a ship gate, not a nice-to-have. A student who opens dev-tools on a
 leaking page gets full marks, and no static check anywhere in this repository
 can see it.
 
+**The marked report has the same split, and the same gate.**
+`scripts/submit-contract.php` proves the server side of docs/07 §3 — a
+full-marks short answer is awarded its marks, `correct` comes back **`null`
+rather than `false`**, and `comment` is non-empty even at full credit. Verified
+12/12, with a control that first observes `correct` in both boolean states, so
+"null on shorts" can never pass on a field that is simply always null.
+
+**The gate, stated as the property that protects the student** (corrected
+10 Aug 2026 — see the note below):
+
+> Short-answer tone is derived from `awarded` against `of`, **never** from
+> `correct`. A short answer at full marks must never render `✗`.
+
+The failure being guarded against is `if (r.correct)`, which reads `null` as
+false and stamps a ✗ on an answer that scored full marks. A revision tool that
+tells a student they got something wrong when they got it right is worse than
+one that simply fails — they will re-learn a correct answer as incorrect.
+`prepare.js` enforces this structurally by never reading `correct` outside the
+MCQ branch, which is stronger than any assertion about glyphs.
+
+**This wording replaces an earlier version that said a full-marks short must
+carry "neither ✓ nor ✗".** That described `design/preview.html`, and the shipped
+renderer deliberately does the opposite: `prepare.js:358` gives a full-marks
+short a **✓**, and `tools/prepare-gate.html:172` asserts exactly that. Code and
+test already agreed; only this document was out of step, because it was written
+from the demo before the tab existed.
+
+The tick is the right behaviour. Withholding it to signal "a model marked this,
+not code" serves our architecture rather than the student — they got it right
+and the report should say so. A short answer with no glyph is also ambiguous
+with one that failed to render at all. What matters is not whether a ✓ appears,
+but that the tone never comes from `correct`; the old wording confused a proxy
+for the property.
+
+So when re-running against the real tab: **render a marked report with at least
+one full-marks short answer and confirm it is not displayed as wrong.**
+
+Check the numbers in the same pass: float marks reaching the page intact
+(`2.5 / 4`), percent as `Math.round(score / total * 100)`, and the band
+subtotals summing to the score and the paper total.
+
 ---
 
 ## 3. Retiring the widget

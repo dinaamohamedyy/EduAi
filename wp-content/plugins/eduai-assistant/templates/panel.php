@@ -29,13 +29,29 @@ $eduai_picker        = (bool) EduAI_Settings::get( 'agent_picker', true );
  * and this defaults to both. [eduai_panel tabs="chat"] is what /ask/ uses.
  */
 $eduai_summary_tab = ! isset( $eduai_atts['tabs'] ) || 'chat' !== $eduai_atts['tabs'];
+
+/*
+ * page="1": the panel is a full page (/ask/), not a box on one. The shell
+ * chrome goes — the page h1 and breadcrumb already say where you are — and
+ * the head's controls move rather than vanish: "New chat" above the log,
+ * the status line below the composer. chat.js binds by data- attribute, so
+ * the attributes move with the elements and exactly one of each renders.
+ */
+$eduai_page = ! empty( $eduai_atts['page'] );
 ?>
-<div class="eduai-app<?php echo $eduai_inline ? ' eduai-app--inline' : ''; ?>"
+<div class="eduai-app<?php echo $eduai_inline ? ' eduai-app--inline' : ''; ?><?php echo $eduai_page ? ' eduai-app--page' : ''; ?>"
 	id="<?php echo esc_attr( $eduai_id ); ?>"
 	data-eduai-app
 	data-post-id="<?php echo esc_attr( (string) get_the_ID() ); ?>"
-	<?php if ( $eduai_inline ) : ?>style="--eduai-body-h:<?php echo esc_attr( (string) $eduai_height ); ?>px"<?php endif; ?>>
+	<?php if ( $eduai_inline && ! $eduai_page ) : ?>style="--eduai-body-h:<?php echo esc_attr( (string) $eduai_height ); ?>px"<?php endif; ?>>
 
+	<?php if ( $eduai_page ) : ?>
+		<div class="eduai-pagebar">
+			<button type="button" class="eduai-btn" data-eduai-new>
+				<?php esc_html_e( 'New chat', 'eduai' ); ?>
+			</button>
+		</div>
+	<?php else : ?>
 	<header class="eduai-head">
 		<span class="eduai-avatar" aria-hidden="true">
 			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -58,6 +74,7 @@ $eduai_summary_tab = ! isset( $eduai_atts['tabs'] ) || 'chat' !== $eduai_atts['t
 			<?php endif; ?>
 		</div>
 	</header>
+	<?php endif; ?>
 
 	<?php if ( $eduai_summary_tab ) : ?>
 		<div class="eduai-tabs" role="tablist">
@@ -114,6 +131,10 @@ $eduai_summary_tab = ! isset( $eduai_atts['tabs'] ) || 'chat' !== $eduai_atts['t
 				</svg>
 			</button>
 		</form>
+
+		<?php if ( $eduai_page ) : ?>
+			<span class="eduai-status eduai-status--foot" data-eduai-status><?php esc_html_e( 'Online · grounded in your course material', 'eduai' ); ?></span>
+		<?php endif; ?>
 
 		<p class="eduai-foot">
 			<?php esc_html_e( 'AI can make mistakes — check important answers against the source document.', 'eduai' ); ?>

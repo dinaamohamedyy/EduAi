@@ -87,6 +87,11 @@ services:
       WORDPRESS_DB_NAME: ${DB_NAME:-scholaris}
       WORDPRESS_DB_USER: ${DB_USER:-scholaris}
       WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-scholaris}
+      # The shared wp-config.php defines EDUAI_*_API_KEY from getenv(), so
+      # without these pass-throughs every wp-cli model harness reads "no API
+      # key configured" — a missing env var disguised as a misconfigured site.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
     volumes:
       - wp_core:/var/www/html
       - ./wp-content/themes/scholaris:/var/www/html/wp-content/themes/scholaris

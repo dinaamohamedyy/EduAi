@@ -644,16 +644,46 @@ class EduAI_Exams {
 			$text = is_string( $text ) ? trim( wp_strip_all_tags( $text ) ) : '';
 			$text = mb_substr( $text, 0, 1200 );
 
-			if ( '' === $text ) {
+			// Blank scores 0 locally — and so does punctuation. Real submissions
+			// have included ",," and ",,,", which were batched to the model and
+			// billed for like an answer.
+			//
+			// The test is a character class, not a length floor: a valid short
+			// answer can be very short — "pH", "9%", "O(n log n)" — and a
+			// minimum-characters rule would zero those without ever asking.
+			// \p{L} and \p{N} with /u rather than [A-Za-z0-9], so "π", "√2",
+			// "°C" and an answer written in Arabic all reach the marker.
+			//
+			// Symbols (\p{S}) count as content too, because "∞" is a complete
+			// and correct answer to "what is lim(x→0) 1/x²". That does let a
+			// lone "=" or "+" through to be marked, and the trade is not close:
+			// a wrongly-zeroed correct answer costs a student marks and tells
+			// them their answer contained no words or numbers, which is both
+			// wrong and baffling; a junk symbol reaching the marker costs a
+			// fraction of a token in a call that was being made anyway, and
+			// comes back 0. Deciding whether a symbol answers the question is
+			// the marker's job — this only skips what cannot answer anything.
+			// Punctuation stays excluded: "!!" and "..." are \p{P}, not \p{S}.
+			if ( '' === $text || ! preg_match( '/[\p{L}\p{N}\p{S}]/u', $text ) ) {
 				$results[ $q['id'] ] = array(
 					'id'        => $q['id'],
 					'type'      => 'short',
 					'band'      => $q['band'],
 					'awarded'   => 0,
 					'of'        => $marks,
-					'comment'   => __( 'No answer given.', 'eduai' ),
+					'comment'   => '' === $text
+						? __( 'No answer given.', 'eduai' )
+						: __( 'No answer given — that response was punctuation only.', 'eduai' ),
 					'expected'  => $q['expected'],
-					'your_text' => '',
+					// Echo it back, don't blank it. Hardcoding '' was right when
+					// this branch only caught genuinely empty answers; once it
+					// also catches punctuation, a student who typed ",,," would
+					// see an empty box beside "that response was punctuation
+					// only" and no evidence of what the mark was given for.
+					// docs/07 §3 promises your_text is what they wrote. $text is
+					// already stripped, trimmed and length-capped, and is '' for
+					// a truly blank answer, so that case is unchanged.
+					'your_text' => $text,
 				);
 				continue;
 			}

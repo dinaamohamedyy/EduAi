@@ -115,16 +115,33 @@ wp_enqueue_script( 'scholaris-library' );
 		</div>
 
 		<aside class="sl-single__side">
+			<?php if ( function_exists( 'eduai_ask_url' ) ) : ?>
+			<?php
+			// The whole panel is the assistant's: without the eduai-assistant
+			// plugin there is no feature behind it, and a missing control is
+			// honest where a link to somewhere unrelated is not. The resolvers
+			// are the assistant's own (it owns /ask/ and /summarise/).
+			//
+			// data-eduai-open stays on the anchors: inert since the dock
+			// retired, harmless because the link works without it, and a
+			// future dock's preventDefault hijack gets these back free.
+			// TODO: carry this document into the panel (?doc=<id>) once
+			// /ask/ reads it — a plain link loses the "this document"
+			// preselection; acceptable while RAG covers the whole library.
+			?>
 			<div class="sl-panel">
 				<h3><?php esc_html_e( 'Study this document', 'scholaris-library' ); ?></h3>
 				<p><?php esc_html_e( 'The assistant has already read this material — ask it anything about the content.', 'scholaris-library' ); ?></p>
-				<button type="button" class="sl-btn sl-btn--primary sl-btn--block" data-eduai-open>
+				<a class="sl-btn sl-btn--primary sl-btn--block" data-eduai-open
+					href="<?php echo esc_url( eduai_ask_url() ); ?>">
 					<?php esc_html_e( 'Ask about this document', 'scholaris-library' ); ?>
-				</button>
-				<button type="button" class="sl-btn sl-btn--ghost sl-btn--block" data-eduai-open="summary">
+				</a>
+				<a class="sl-btn sl-btn--ghost sl-btn--block" data-eduai-open="summary"
+					href="<?php echo esc_url( eduai_summarise_url() ); ?>">
 					<?php esc_html_e( 'Summarise it for me', 'scholaris-library' ); ?>
-				</button>
+				</a>
 			</div>
+			<?php endif; ?>
 
 			<?php
 			$sl_related = new WP_Query( array(

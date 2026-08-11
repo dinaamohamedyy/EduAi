@@ -84,6 +84,25 @@ jobs:
       - name: Inline JavaScript syntax check (HTML pages)
         run: node scripts/check-inline-js.js
 
+      # Drives the mock's session machinery in a real headless browser and reads
+      # computed style rather than the `hidden` flag — the distinction that let
+      # `.btn{display:inline-flex}` defeat `hidden` at equal specificity, so the
+      # header rendered Sign in, Your account and Sign out at once while every
+      # `el.hidden` toggled exactly as designed.
+      #
+      # It belongs HERE and not in scripts/live-checks.sh or the nightly. It
+      # needs no WordPress — its target is design/preview.html, committed and
+      # keyless, so a bare checkout suffices; ubuntu-latest's google-chrome is
+      # found unaided. And the regression it guards is shipped CSS: catching it
+      # overnight would mean it had already merged. This is the only browser
+      # check that can run before anything is composed, which is the whole
+      # reason to spend ten seconds on it here.
+      #
+      # SCOPE: it renders the MOCK. A pass says nothing about the real tab —
+      # same caveat as visual-checks.js needing both themes.
+      - name: Mock session-state pass
+        run: node scripts/mock-state-pass.mjs
+
       - name: Shell syntax check
         run: bash -n scripts/setup.sh
 
@@ -127,6 +146,35 @@ jobs:
       # Add these repository secrets:
       #   SSH_HOST, SSH_USER, SSH_PORT, SSH_PRIVATE_KEY, REMOTE_PATH
       # ------------------------------------------------------------------
+      # Fail closed on the destination, before any rsync --delete runs.
+      #
+      # An empty REMOTE_PATH makes the target "USER@HOST:/wp-content/themes/…".
+      # On an ordinary box that fails because /wp-content does not exist. On a
+      # CHROOTED shared-hosting account — which Hostinger commonly is — it can
+      # resolve inside the jail and SUCCEED, depositing the theme somewhere
+      # nobody looks while the summary reports a clean deploy. A silent success
+      # at the wrong path is worse than a loud failure at the right one.
+      #
+      # Same principle as scripts/live-checks.sh refusing a non-localhost
+      # target: the operator who most needs this guard is the one who has just
+      # pasted five secrets in a hurry.
+      - name: Deploy destination is fully specified
+        if: ${{ vars.DEPLOY_METHOD == 'ssh' }}
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          REMOTE_PATH: ${{ secrets.REMOTE_PATH }}
+        run: |
+          missing=
+          [ -n "$SSH_HOST" ]    || missing="$missing SSH_HOST"
+          [ -n "$SSH_USER" ]    || missing="$missing SSH_USER"
+          [ -n "$REMOTE_PATH" ] || missing="$missing REMOTE_PATH"
+          if [ -n "$missing" ]; then
+            echo "::error::Empty deploy secret(s):$missing — refusing to rsync --delete against an unintended path."
+            exit 1
+          fi
+          echo "destination fully specified"
+
       - name: Install the SSH key
         if: ${{ vars.DEPLOY_METHOD == 'ssh' }}
         run: |

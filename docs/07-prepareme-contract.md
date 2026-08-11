@@ -101,6 +101,30 @@ index into this array is what gets submitted.
 A `reused: true` response costs nothing and does not touch the generation rate
 limit, so re-opening the same lecture is free.
 
+### The standing check on `answer_index` — make the paper mark its own key
+
+`answer_index` is **0-based**, and it is the most dangerous number in the
+product. `normalize_exam()` only range-checks it against `0..3`, so an in-range
+index pointing at the *wrong option* passes every guard in the codebase. A
+0-vs-1 slip mis-marks every MCQ on every paper while each one still returns a
+plausible mark, and no static check anywhere can see it — the convention is one
+the model has to infer, not one the schema can enforce.
+
+**So after any generation, submit the paper's own `answer_index` for every MCQ
+and require full marks on them.** If the model had emitted 1-based indices, the
+paper would necessarily mark its own answer key wrong; full marks is therefore a
+proof by construction, not a correlation. It cannot be satisfied by a lenient
+marker or by coincidence.
+
+Checking that each `explanation` describes the option at its index is a useful
+second reading, but it is weaker on its own: a model wrong the same way twice
+can satisfy it. Do both; rely on the self-marking result.
+
+Verified this way on **14 of 14 MCQs across two unrelated subjects**, with the
+correct option spread over all four positions — a fixture where the answer is
+never index 0 would have missed the 0-vs-1 case entirely, and one where it is
+always 0 would have missed a stuck default. Spread it across all four.
+
 **Errors** — same vocabulary as `/summarize`: `400` short/absent input, `413`
 oversized file, `415` unsupported or legacy Office format, `422` no readable
 text, `429` rate limited, `502` provider unreachable, `500` generation failed

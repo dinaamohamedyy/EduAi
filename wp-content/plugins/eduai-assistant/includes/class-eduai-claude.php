@@ -342,6 +342,20 @@ class EduAI_Claude {
 			}
 		}
 
+		// Same rule as the OpenAI branch: an empty answer is never handed
+		// upstream as a success. Here it means every content block was
+		// something other than text — thinking blocks, most likely — and the
+		// budget ran out before any prose was written.
+		if ( '' === trim( $text ) ) {
+			return new WP_Error(
+				'eduai_truncated',
+				'max_tokens' === ( $json['stop_reason'] ?? '' )
+					? __( 'The model used its whole reply budget before writing an answer. Raise "Max tokens" under Settings → EduAI Assistant.', 'eduai' )
+					: __( 'The model returned an empty answer. Try asking again.', 'eduai' ),
+				array( 'status' => 502 )
+			);
+		}
+
 		return array(
 			'text'        => trim( $text ),
 			'usage'       => $json['usage'] ?? array(),
@@ -358,16 +372,51 @@ class EduAI_Claude {
 			return new WP_Error( 'eduai_bad_payload', __( 'The API returned an unexpected response.', 'eduai' ), array( 'status' => 502 ) );
 		}
 
-		$usage = $json['usage'] ?? array();
+		$usage  = $json['usage'] ?? array();
+		$choice = $json['choices'][0];
+		$text   = trim( (string) ( $choice['message']['content'] ?? '' ) );
+		$finish = (string) ( $choice['finish_reason'] ?? '' );
+
+		// Reasoning models spend the SAME max_tokens budget on thinking as on
+		// the answer, and put the two in different fields: the thinking in
+		// `reasoning`, the answer in `content`. Run the budget out mid-thought
+		// and the provider returns HTTP 200 with `content: ""` — a success
+		// carrying nothing.
+		//
+		// Passed through, that reaches the student as an empty reply from a
+		// working assistant, which is indistinguishable from the model not
+		// being connected at all and is the single most confusing failure this
+		// gateway can produce. It is a truncation, so it is reported as one.
+		if ( '' === $text ) {
+			$reasoned = '' !== trim( (string) ( $choice['message']['reasoning'] ?? '' ) );
+
+			if ( 'length' === $finish ) {
+				return new WP_Error(
+					'eduai_truncated',
+					$reasoned
+						// The specific, actionable case: all of the budget went
+						// on thinking and none was left to answer with.
+						? __( 'The model used its whole reply budget thinking and had none left to answer with. Raise "Max tokens" under Settings → EduAI Assistant — reasoning models need roughly double what the visible answer looks like it needs.', 'eduai' )
+						: __( 'The reply was cut off before it began. Raise "Max tokens" under Settings → EduAI Assistant.', 'eduai' ),
+					array( 'status' => 502 )
+				);
+			}
+
+			return new WP_Error(
+				'eduai_empty',
+				__( 'The model returned an empty answer. Try asking again.', 'eduai' ),
+				array( 'status' => 502 )
+			);
+		}
 
 		return array(
-			'text'        => trim( (string) ( $json['choices'][0]['message']['content'] ?? '' ) ),
+			'text'        => $text,
 			// Re-key to the Anthropic names so conversation logging stays uniform.
 			'usage'       => array(
 				'input_tokens'  => (int) ( $usage['prompt_tokens'] ?? 0 ),
 				'output_tokens' => (int) ( $usage['completion_tokens'] ?? 0 ),
 			),
-			'stop_reason' => (string) ( $json['choices'][0]['finish_reason'] ?? '' ),
+			'stop_reason' => $finish,
 			'model'       => $json['model'] ?? $model,
 		);
 	}
@@ -496,7 +545,12 @@ class EduAI_Claude {
 		$result = self::message(
 			array( array( 'role' => 'user', 'content' => 'Reply with the single word: ready' ) ),
 			'You are a connectivity probe. Reply with one word.',
-			array( 'max_tokens' => 16, 'temperature' => 0 )
+			// Not 16. A one-word answer needs one token, but a reasoning model
+			// spends this same budget thinking first and would run out before
+			// writing it — so the probe would report a broken connection on a
+			// provider that is working perfectly. 512 is far more than the
+			// answer needs and comfortably more than the thinking does.
+			array( 'max_tokens' => 512, 'temperature' => 0 )
 		);
 
 		return is_wp_error( $result ) ? $result : true;
