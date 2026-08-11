@@ -1,21 +1,35 @@
-# Safety net. The intended way to publish the design mock-up is:
+# Files Vercel must not receive.
 #
-#     bash scripts/build-static-preview.sh
-#     npx vercel deploy --prod dist/preview-site
+# READ THIS BEFORE ADDING A DIRECTORY. Vercel applies this file to BOTH the CLI
+# upload and the GitHub-integration build — the build log says "Removed N
+# ignored files defined in .vercelignore" before it runs `vercel build`. An
+# earlier version of this file listed scripts/ and design/, which deleted the
+# build script and its source page and left the build with nothing to do.
 #
-# ...which uploads an isolated two-file directory. This file exists for the
-# case where someone runs `vercel` in the repository root instead.
+# So this file may only exclude things the build does not need. The build
+# (scripts/build-static-preview.sh, set as buildCommand in vercel.json) reads:
 #
-# It matters because the Vercel CLI uploads the working directory and reads
-# THIS file, not .gitignore. The two files holding live API keys are gitignored,
-# which means every guard in this repo is blind to them here: check-no-secrets.pl
-# skips them by design, the pre-commit hook scans the git index, and CI scans a
-# git checkout. None of that protects an upload that never touches git.
+#     design/preview.html          the page itself
+#     scripts/check-no-secrets.pl  the guard that stops a key being published
 #
-# A key published this way is public the moment it uploads and must be rotated,
-# not deleted.
+# Neither may be listed here, ever.
+#
+# It is NOT this file's job to stop application source being served publicly.
+# `outputDirectory` in vercel.json does that: only dist/preview-site is served,
+# whatever else exists in the source tree. Excluding the rest below is purely to
+# keep the upload small.
+#
+# What this file IS for: the CLI case. `npx vercel` in the repo root uploads the
+# working directory and does not read .gitignore, so it would publish the root
+# preview.html (which holds the front-end dev's live Groq key) and .env. Both
+# are gitignored, so every other guard here is blind to them — the secrets
+# scanner skips them by design, the pre-commit hook scans the git index, and CI
+# scans a git checkout. None of that protects an upload that never touches git.
+#
+# A key published this way is public the moment it uploads, and must be rotated
+# rather than deleted.
 
-# Live keys — the reason this file exists
+# --- Live keys. The reason this file exists. Never remove these. ---
 .env
 .env.*
 preview.html
@@ -23,20 +37,17 @@ preview*.html
 *.key
 *.pem
 
-# WordPress source: PHP served by a static host is delivered as readable text,
-# so this would publish the application's source rather than run it.
+# --- Not needed by the build; excluded to keep the upload small. ---
+# (Serving scope is enforced by outputDirectory, not by these lines.)
 wp-content/
 php/
-scripts/
 tools/
 docs/
-design/
 .github/
 .githooks/
 *.zip
 
-# Noise
+# --- Noise ---
 node_modules/
 vendor/
-.git/
 *.log
