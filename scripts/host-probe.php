@@ -189,4 +189,26 @@ if ( $fail > 0 ) {
 	print "Everything passed. This host can run EduAi.\n";
 }
 
-print "\nNow delete this file.\n";
+// ---------------------------------------------------------------- self-delete
+//
+// "Now delete this file" was the whole cleanup, and a remembered step is not a
+// step. Left in place this is an unauthenticated page publishing the server's
+// PHP version, loaded extensions and ini limits to anyone who guesses the URL —
+// a phpinfo() page by another name, on a host chosen for being cheap. It cannot
+// be gated behind a token, because it has to run before WordPress exists and
+// its whole value is "upload one file, open it".
+//
+// So it runs exactly once and removes itself. If that fails — read-only
+// directory, wrong owner — say so loudly rather than printing a tidy summary
+// and leaving the page up, because a silent failure here is indistinguishable
+// from success and leaves the disclosure in place indefinitely.
+print "\n";
+
+if ( @unlink( __FILE__ ) ) {
+	print "This file has deleted itself. Re-upload it if you need to run it again.\n";
+} else {
+	print "!! COULD NOT DELETE ITSELF — DO IT NOW, BY HAND.\n";
+	printf( "   %s\n", __FILE__ );
+	print "   Until you do, anyone with this URL can read the server's PHP\n";
+	print "   version, extensions and limits.\n";
+}
