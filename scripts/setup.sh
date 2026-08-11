@@ -280,6 +280,100 @@ else
 	ok "sidebar-1 still holds $remaining widget(s) — check Appearance → Widgets"
 fi
 
+# ------------------------------------------------------- seeded content ---
+say "Clearing WordPress's seeded content"
+
+# The sibling of the sidebar reset above, and the same root cause: this script
+# converges what it CREATES and had nothing to say about what WordPress LEAVES
+# BEHIND. A fresh install seeds three posts that are pure scaffolding — the
+# "Hello world!" post, "Sample Page", and an auto-drafted "Privacy Policy" that
+# duplicates the real /privacy/ page made above — plus one canned comment from
+# "A WordPress Commenter".
+#
+# Emptying sidebar-1 took those off the page but not off the site: /hello-world/
+# and /sample-page/ both still answered 200. On a student-facing product they
+# are crawlable URLs, and "Sample Page" in a sitemap reads as an abandoned
+# install rather than a product.
+#
+# TRASHED, NEVER --force. wp_trash_post() moves to Trash, so every one of these
+# is recoverable from wp-admin. This script must not be the reason something
+# becomes unrecoverable.
+#
+# GUARDED ON post_modified === post_date, which is WordPress's own record that
+# a seeded row has never been edited. Matching the slug alone is not enough: if
+# somebody ever writes a real post that lands on /hello-world/, an unguarded
+# run would trash their work. The guard asks the database rather than carrying
+# a hardcoded copy of whatever the current WordPress happens to seed, so it
+# does not rot when that copy changes.
+$WP eval '
+$ours = get_page_by_path( "privacy" );
+
+// WordPress points wp_page_for_privacy_policy at the draft it seeded, never at
+// ours — it was page 3 here while the real policy was page 11. So
+// get_privacy_policy_url() resolved to a DRAFT, which 404s for every logged-out
+// visitor, and that is the URL WordPress hands to login forms and to any plugin
+// that asks for it. Re-point it BEFORE the draft is trashed, so the option is
+// never left aimed at a trashed post.
+if ( $ours && (int) get_option( "wp_page_for_privacy_policy" ) !== $ours->ID ) {
+	update_option( "wp_page_for_privacy_policy", $ours->ID );
+	echo "  ok  privacy policy option now points at /privacy/ (page {$ours->ID})\n";
+}
+
+foreach ( array(
+	array( "hello-world", "post" ),
+	array( "sample-page", "page" ),
+	array( "privacy-policy", "page" ),
+) as $seed ) {
+	list( $slug, $type ) = $seed;
+
+	$found = get_posts( array(
+		"name"        => $slug,
+		"post_type"   => $type,
+		"post_status" => array( "publish", "draft", "pending", "private", "future" ),
+		"numberposts" => 1,
+	) );
+
+	if ( ! $found ) {
+		continue;
+	}
+
+	$p = $found[0];
+
+	if ( $p->post_modified !== $p->post_date ) {
+		echo "  --  /{$slug}/ has been edited since WordPress seeded it — left alone\n";
+		continue;
+	}
+
+	wp_trash_post( $p->ID );
+	echo "  ok  trashed the seeded {$type} /{$slug}/ (id {$p->ID})\n";
+}
+
+// Handled separately rather than left to wp_trash_post() cascading over the
+// Hello world! comments: if that post was edited and skipped above, the canned
+// comment is still there and still WordPress scaffolding.
+//
+// Matched on the seeded address, not the display name. wapuu@wordpress.example
+// is on the reserved .example TLD (RFC 2606), so it cannot belong to a real
+// commenter, whereas a display name is free text a real person could type.
+//
+// "any", not "all". They are not synonyms in WP_Comment_Query: "all" means the
+// moderation statuses (approved + pending) and silently excludes trash, spam
+// and post-trashed, while "any" means every status there is. Measured on this
+// install — with the comment sitting at post-trashed, "all" returned 0 rows and
+// "any" returned 1. Written with "all" this loop would have done nothing at all
+// and still printed a clean run.
+foreach ( get_comments( array(
+	"author_email" => "wapuu@wordpress.example",
+	"status"       => "any",
+) ) as $c ) {
+	if ( "trash" === $c->comment_approved ) {
+		continue;
+	}
+	wp_trash_comment( $c->comment_ID );
+	echo "  ok  trashed the seeded comment (id {$c->comment_ID})\n";
+}
+'
+
 # ------------------------------------------------------------ taxonomies ---
 say "Seeding subjects"
 for subject in "Mathematics" "Physics" "Computer Science" "Biology" "Chemistry"; do
