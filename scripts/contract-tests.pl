@@ -1599,20 +1599,36 @@ sub check_hidden_attribute {
 # sign. That block is where this class of bug actually lives, because those are
 # the characters a writer pastes out of a word processor.
 #
-# The c3-lead family (accented letters: é becomes Ã©, ü becomes Ã¼) is caught
-# too, but only when the "Ã" is followed by punctuation or a symbol rather than
-# a letter — "Ã" is a real letter in Portuguese and Vietnamese, and flagging it
-# unconditionally would make this check something people learn to ignore.
+# The c2-lead and c3-lead families (Latin-1 symbols, and accented letters) are
+# caught too, but only when the lead character is followed by punctuation or a
+# symbol rather than a letter. U+00C2 and U+00C3 are real letters in French,
+# Portuguese, Welsh and Vietnamese, and flagging them unconditionally would make
+# this check something people learn to ignore.
 #
-# WRITTEN AS \x{} ESCAPES, DELIBERATELY. Spelling the signatures out as literal
-# characters would put them in this file, and a scanner that matches its own
-# source is a scanner that cries wolf on every run. setup.sh's lede comment is
-# written the same way and for the same reason.
+# WRITTEN AS \x{} ESCAPES, AND NAMED BY CODEPOINT RATHER THAN SPELLED OUT.
+# An earlier version of this comment illustrated the c3 family by pasting two
+# corrupt examples into it. That is a real occurrence of the signature living in
+# the scanner's own source, and it was invisible because the scanner also
+# skipped its own file — the one file guaranteed to contain the patterns was
+# the one file never examined, so genuine corruption here could never have been
+# reported. Both halves of that are now gone: nothing below is spelled out, and
+# nothing is skipped. Keep it that way — describe these sequences by codepoint,
+# never by example.
 sub check_no_mojibake {
     my @problems;
 
-    my $lead     = "\x{00E2}\x{20AC}";              # e2 80 xx, double-encoded
-    my $accented = "\x{00C3}[\x{00A0}-\x{00BF}]";   # c3 xx, double-encoded
+    # One signature per UTF-8 lead byte that this project's copy actually uses.
+    # The three are not interchangeable and missing one is not academic: the
+    # first version of this check carried only the first two, and a
+    # double-encoded middle dot — "Dr. Amany Fouad · 24 documents" in the
+    # library card — passed it clean and had to be caught by eye instead
+    # (3434ac0). The middle dot is this design's separator, so it is the single
+    # most likely character here to arrive corrupted.
+    my $punct    = "\x{00E2}\x{20AC}";              # e2 80 xx — dashes, curly
+                                                    # quotes, ellipsis, bullet
+    my $latin1   = "\x{00C2}[\x{00A0}-\x{00BF}]";   # c2 xx — ·, ©, °, ±, «, »,
+                                                    # ¡, ¿, non-breaking space
+    my $accented = "\x{00C3}[\x{00A0}-\x{00BF}]";   # c3 xx — é, ü, ñ, à…
 
     my @files;
     File::Find::find(
@@ -1644,14 +1660,15 @@ sub check_no_mojibake {
         my $rel = File::Spec->abs2rel( $path, $root );
         $rel =~ tr{\\}{/};
 
-        # This file names the signatures in order to look for them.
-        next if $rel eq 'scripts/contract-tests.pl';
-
+        # No file is skipped, this one included — see the note above on why the
+        # self-skip that used to be here was a blind spot rather than a
+        # convenience. It holds because the signatures are written as \x{}
+        # escapes, so this source does not contain the sequences it looks for.
         open( my $fh, '<:encoding(UTF-8)', $path ) or next;
         my $line = 0;
         while ( my $text = <$fh> ) {
             $line++;
-            next unless $text =~ /$lead|$accented/;
+            next unless $text =~ /$punct|$latin1|$accented/;
 
             $text =~ s/\s+/ /g;
             $text =~ s/^\s+|\s+$//g;
