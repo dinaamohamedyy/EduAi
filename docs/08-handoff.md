@@ -122,6 +122,47 @@ reason to check the assertion first when something goes red — and never a reas
 to conclude the code is fine. Prove the assertion can see the thing at all, then
 decide which side broke.
 
+**A shared working tree has no safe commit, only disclosure.** Every session
+edits the same files and stages into the same index. `git commit <paths>` looks
+like the answer and is not: it commits *whole files*, so when two sessions are in
+one file it takes the other's hunks too. On 11 Aug that happened twice in
+opposite directions within two hours, in `design/preview.html`, and neither time
+was anyone careless — the tooling did exactly what it documents.
+
+Three rules came out of it, in increasing order of how much they cost to learn:
+
+- Run `git diff --numstat --ignore-all-space` **as its own step, read it, then
+  decide**. Chained after the commit with `&&` it prints and commits regardless:
+  ee12d0e claims numstat showed "only this cut" while carrying 114 unread lines.
+- **Never `git commit --amend` in this tree.** An amend that passed
+  `HEAD ==` and clean-status checks at read time rewrote a *different session's
+  commit* that landed in between, destroying its message. Recovered from
+  `reflog HEAD@{1}`. A HEAD guard shrinks the race; it cannot close it.
+- Fix history the no-rewrite way. `git notes add` on the offending commit, which
+  is why `git notes show ee12d0e` carries the correction rather than the message
+  being rewritten.
+
+### The mock, and what ee12d0e actually contains
+
+`design/preview.html` is the static design mock. It is **not** the product, and
+Vercel serves it — which is why deploying there produced "the models don't work,
+it's the old version, and who is Youssef". Vercel cannot host WordPress at all
+(docs/03 §"Why not Vercel"); that page has no server, no database, and
+deliberately no API key.
+
+On 11 Aug the owner ruled that the mock must describe what shipped. That work —
+the PrepareME-shaped quiz history, the `s-profile` screen mirroring
+`page-templates/profile.php`, the `.profile__*` CSS port, the dashboard CTAs
+rewired from `home` to their real tabs, the Youssef removal, and the permanent
+sign-in error notice that made the page look broken on every load — was authored
+in the main session but is **committed under ee12d0e, whose title is about
+cutting a chart**. `git notes show ee12d0e` records this; so does this paragraph,
+because a note is easy to miss.
+
+`preview-route-targets` in the contract suite exists because of the same
+incident: a button pointing at a screen that did not exist yet blanks the page
+silently, and that shipped briefly into the synced copy.
+
 ---
 
 ## 5. Running the checks
