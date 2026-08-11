@@ -2715,6 +2715,11 @@ if(demoFail){
    demoFail.textContent='Show the failed sign-in state';
    return;
   }
+  // role="status" is LOAD-BEARING beyond accessibility: demo-notice-wording
+  // (contract-tests.pl) anchors on it to compare this sentence against
+  // scholaris_auth_notices() in inc/auth.php. Drop it and the check reports
+  // "found 0" rather than silently passing — but drop it knowingly, not as a
+  // tidy-up. The wording below must stay verbatim-production for that check.
   host.innerHTML='<p class="notice notice--error" role="status">That password is not right for this account. Try again, or <a href="#" data-go="forgot">reset it</a>.</p>';
   var l=host.querySelector('[data-go]');
   if(l) l.onclick=function(e){e.preventDefault();go('forgot');};
