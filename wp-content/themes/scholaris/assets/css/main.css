@@ -710,10 +710,20 @@ body.admin-bar .auth {
 .auth__card > p.text-muted { margin-bottom: var(--space-m); }
 .auth__form .field + .field { margin-top: var(--space-s); }
 .auth__form .btn { margin-top: var(--space-m); }
+/* Two different shapes share this row. In the auth cards it is a checkbox
+   opposite a link, where space-between IS the layout. In profile.php it wraps
+   a PAIR OF FIELDS (first/last name, new password/repeat) — and there
+   space-between held each input at its natural width and pushed the two to
+   opposite edges of the row with a void between them. So: fields share the
+   row and stack when it gets tight; the checkbox row is untouched. */
 .auth__row {
   display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-s); margin-top: var(--space-s);
 }
+/* min-width:0 because a flex item's default min-width:auto is the input's
+   intrinsic size, which would refuse to shrink before the row wraps. */
+.auth__row > .field { flex: 1 1 14rem; min-width: 0; }
 .auth__link { font-size: var(--step--1); font-weight: 600; color: hsl(var(--brand)); text-decoration: none; }
 .auth__link:hover { text-decoration: underline; }
 .auth__alt {
@@ -738,6 +748,13 @@ body.admin-bar .auth {
 }
 .breadcrumbs a { color: hsl(var(--text-muted)); text-decoration: none; }
 .breadcrumbs a:hover { color: hsl(var(--brand)); }
+/* Rendered only when the page carries a manual excerpt (page.php). 60ch is a
+   measure limit, not a layout width — the wrap already bounds the line box. */
+.page-hero__lede {
+  max-width: 60ch;
+  margin-top: var(--space-2xs);
+  color: hsl(var(--text-muted));
+}
 
 .entry-content > * + * { margin-top: var(--space-s); }
 .entry-content h2 { margin-top: var(--space-l); }

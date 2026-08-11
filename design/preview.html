@@ -333,7 +333,11 @@ box-shadow:0 0 0 3px hsl(var(--accent)/.22)}
 .dhead{display:flex;flex-wrap:wrap;align-items:center;gap:1rem;padding:1.5rem;
 background:hsl(var(--surface));border:1px solid hsl(var(--border));
 border-left:3px solid hsl(var(--accent));border-radius:var(--r-s);margin-bottom:2rem}
-.dhead h1{margin:0 0 .1rem;font-size:1.5rem}.dhead p{margin:0;color:hsl(var(--text-muted));font-size:.92rem}
+/* h2, not h1: the shipped dashboard puts "Welcome back, {name}" in the
+   shortcode's own head (templates/dashboard.php) BENEATH the page hero's h1,
+   which the_title() renders as "My Progress". The mock had the greeting at h1
+   and no hero at all, so it disagreed with the product on both. */
+.dhead h2{margin:0 0 .1rem;font-size:1.5rem}.dhead p{margin:0;color:hsl(var(--text-muted));font-size:.92rem}
 .dav{width:56px;height:56px;border-radius:var(--r-m);display:grid;place-items:center;
 color:hsl(var(--on-brand));font-family:var(--font-display);font-weight:600;font-size:1.3rem;
 background:hsl(var(--brand));box-shadow:inset 0 0 0 1px hsl(var(--on-brand)/.14)}
@@ -343,7 +347,10 @@ background:hsl(var(--brand));box-shadow:inset 0 0 0 1px hsl(var(--on-brand)/.14)
    rather than inventing a preview-only shape, so this screen demonstrates the
    real thing. Token names are translated: the theme's --space-* is --s-* here,
    and its --step-* type scale has no equivalent, so those become rem values. */
-.profile{display:grid;gap:var(--s-l)}
+/* 760px matches the theme's --wrap-narrow: profile.php puts this content in
+   `wrap wrap--narrow`, and the mock was rendering it at the full wrap, so the
+   same form measured ~460px wider here than it does on the site. */
+.profile{display:grid;gap:var(--s-l);max-width:760px;margin-inline:auto}
 .profile__head{display:flex;align-items:center;gap:var(--s-m);flex-wrap:wrap;
 padding-bottom:var(--s-m);border-bottom:1px solid hsl(var(--border))}
 .profile__avatar{border-radius:50%;flex:none;width:88px;height:88px;display:grid;place-items:center;
@@ -443,7 +450,12 @@ border:1px solid hsl(var(--border-strong));border-radius:var(--r-s)}
 .field input:focus{outline:none;border-color:hsl(var(--accent));box-shadow:0 0 0 3px hsl(var(--accent)/.3)}
 .check{display:inline-flex;align-items:center;gap:.5rem;font-weight:500;font-size:.88rem;cursor:pointer}
 .check input{accent-color:hsl(var(--brand))}
-.auth__row{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:.2rem 0 1.2rem}
+/* space-between is the layout for the auth cards' checkbox-opposite-link row,
+   but this row also holds FIELD PAIRS on the profile screen, where it left the
+   two inputs at natural width against opposite edges. Fields share the row and
+   stack when tight; the checkbox row keeps its behaviour. */
+.auth__row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin:.2rem 0 1.2rem}
+.auth__row>.field{flex:1 1 14rem;min-width:0}
 .auth__link{font-size:.85rem;font-weight:600;color:hsl(var(--brand));text-decoration:none;cursor:pointer}
 .auth__link:hover{text-decoration:underline}
 .auth__alt{margin:1.5rem 0 0;padding-top:1rem;border-top:1px solid hsl(var(--border));font-size:.88rem;color:hsl(var(--text-muted))}
@@ -787,7 +799,7 @@ color:hsl(var(--text-muted));font-weight:600}
 <div class="screen" id="s-summarise">
   <div class="pagehero"><div class="wrap">
     <p class="crumbs">Home / Summarise</p>
-    <h1 class="mb0">Summarise a lecture</h1>
+    <h1 class="mb0">Summarise</h1>
     <p class="muted mt-m mb0">Upload a PDF, PowerPoint, Word or text file â€” or paste the text â€” and get study notes in the style you need.</p>
   </div></div>
   <div class="wrap section">
@@ -946,10 +958,21 @@ color:hsl(var(--text-muted));font-weight:600}
 </div>
 <!-- ======================== DASHBOARD ======================== -->
 <div class="screen" id="s-dashboard">
+  <!-- The hero every other screen has, and which page.php renders on every
+       live page from the_title(). The two account screens were built without
+       it, which is why their in-page heads had drifted up to h1. -->
+  <div class="pagehero"><div class="wrap">
+    <p class="crumbs">Home / My Progress</p>
+    <h1 class="mb0">My Progress</h1>
+  </div></div>
   <div class="wrap section">
     <div class="dhead">
       <div class="dav" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
-      <div><h1>Welcome back</h1><p>Here is where you stand, and what is new in the library.</p></div>
+      <!-- The product interpolates the display name here ("Welcome back, %s",
+           templates/dashboard.php); "student" is what a fresh account with that
+           username renders, so the mock shows the shape without inventing a
+           person. -->
+      <div><h2>Welcome back, student</h2><p>Here is where you stand, and what is new in the library.</p></div>
       <!-- These two used to both go to "home". The shipped dashboard sends them
            to eduai_ask_url() and eduai_summarise_url() — their own tabs. -->
       <div class="dact">
@@ -992,13 +1015,24 @@ color:hsl(var(--text-muted));font-weight:600}
      (current_user_can('list_users')); it is shown here because the demo has no
      roles to gate on, and it is labelled so nobody reads it as student-facing. -->
 <div class="screen" id="s-profile">
+  <!-- Same hero the live profile page renders (page-templates/profile.php).
+       "Your account" rather than "Profile" so the destination confirms the
+       header control that reaches it — this screen has no nav tab, so nothing
+       geometric pins the title short the way it does the seven tabs. -->
+  <div class="pagehero"><div class="wrap">
+    <p class="crumbs">Home / Your account</p>
+    <h1 class="mb0">Your account</h1>
+  </div></div>
   <div class="wrap section">
     <div class="profile">
 
       <header class="profile__head">
         <div class="profile__avatar" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
         <div>
-          <h2 class="profile__name">Your account</h2>
+          <!-- display_name, not a page label: profile.php renders the account
+               holder's name in this slot. It said "Your account", which no
+               live account can ever show. -->
+          <h2 class="profile__name">student</h2>
           <p class="profile__mail">student@university.edu</p>
           <p class="profile__since">Member since 4 February 2026</p>
         </div>
