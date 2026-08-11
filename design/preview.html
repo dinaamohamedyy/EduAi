@@ -906,8 +906,8 @@ color:hsl(var(--text-muted));font-weight:600}
 <div class="screen" id="s-dashboard">
   <div class="wrap section">
     <div class="dhead">
-      <div class="dav">YZ</div>
-      <div><h1>Welcome back, Youssef</h1><p>Here is where you stand, and what is new in the library.</p></div>
+      <div class="dav" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+      <div><h1>Welcome back</h1><p>Here is where you stand, and what is new in the library.</p></div>
       <div class="dact">
         <button class="btn btn--primary" data-go="home">Ask the assistant</button>
         <button class="btn btn--ghost" data-go="home">Summarise a lecture</button>
@@ -917,10 +917,12 @@ color:hsl(var(--text-muted));font-weight:600}
     <h3 style="margin:0 0 1rem">Quiz history</h3>
 
     <div class="stats">
-      <div class="stat"><span class="stat__l">Average score</span><span class="stat__v">78.4%</span><span class="stat__n up">+6.2% vs earlier attempts</span></div>
+      <!-- Figures agree with the ROWS table below — 5 papers averaging 75, best 94.
+           A "Passed" tile used to sit here and has been dropped: the product has no
+           pass mark, so it was reporting on a concept the site does not implement. -->
+      <div class="stat"><span class="stat__l">Papers sat</span><span class="stat__v">5</span><span class="stat__n">generated from your own lectures</span></div>
+      <div class="stat"><span class="stat__l">Average score</span><span class="stat__v">75%</span><span class="stat__n up">+6.2% vs earlier attempts</span></div>
       <div class="stat"><span class="stat__l">Best score</span><span class="stat__v">94%</span><span class="stat__n">personal record</span></div>
-      <div class="stat"><span class="stat__l">Attempts</span><span class="stat__v">11</span><span class="stat__n">across 6 quizzes</span></div>
-      <div class="stat"><span class="stat__l">Passed</span><span class="stat__v">8/11</span><span class="stat__n">attempts at or above the pass mark</span></div>
     </div>
 
     <figure class="chartbox" style="margin:0 0 1.5rem">
@@ -941,7 +943,7 @@ color:hsl(var(--text-muted));font-weight:600}
 
     <div class="tw">
       <table>
-        <thead><tr><th>Quiz</th><th>Score</th><th>Result</th><th>Answered</th><th>Time</th><th>Date</th><th></th></tr></thead>
+        <thead><tr><th>Paper</th><th>Score</th><th>Result</th><th>Date</th><th></th></tr></thead>
         <tbody id="qrows"></tbody>
       </table>
     </div>
@@ -971,10 +973,9 @@ color:hsl(var(--text-muted));font-weight:600}
         <span class="eyebrow">Welcome back</span>
         <h1>Sign in</h1>
         <p class="lede">Pick up where you left off — your library, quiz history and assistant are waiting.</p>
-        <p class="notice notice--error" role="status">That password is not right for this account. Try again, or <a href="#" data-go="forgot">reset it</a>.</p>
         <div class="field">
           <label for="li-user">Username or e-mail</label>
-          <input id="li-user" type="text" autocomplete="username" value="youssef">
+          <input id="li-user" type="text" autocomplete="username" placeholder="you@university.edu">
         </div>
         <div class="field">
           <label for="li-pass">Password</label>
@@ -1223,22 +1224,29 @@ document.getElementById('libcards').innerHTML=cards(DOCS);
 document.querySelectorAll('[data-go]').forEach(function(b){b.onclick=function(e){e.preventDefault();go(b.dataset.go);};});
 
 /* ---------- quiz rows ---------- */
+/* Papers PrepareME wrote from an uploaded lecture, newest first:
+   [title, the file it came from, percent, marks awarded, marks available, when].
+   The tone is DERIVED from the percent below rather than stored, at the same
+   70/40 thresholds the marking screen uses — the product has no pass mark, so a
+   stored pass/fail here would be inventing a concept the site does not have. */
 var ROWS=[
- ['Fourier Series — quiz 2','Applied Mathematics II',94,'17/18','12m','2 Apr 2026','pass'],
- ['Complexity classes','Data Structures',88,'22/25','18m','29 Mar 2026','pass'],
- ['Second Law problems','Thermodynamics',72,'13/18','21m','24 Mar 2026','pass'],
- ['Cell respiration','Cell Biology',55,'11/20','16m','19 Mar 2026','fail'],
- ['Limits and Continuity','Applied Mathematics I',66,'10/15','14m','12 Mar 2026','mid']
+ ['Fourier Series Practice Exam','Fourier-Series-L7.pptx',94,17,18,'2 Apr 2026'],
+ ['Complexity Classes Practice Exam','Complexity-Classes.pdf',88,22,25,'29 Mar 2026'],
+ ['Second Law Practice Exam','Thermodynamics-L4.pptx',72,13,18,'24 Mar 2026'],
+ ['Cell Respiration Practice Exam','Cell-Respiration.pdf',55,11,20,'19 Mar 2026'],
+ ['Limits and Continuity Practice Exam','Limits-Continuity-L2.pptx',66,10,15,'12 Mar 2026']
 ];
 document.getElementById('qrows').innerHTML=ROWS.map(function(r){
- var badge = r[6]==='pass' ? '<span class="badge badge--pass">Passed</span>'
-           : r[6]==='fail' ? '<span class="badge badge--fail">Not passed</span>'
-           : '<span class="badge badge--warn">Awaiting review</span>';
- return '<tr><th><span class="qt">'+r[0]+'</span><span class="qc">'+r[1]+'</span></th>'+
-  '<td class="num"><div class="score"><strong>'+r[2]+'%</strong>'+
-  '<span class="meter" data-t="'+r[6]+'"><span style="width:'+r[2]+'%"></span></span></div>'+
-  '<span class="marks">'+Math.round(r[2]*0.2)+' of 20 marks</span></td>'+
-  '<td>'+badge+'</td><td class="num">'+r[3]+'</td><td class="num">'+r[4]+'</td>'+
+ var pct = r[2];
+ /* Same thresholds as .eduai-prog__score in the shipped product. */
+ var tone  = pct >= 70 ? 'pass'   : pct >= 40 ? 'mid'     : 'fail';
+ var label = pct >= 70 ? 'Strong' : pct >= 40 ? 'Partial' : 'Needs work';
+ var cls   = pct >= 70 ? 'badge--pass' : pct >= 40 ? 'badge--warn' : 'badge--fail';
+ return '<tr><th><span class="qt">'+r[0]+'</span><span class="qc">from '+r[1]+'</span></th>'+
+  '<td class="num"><div class="score"><strong>'+pct+'%</strong>'+
+  '<span class="meter" data-t="'+tone+'"><span style="width:'+pct+'%"></span></span></div>'+
+  '<span class="marks">'+r[3]+' of '+r[4]+' marks</span></td>'+
+  '<td><span class="badge '+cls+'">'+label+'</span></td>'+
   '<td class="num">'+r[5]+'</td><td><a class="btn btn--quiet btn--sm" href="#">Retake</a></td></tr>';
 }).join('');
 
