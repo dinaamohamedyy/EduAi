@@ -239,6 +239,47 @@ done
 $WP menu location assign Primary primary >/dev/null 2>&1 || true
 ok "Menu assigned"
 
+# --------------------------------------------------------------- widgets ---
+say "Emptying the sidebar"
+
+# WordPress populates the FIRST registered sidebar on a fresh install with five
+# stock block widgets — Search, Recent Posts, Recent Comments, Archives,
+# Categories. The theme registers exactly one (`sidebar-1`, functions.php), so
+# they land in ours, and footer.php renders it whenever is_active_sidebar() is
+# true. Nothing in this script ever emptied it.
+#
+# The result was ~800px of WordPress demo content in the footer of EVERY page
+# of the running site: "Recent Posts → Hello world!" and "Recent Comments → A
+# WordPress Commenter on Hello world!", under the real footer, on the home
+# page, the library, the four AI tabs and both auth screens. The design mock
+# has no sidebar anywhere, so this is the single most visible way the site and
+# the mock disagree — and it reads as a broken install rather than a product.
+#
+# Emptying it also makes the `no-sidebar` body class apply for the first time
+# (functions.php's scholaris_body_class adds it when the sidebar is inactive —
+# with stock widgets present it never fired). No stylesheet reads that class
+# today, so nothing moves as a result; it is the hook the front end would use
+# if a sidebar-less layout ever needs its own rules, and it has simply never
+# been reachable on this install.
+#
+# Unconditional on every run, exactly like the Primary menu rebuild above, and
+# for the same reason: this has to converge on sites that were bootstrapped
+# before the fix, not only on fresh ones. It is the safe direction — the theme
+# supports an empty sidebar by design, and `wp widget reset` moves widgets to
+# Inactive Widgets rather than destroying them, so a deliberate widget added
+# later is recoverable from Appearance → Widgets.
+#
+# If this project ever does want a sidebar, add the widgets here rather than in
+# wp-admin, or the next run of this script will sweep them out again.
+$WP widget reset sidebar-1 >/dev/null 2>&1 || true
+
+remaining=$($WP widget list sidebar-1 --format=count 2>/dev/null || echo 0)
+if [ "$remaining" = "0" ]; then
+	ok "sidebar-1 is empty — no stock widgets in the footer"
+else
+	ok "sidebar-1 still holds $remaining widget(s) — check Appearance → Widgets"
+fi
+
 # ------------------------------------------------------------ taxonomies ---
 say "Seeding subjects"
 for subject in "Mathematics" "Physics" "Computer Science" "Biology" "Chemistry"; do
