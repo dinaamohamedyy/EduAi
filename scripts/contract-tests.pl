@@ -68,6 +68,7 @@ my @checks = (
     [ 'admin-bar-pair'         => \&check_admin_bar_pair ],
     [ 'nowrap-asymmetry'       => \&check_nowrap_asymmetry ],
     [ 'preview-route-targets'  => \&check_preview_routes ],
+    [ 'demo-notice-wording'    => \&check_demo_notice_wording ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1415,5 +1416,74 @@ sub check_preview_routes {
         "$PREVIEW has data-go target(s) with no matching screen: "
         . join( ', ', map { qq{"$_" (no #s-$_)} } @dangling )
         . ' — the router hides every screen and shows none, so clicking these blanks the page silently'
+    );
+}
+
+# The mock's demo notice must be the wording production actually shows.
+#
+# design/preview.html was retasked on 11 Aug to describe what shipped, after the
+# owner deployed it and reported the site as broken. Its sign-in card can inject
+# the failed-password state on demand, and that demo is only worth having if the
+# words are the ones a student really sees — a mock that paraphrases is back to
+# describing a product that does not exist, which is the failure it was retasked
+# to stop.
+#
+# The claim "production wording verbatim" was made in prose when the toggle
+# landed and was true then. This is the enforcement, because prose does not stay
+# true through a copy edit on either side.
+#
+# Compared as text, not as markup: the theme carries a printf placeholder
+# (<a href="%s">) and the mock a real target (<a href="#" data-go="forgot">), so
+# tags are stripped from both and whitespace collapsed before comparing. That
+# lets the link markup differ, which it must, while the sentence may not.
+sub check_demo_notice_wording {
+    my $auth = slurp($AUTH);
+    my $mock = slurp($PREVIEW);
+
+    my $strip = sub {
+        my ($s) = @_;
+        $s =~ s/<[^>]*>//g;
+        $s =~ s/\s+/ /g;
+        $s =~ s/^\s+|\s+\z//g;
+        return $s;
+    };
+
+    my ($shipped) = $auth =~ /__\(\s*'(That password[^']*)'/;
+
+    return ('could not find the bad-password notice in ' . $AUTH
+            . ' — this check can no longer see the string it guards')
+        unless defined $shipped;
+
+    # Anchored on role="status", which is what distinguishes the sign-in demo
+    # from the other two notice--error injections in this file (the prepare
+    # screen's "attach a lecture" validation and its generic error). Written
+    # first as a bare class match, it silently compared the prepare screen's
+    # sentence instead and reported drift that did not exist — twice, including
+    # once after an "anchor fix" that still matched the wrong element.
+    #
+    # Ambiguity fails rather than resolving: if more than one injection ever
+    # carries role="status", picking the first is how this check goes back to
+    # being about the wrong object without saying so.
+    my @demos = $mock =~ /innerHTML\s*=\s*'<p class="notice notice--error" role="status">(.*?)<\/p>'/gs;
+
+    return ( 'found ' . scalar(@demos) . " failed-state notices carrying role=\"status\" in $PREVIEW"
+            . ' — this check compares exactly one and cannot choose between them' )
+        if @demos > 1;
+
+    my ($demo) = @demos;
+
+    return ("could not find the injected failed-state notice in $PREVIEW"
+            . ' — either the demo toggle is gone, or this check can no longer see it')
+        unless defined $demo;
+
+    my $want = $strip->($shipped);
+    my $got  = $strip->($demo);
+
+    return () if $want eq $got;
+
+    return (
+        "the mock's failed sign-in demo has drifted from the wording production shows.\n"
+        . "          $AUTH: \"$want\"\n"
+        . "          $PREVIEW: \"$got\""
     );
 }
