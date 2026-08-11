@@ -287,14 +287,8 @@ text-transform:uppercase;color:hsl(var(--text-faint))}
 .stat__v{font-family:var(--font-display);font-size:1.9rem;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
 .stat__n{font-size:.78rem;color:hsl(var(--text-faint))}
 .up{color:hsl(var(--success));font-weight:600}.down{color:hsl(var(--danger));font-weight:600}
-.chartbox{padding:1rem 1.1rem;background:hsl(var(--surface));border:1px solid hsl(var(--border));
-border-radius:var(--r-s);margin-bottom:1.5rem}
-.chartbox figcaption{font-family:var(--font-mono);font-size:.68rem;font-weight:600;letter-spacing:.08em;
-text-transform:uppercase;color:hsl(var(--text-muted));margin-bottom:.6rem}
-.chartbox svg{width:100%;height:110px;overflow:visible}
-.cl{fill:none;stroke:hsl(var(--brand));stroke-width:.8;stroke-linejoin:round;vector-effect:non-scaling-stroke}
-.cd{stroke:hsl(var(--brand));stroke-width:6;stroke-linecap:round;vector-effect:non-scaling-stroke}
-.cp{stroke:hsl(var(--accent)/.6);stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+/* Chart rules removed with the score-trend figure (see the dashboard screen's
+   cut comment) — dead selectors invite someone to resurrect the markup. */
 .tw{overflow-x:auto;border:1px solid hsl(var(--border));border-radius:var(--r-s);background:hsl(var(--surface))}
 table{width:100%;border-collapse:collapse;font-size:.9rem}
 th,td{padding:.8rem 1rem;text-align:left}
@@ -336,6 +330,32 @@ border-left:3px solid hsl(var(--accent));border-radius:var(--r-s);margin-bottom:
 color:hsl(var(--on-brand));font-family:var(--font-display);font-weight:600;font-size:1.3rem;
 background:hsl(var(--brand));box-shadow:inset 0 0 0 1px hsl(var(--on-brand)/.14)}
 .dact{margin-left:auto;display:flex;flex-wrap:wrap;gap:.5rem}
+
+/* profile — mirrors the shipped component in the theme's main.css (.profile__*)
+   rather than inventing a preview-only shape, so this screen demonstrates the
+   real thing. Token names are translated: the theme's --space-* is --s-* here,
+   and its --step-* type scale has no equivalent, so those become rem values. */
+.profile{display:grid;gap:var(--s-l)}
+.profile__head{display:flex;align-items:center;gap:var(--s-m);flex-wrap:wrap;
+padding-bottom:var(--s-m);border-bottom:1px solid hsl(var(--border))}
+.profile__avatar{border-radius:50%;flex:none;width:88px;height:88px;display:grid;place-items:center;
+background:hsl(var(--brand));color:hsl(var(--on-brand))}
+.profile__name{margin:0;font-size:1.4rem}
+.profile__mail{margin:2px 0 0;color:hsl(var(--text-muted))}
+.profile__since{margin:2px 0 0;color:hsl(var(--text-muted));font-size:.82rem}
+.profile__section{display:grid;gap:var(--s-s)}
+.profile__section h3{margin:0;font-size:1.1rem}
+.profile__section--quiet{border-top:1px solid hsl(var(--border));padding-top:var(--s-m)}
+.profile__section--quiet p{margin:0;display:flex;gap:var(--s-2xs);flex-wrap:wrap}
+.profile__stats{display:flex;flex-wrap:wrap;gap:var(--s-s)}
+.profile__stat{flex:1 1 6rem;display:grid;gap:2px;padding:var(--s-s);
+background:hsl(var(--surface));border:1px solid hsl(var(--border));border-radius:var(--r-s)}
+.profile__statnum{font-family:var(--font-display);font-size:1.4rem;font-weight:600;line-height:1.1}
+.profile__statlabel{font-size:.82rem;color:hsl(var(--text-muted))}
+.profile__actions{margin:0;display:flex;gap:var(--s-2xs);flex-wrap:wrap}
+/* Disabled inputs must read as "not editable", not as "broken". */
+.profile .field input:disabled{background:hsl(var(--bg-sunken));color:hsl(var(--text-muted));
+cursor:not-allowed}
 
 /* single material */
 .single{display:grid;gap:2rem;align-items:start}
@@ -908,9 +928,12 @@ color:hsl(var(--text-muted));font-weight:600}
     <div class="dhead">
       <div class="dav" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
       <div><h1>Welcome back</h1><p>Here is where you stand, and what is new in the library.</p></div>
+      <!-- These two used to both go to "home". The shipped dashboard sends them
+           to eduai_ask_url() and eduai_summarise_url() — their own tabs. -->
       <div class="dact">
-        <button class="btn btn--primary" data-go="home">Ask the assistant</button>
-        <button class="btn btn--ghost" data-go="home">Summarise a lecture</button>
+        <button class="btn btn--primary" data-go="qa">Ask the assistant</button>
+        <button class="btn btn--ghost" data-go="summarise">Summarise a lecture</button>
+        <button class="btn btn--quiet" data-go="profile">Your profile</button>
       </div>
     </div>
 
@@ -925,27 +948,89 @@ color:hsl(var(--text-muted));font-weight:600}
       <div class="stat"><span class="stat__l">Best score</span><span class="stat__v">94%</span><span class="stat__n">personal record</span></div>
     </div>
 
-    <figure class="chartbox" style="margin:0 0 1.5rem">
-      <figcaption>Score trend — oldest to most recent</figcaption>
-      <svg viewBox="0 0 100 34" preserveAspectRatio="none" role="img" aria-label="Line chart of quiz scores over time">
-        <line x1="0" y1="13.6" x2="100" y2="13.6" class="cp"></line>
-        <polyline class="cl" points="0,20.4 12.5,17 25,22.1 37.5,13.6 50,15.3 62.5,10.2 75,11.9 87.5,6.8 100,8.2"></polyline>
-        <line class="cd" x1="0" y1="20.4" x2="0" y2="20.4"/><line class="cd" x1="12.5" y1="17" x2="12.5" y2="17"/>
-        <line class="cd" x1="25" y1="22.1" x2="25" y2="22.1"/><line class="cd" x1="37.5" y1="13.6" x2="37.5" y2="13.6"/>
-        <line class="cd" x1="50" y1="15.3" x2="50" y2="15.3"/><line class="cd" x1="62.5" y1="10.2" x2="62.5" y2="10.2"/>
-        <line class="cd" x1="75" y1="11.9" x2="75" y2="11.9"/><line class="cd" x1="87.5" y1="6.8" x2="87.5" y2="6.8"/>
-        <line class="cd" x1="100" y1="8.2" x2="100" y2="8.2"/>
-      </svg>
-      <div style="display:flex;justify-content:space-between;margin-top:.5rem;font-size:.74rem;color:hsl(var(--text-muted))">
-        <span>Limits and Continuity</span><span>Fourier Series — quiz 2</span>
-      </div>
-    </figure>
+    <!-- The score-trend chart was cut here on purpose (owner ruling: the mock
+         tells the truth about what shipped, and the product has no trend
+         view). The CONCEPT is roadmap, not dead — per-band progress over
+         attempts; the submit response already carries bands per attempt.
+         Reference markup: git show 9955c91:design/preview.html -->
 
     <div class="tw">
       <table>
         <thead><tr><th>Paper</th><th>Score</th><th>Result</th><th>Date</th><th></th></tr></thead>
         <tbody id="qrows"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- ========================== PROFILE ==========================
+     Mirrors wp-content/themes/scholaris/page-templates/profile.php section for
+     section, so what is demonstrated here is the component that shipped. The
+     staff link in the last section is capability-gated in the real template
+     (current_user_can('list_users')); it is shown here because the demo has no
+     roles to gate on, and it is labelled so nobody reads it as student-facing. -->
+<div class="screen" id="s-profile">
+  <div class="wrap section">
+    <div class="profile">
+
+      <header class="profile__head">
+        <div class="profile__avatar" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <div>
+          <h2 class="profile__name">Your account</h2>
+          <p class="profile__mail">student@university.edu</p>
+          <p class="profile__since">Member since 4 February 2026</p>
+        </div>
+      </header>
+
+      <section class="profile__section">
+        <h3>Your practice papers</h3>
+        <div class="profile__stats">
+          <div class="profile__stat"><span class="profile__statnum">5</span><span class="profile__statlabel">sat</span></div>
+          <div class="profile__stat"><span class="profile__statnum">75%</span><span class="profile__statlabel">average</span></div>
+          <div class="profile__stat"><span class="profile__statnum">94%</span><span class="profile__statlabel">best</span></div>
+        </div>
+        <p class="profile__actions">
+          <a class="btn btn--primary btn--sm" href="#" data-go="dashboard">See all results</a>
+          <a class="btn btn--ghost btn--sm" href="#" data-go="prepare">Sit a new paper</a>
+        </p>
+      </section>
+
+      <section class="profile__section">
+        <h3>Your details</h3>
+        <form class="auth__form" onsubmit="return false">
+          <div class="auth__row">
+            <div class="field"><label for="pf-first">First name</label><input id="pf-first" type="text" autocomplete="given-name" value=""></div>
+            <div class="field"><label for="pf-last">Last name</label><input id="pf-last" type="text" autocomplete="family-name" value=""></div>
+          </div>
+          <div class="field"><label for="pf-mail">E-mail</label><input id="pf-mail" type="email" autocomplete="email" required value="student@university.edu"></div>
+          <div class="field">
+            <label for="pf-user">Username</label>
+            <input id="pf-user" type="text" value="student" disabled>
+            <p class="field__hint">Usernames cannot be changed.</p>
+          </div>
+          <button type="submit" class="btn btn--primary">Save details</button>
+        </form>
+      </section>
+
+      <section class="profile__section">
+        <h3>Change password</h3>
+        <form class="auth__form" onsubmit="return false">
+          <div class="field"><label for="pf-cur">Current password</label><input id="pf-cur" type="password" autocomplete="current-password" required></div>
+          <div class="auth__row">
+            <div class="field"><label for="pf-new">New password</label><input id="pf-new" type="password" autocomplete="new-password" required minlength="8"></div>
+            <div class="field"><label for="pf-new2">Repeat new password</label><input id="pf-new2" type="password" autocomplete="new-password" required minlength="8"></div>
+          </div>
+          <button type="submit" class="btn btn--primary">Change password</button>
+        </form>
+      </section>
+
+      <section class="profile__section profile__section--quiet">
+        <p>
+          <a class="btn btn--ghost btn--sm" href="#" data-go="home">Sign out</a>
+          <a class="btn btn--quiet btn--sm" href="#" data-go="dashboard">Student progress (staff)</a>
+        </p>
+      </section>
+
     </div>
   </div>
 </div>
@@ -975,7 +1060,10 @@ color:hsl(var(--text-muted));font-weight:600}
         <p class="lede">Pick up where you left off — your library, quiz history and assistant are waiting.</p>
         <div class="field">
           <label for="li-user">Username or e-mail</label>
-          <input id="li-user" type="text" autocomplete="username" placeholder="you@university.edu">
+          <!-- Prefilled to demonstrate the post-bounce refill state: a failed
+               sign-in returns the username so it need not be retyped.
+               "student" names nobody. -->
+          <input id="li-user" type="text" autocomplete="username" value="student">
         </div>
         <div class="field">
           <label for="li-pass">Password</label>
