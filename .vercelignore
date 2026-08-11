@@ -30,10 +30,21 @@
 # rather than deleted.
 
 # --- Live keys. The reason this file exists. Never remove these. ---
-.env
-.env.*
-preview.html
-preview*.html
+#
+# ANCHORED WITH A LEADING SLASH, and that is load-bearing. These patterns match
+# the way .gitignore does: without a leading slash, a pattern matches the
+# basename at ANY depth, so a bare `preview.html` also deletes
+# design/preview.html — the key-free copy the build reads. That is exactly what
+# happened on 11 Aug 2026: the build failed with "design/preview.html not
+# found" while this file appeared to name only the root copy.
+#
+# .gitignore in this repo anchors these for the same reason and says so. Keep
+# the two consistent: root copy excluded, design/ copy untouched.
+/.env
+/.env.*
+/preview.html
+/preview*.html
+/preview.html.*
 *.key
 *.pem
 
