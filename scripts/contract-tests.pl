@@ -6,6 +6,7 @@ use warnings;
 # gets encoded twice and prints as "â".
 use utf8;
 use File::Basename qw(dirname);
+use File::Find ();
 use File::Spec;
 use JSON::PP ();
 
@@ -71,6 +72,7 @@ my @checks = (
     [ 'demo-notice-wording'    => \&check_demo_notice_wording ],
     [ 'gated-screens-pinned'   => \&check_gated_screens ],
     [ 'hidden-attribute-works' => \&check_hidden_attribute ],
+    [ 'no-mojibake'            => \&check_no_mojibake ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1571,4 +1573,95 @@ sub check_hidden_attribute {
         . ' — the hidden attribute is only a UA-stylesheet rule and any author display rule outranks it,'
         . ' so hidden elements will render'
     );
+}
+
+# Corrupt text encoding, swept across every source file that carries copy.
+#
+# WHY THIS EXISTS. design/preview.html shipped a double-encoded em dash in the
+# summarise and calc ledes — the bytes c3 a2 e2 82 ac e2 80 9d where U+2014 (e2
+# 80 94) belongs, which is what happens when UTF-8 is read as Windows-1252 and
+# written back out as UTF-8. On a page declaring utf-8 that renders as three
+# stray glyphs. It was on the deployed Vercel mock and none of the other 23
+# checks looked for it: every one of them asserts that something correct is
+# PRESENT, and corruption is a wrong value in a field that is present and
+# populated, so it sails through.
+#
+# It also came within one copy-paste of reaching the live site — that mock copy
+# was the source for setup.sh's page ledes, and lifting the two strings verbatim
+# would have written the corruption into the database.
+#
+# THE SIGNATURES. Double-encoding is mechanical, so its output is a small fixed
+# set rather than arbitrary noise. Every UTF-8 sequence starting e2 80 (the
+# General Punctuation block — em dash, en dash, curly quotes, ellipsis, bullet)
+# becomes U+00E2 U+20AC followed by one more character. Those two together are
+# the signature, and they are effectively impossible in real prose: "â" is only
+# ever followed by a letter in a language that uses it, never by a currency
+# sign. That block is where this class of bug actually lives, because those are
+# the characters a writer pastes out of a word processor.
+#
+# The c3-lead family (accented letters: é becomes Ã©, ü becomes Ã¼) is caught
+# too, but only when the "Ã" is followed by punctuation or a symbol rather than
+# a letter — "Ã" is a real letter in Portuguese and Vietnamese, and flagging it
+# unconditionally would make this check something people learn to ignore.
+#
+# WRITTEN AS \x{} ESCAPES, DELIBERATELY. Spelling the signatures out as literal
+# characters would put them in this file, and a scanner that matches its own
+# source is a scanner that cries wolf on every run. setup.sh's lede comment is
+# written the same way and for the same reason.
+sub check_no_mojibake {
+    my @problems;
+
+    my $lead     = "\x{00E2}\x{20AC}";              # e2 80 xx, double-encoded
+    my $accented = "\x{00C3}[\x{00A0}-\x{00BF}]";   # c3 xx, double-encoded
+
+    my @files;
+    File::Find::find(
+        {
+            no_chdir => 1,
+            wanted   => sub {
+                my $p = $File::Find::name;
+
+                # dist/ is build output, rebuilt from design/preview.html on
+                # every run — flagging it would report the same defect twice
+                # and point at the copy nobody edits.
+                if ( -d $p && $p =~ m{/(?:\.git|node_modules|dist|vendor)$} ) {
+                    $File::Find::prune = 1;
+                    return;
+                }
+
+                return unless -f $p;
+                return unless $p =~ /\.(?:php|html|css|js|mjs|sh|pl|md|json)$/;
+                push @files, $p;
+            },
+        },
+        $root
+    );
+
+    for my $path ( sort @files ) {
+        # abs2rel + tr rather than a hand-rolled prefix strip: the separator is
+        # a backslash on this project's Windows boxes and a slash in CI, and
+        # every report below is compared against a slash-form path.
+        my $rel = File::Spec->abs2rel( $path, $root );
+        $rel =~ tr{\\}{/};
+
+        # This file names the signatures in order to look for them.
+        next if $rel eq 'scripts/contract-tests.pl';
+
+        open( my $fh, '<:encoding(UTF-8)', $path ) or next;
+        my $line = 0;
+        while ( my $text = <$fh> ) {
+            $line++;
+            next unless $text =~ /$lead|$accented/;
+
+            $text =~ s/\s+/ /g;
+            $text =~ s/^\s+|\s+$//g;
+            $text = substr( $text, 0, 90 ) . '…' if length($text) > 90;
+
+            push @problems,
+                "$rel:$line has double-encoded UTF-8 (text read as Windows-1252 and re-encoded): $text";
+        }
+        close($fh);
+    }
+
+    return @problems;
 }
