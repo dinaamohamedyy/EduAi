@@ -1,0 +1,50 @@
+{
+  "name": "EduAi — the real site",
+
+  // A plain Ubuntu box with Docker inside it, because the site is the compose
+  // stack: WordPress, MariaDB and Mailpit. This is deliberately NOT a PHP
+  // devcontainer serving the theme directly — that would be a different thing
+  // running the same files, and the point here is to run what actually ships.
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+
+  // 2 cores keeps a Codespace inside the free monthly allowance for roughly
+  // twice as long as 4 would, and the stack does not need more.
+  "hostRequirements": { "cpus": 2, "memory": "8gb" },
+
+  "forwardPorts": [8080, 8025],
+  "portsAttributes": {
+    "8080": {
+      "label": "EduAi (the site)",
+      "onAutoForward": "openBrowser",
+      // Public so a supervisor or a student can open the link without a GitHub
+      // account. If the organisation forbids public ports this line is ignored
+      // rather than failing, and the port stays private — boot.sh prints how to
+      // change it by hand, because a link that silently 404s for everyone else
+      // is the worst version of this.
+      "visibility": "public"
+    },
+    "8025": { "label": "Mail (password resets)" }
+  },
+
+  // onCreateCommand runs once when the Codespace is built; postAttachCommand
+  // runs every time it is reconnected after an idle stop. The stack has
+  // restart: unless-stopped, so containers come back on their own — but the
+  // hostname changes on a rebuild, so the address is re-derived and re-applied.
+  "onCreateCommand": "bash .devcontainer/boot.sh",
+  "postAttachCommand": "bash .devcontainer/boot.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["bmewburn.vscode-intelephense-client"]
+    }
+  },
+
+  // The API key is never in this file and never in the repository. It reaches
+  // the container from a Codespaces secret of the same name.
+  "remoteEnv": {
+    "GROQ_API_KEY": "${localEnv:GROQ_API_KEY}"
+  }
+}

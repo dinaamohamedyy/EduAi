@@ -1,0 +1,62 @@
+# Codespaces overlay. Applied on top of docker-compose.yml, never instead of it:
+#
+#   docker compose -f docker-compose.yml -f .devcontainer/compose.codespaces.yml up -d
+#
+# Kept separate rather than folded into the main file because local development
+# must stay exactly as it was — every value here is inert or absent on a laptop.
+#
+# Two things change in a Codespace, and both break WordPress if ignored.
+#
+# 1. THE SITE IS NOT ON localhost. It is served from
+#    https://<codespace>-8080.app.github.dev. WordPress stores its own address
+#    in the database, so without WP_HOME/WP_SITEURL it emits localhost:8080
+#    links into a page loaded from github.dev — every asset 404s and every
+#    redirect leaves the site.
+#
+# 2. TLS TERMINATES AT GITHUB'S PROXY. The browser speaks HTTPS; Apache in this
+#    container is spoken to over plain HTTP. WordPress therefore believes the
+#    request was insecure, generates http:// URLs for an https:// page, and
+#    is_ssl() stays false. The result is mixed content and, once WordPress tries
+#    to canonicalise, a redirect loop. The X-Forwarded-Proto shim below is what
+#    stops that, and it is the single most important line in this file.
+
+services:
+  wordpress:
+    environment:
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'EDUAI_ZAI_API_KEY', getenv('ZAI_API_KEY') ?: '' );
+        define( 'EDUAI_ANTHROPIC_API_KEY', getenv('ANTHROPIC_API_KEY') ?: '' );
+        define( 'EDUAI_GROQ_API_KEY', getenv('GROQ_API_KEY') ?: '' );
+        define( 'SCHOLARIS_DEV_SMTP', getenv('DEV_SMTP') ?: 'mailpit:1025' );
+        define( 'SCHOLARIS_DEV_SMTP_TIMEOUT', (int) ( getenv('DEV_SMTP_TIMEOUT') ?: 10 ) );
+        define( 'WP_MEMORY_LIMIT', '256M' );
+        define( 'WP_DEBUG_LOG', true );
+        define( 'WP_DEBUG_DISPLAY', false );
+        define( 'DISALLOW_FILE_EDIT', true );
+
+        /* Behind GitHub's proxy: trust the forwarded scheme, or WordPress
+           serves http:// URLs to an https:// page and then redirect-loops.
+           str_contains handles the list form ("https,http") that appears when
+           more than one proxy is in front — taking the whole header literally
+           is a known way to get this wrong. */
+        /* $$$$ is not a typo. Compose interpolates $$VAR inside this block, so a
+           single $$_SERVER is eaten and wp-config.php receives
+           ['HTTP_X_FORWARDED_PROTO'] — a parse error that takes the whole site
+           down on first boot. Doubling every dollar, including the ones in this
+           comment, is what makes it arrive as PHP. Verified by reading
+           WORDPRESS_CONFIG_EXTRA out of a real container: `docker compose
+           config` re-escapes for round-tripping and cannot answer this. */
+        if ( ! empty( $$_SERVER['HTTP_X_FORWARDED_PROTO'] )
+             && str_contains( $$_SERVER['HTTP_X_FORWARDED_PROTO'], 'https' ) ) {
+          $$_SERVER['HTTPS'] = 'on';
+        }
+
+        /* The address the site is actually reachable at. Set from the
+           environment so the same file works for a laptop and a Codespace, and
+           so a rebuilt Codespace with a new name cannot leave a stale address
+           in the database. */
+        if ( getenv('SITE_URL') ) {
+          define( 'WP_HOME', getenv('SITE_URL') );
+          define( 'WP_SITEURL', getenv('SITE_URL') );
+        }
+      SITE_URL: ${SITE_URL:-}
