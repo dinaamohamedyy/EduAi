@@ -29,6 +29,16 @@
 
 set -euo pipefail
 
+# Vercel's build image sets LANG=en_US.UTF-8 without that locale being
+# installed, so every perl call below emitted six lines of "Setting locale
+# failed... falling back to the standard locale (C)" into the deploy log. The
+# fallback was harmless — output is byte-identical under both, em dash and
+# middle dot in the title included, verified with od — but a build log that
+# cries wolf is how a real warning goes unread later. Ask for C explicitly and
+# the warning has nothing to report.
+export LC_ALL=C
+export LANG=C
+
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 src="$repo/design/preview.html"
 out="$repo/dist/preview-site"
