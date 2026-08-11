@@ -146,6 +146,31 @@ retitle_page() {
 	fi
 }
 
+# The lede under the h1, for the same reason and by the same rule as titles.
+#
+# page.php renders post_excerpt as the page lede when has_excerpt() — the four
+# tool pages are a bare word over a shortcode without it, which is what they
+# shipped as. The excerpt is WordPress's own field for this, so the owner can
+# reword a lede in wp-admin without touching a template.
+#
+# It CANNOT ride along on make_page(): that is create-only and skips any page
+# that already exists, so every installed site — including the owner's — would
+# stay lede-less while a fresh install looked correct. That is the exact shape
+# of the five drift bugs already on the board, and why retitle_page exists as
+# a separate converge-on-every-run setter. This is its sibling.
+#
+# Create-only still governs page BODIES; a lede is ours the way a title is.
+set_lede() {
+	local slug="$1" lede="$2" id current
+	id=$($WP post list --post_type=page --name="$slug" --field=ID | head -1)
+	[ -z "$id" ] && return 0
+	current=$($WP post get "$id" --field=post_excerpt)
+	if [ "$current" != "$lede" ]; then
+		$WP post update "$id" --post_excerpt="$lede" >/dev/null
+		ok "lede set on /$slug/"
+	fi
+}
+
 make_page "Home" "home" "Welcome to $SITE_TITLE."
 make_page "Library" "library" "[scholaris_library per_page=\"12\" filters=\"yes\"]"
 # /dashboard/ belongs to Tutor LMS, which creates it on activation before this
@@ -171,6 +196,26 @@ retitle_page "calc" "AiCalc"
 retitle_page "ask" "Q&A"
 retitle_page "prepare" "PrepareME"
 retitle_page "progress" "My Progress"
+
+# /profile/ is the one page with no nav tab, so nothing pins its title short the
+# way the seven tabs are pinned by the header geometry — and the header control
+# that reaches it says "Your account", which is what the page should answer to.
+retitle_page "profile" "Your account"
+
+# The four tool pages' ledes, lifted from the mock's .pagehero copy so the two
+# surfaces say the same sentence.
+#
+# The em dashes here are real em dashes, U+2014, the three bytes e2 80 94. The
+# mock's summarise and calc ledes carry a double-encoded one instead — the eight
+# bytes c3 a2 e2 82 ac e2 80 9d, which is a UTF-8 em dash decoded as
+# Windows-1252 and re-encoded — so copying those two strings verbatim would have
+# published the corruption onto the live site too. Repaired here; the mock is
+# fixed separately. Named as bytes rather than pasted, so that a scanner looking
+# for the corrupt sequence does not match this explanation of it.
+set_lede "summarise" "Upload a PDF, PowerPoint, Word or text file — or paste the text — and get study notes in the style you need."
+set_lede "calc" "Pure arithmetic is computed exactly, in code, with every step shown. Symbolic and worded problems go to the model — and the answer always says which path it took."
+set_lede "ask" "Ask your material anything. Answers are grounded in the library and cite their sources; off-syllabus maths and science are answered in full."
+set_lede "prepare" "Upload a lecture, sit an exam generated from it, and get it marked with corrections."
 
 # Auth pages. Content stays empty: the theme routes wp_login_url()/
 # wp_registration_url()/wp_lostpassword_url() to these slugs and applies the
