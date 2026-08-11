@@ -8,8 +8,15 @@
  * looks completely fine while every AI feature fails and no password reset ever
  * arrives. That failure is invisible until a student hits it.
  *
- * Upload to the host's web root, open it in a browser, then DELETE IT. It takes
- * no input, writes nothing, and needs no database credentials.
+ * Upload to the host's web root and open it in a browser. It takes no input,
+ * writes nothing, and needs no database credentials.
+ *
+ * It then DELETES ITSELF, so it runs exactly once and a reload returning 404 is
+ * the success case, not a problem — re-upload it if you need to run it again.
+ * If it could not delete itself it says so in place of that, loudly and with
+ * the absolute path, because until it is gone this page publishes the server's
+ * PHP version, extensions and limits to anyone who guesses the URL. See the
+ * note above the unlink at the end of the file for why it works this way.
  *
  * It deliberately does NOT need an API key. Reaching api.groq.com and being
  * told "unauthorized" is proof the network path works — which is the thing
