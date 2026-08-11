@@ -204,10 +204,62 @@ jobs:
             wp-content/plugins/scholaris-library/ \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}/wp-content/plugins/scholaris-library/"
 
+      # The rsync above ships CODE. It ships no CONFIGURATION: no pages, no
+      # student role, no menu, no permalinks, no third-party plugin stack, and
+      # no plugin tables — those are created on activation, and nothing above
+      # activates anything. A server in that state is an unconfigured
+      # WordPress wearing our theme, which is the failure shape this project
+      # keeps producing: something that looks finished and is not. Here it
+      # would land on a live domain.
+      #
+      # So configuration follows the sync in the same job. setup.sh is safe to
+      # re-run — pages are counted by slug before creation, plugins guarded by
+      # `is-installed`, `role create` tolerates an existing role, and option
+      # updates are idempotent.
+      - name: Configure the site over SSH (setup.sh)
+        if: ${{ vars.DEPLOY_METHOD == 'ssh' }}
+        env:
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          REMOTE_PATH: ${{ secrets.REMOTE_PATH }}
+        run: |
+          set -euo pipefail
+          SSH="ssh -o BatchMode=yes -p ${SSH_PORT:-22} -i ~/.ssh/id_ed25519 ${SSH_USER}@${SSH_HOST}"
+
+          if ! $SSH "command -v wp >/dev/null 2>&1"; then
+            echo "::error::wp-cli is not on the server's PATH, so the site cannot be configured. The code is deployed but the site is NOT set up: no pages, no student role, no menu. Install WP-CLI, or run scripts/setup.sh by hand over SSH."
+            exit 1
+          fi
+
+          # WordPress must ALREADY be installed. setup.sh's first branch runs
+          # `wp core install` when it is not, and ADMIN_PASSWORD defaults to
+          # "change-me-now" — that would create an administrator with a
+          # publicly known password on a live domain. Never let CI reach it.
+          if ! $SSH "wp --allow-root --path='${REMOTE_PATH}' core is-installed --skip-plugins --skip-themes"; then
+            echo "::error::No WordPress install at ${REMOTE_PATH}. Refusing to continue: setup.sh would run 'wp core install' with the default admin password. Install WordPress with the host's installer first, then re-run this workflow."
+            exit 1
+          fi
+
+          scp -o BatchMode=yes -P "${SSH_PORT:-22}" -i ~/.ssh/id_ed25519 \
+            scripts/setup.sh "${SSH_USER}@${SSH_HOST}:/tmp/scholaris-setup.sh"
+
+          # SITE_URL is read from the live install rather than guessed, so the
+          # script cannot rewrite the site's own address to a placeholder.
+          $SSH "SITE_URL=\$(wp --allow-root --path='${REMOTE_PATH}' option get siteurl) \
+                WP_PATH='${REMOTE_PATH}' bash /tmp/scholaris-setup.sh" || rc=$?
+          $SSH "rm -f /tmp/scholaris-setup.sh" || true
+          exit "${rc:-0}"
+
       # ------------------------------------------------------------------
       # Option B — FTPS (shared hosting: Hostinger, Namecheap, GoDaddy).
       # Set the repository variable DEPLOY_METHOD to "ftp" and add secrets:
       #   FTP_SERVER, FTP_USERNAME, FTP_PASSWORD
+      #
+      # NOTE: FTPS has no shell, so the setup.sh step above cannot run on this
+      # transport. An FTPS deploy ships code only and the site must be
+      # configured by hand — which is the main reason docs/03 now recommends a
+      # host with SSH.
       # ------------------------------------------------------------------
       - name: Upload over FTPS
         if: ${{ vars.DEPLOY_METHOD == 'ftp' }}
