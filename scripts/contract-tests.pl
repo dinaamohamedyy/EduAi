@@ -67,6 +67,7 @@ my @checks = (
     [ 'nav-breakpoint-parity'  => \&check_nav_breakpoint ],
     [ 'admin-bar-pair'         => \&check_admin_bar_pair ],
     [ 'nowrap-asymmetry'       => \&check_nowrap_asymmetry ],
+    [ 'preview-route-targets'  => \&check_preview_routes ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1373,4 +1374,46 @@ sub check_nowrap_asymmetry {
     }
 
     return @problems;
+}
+
+# Every data-go target must have a screen to land on.
+#
+# The mock's router hides every .screen then shows #s-<target>. A target with no
+# screen therefore hides everything and leaves a blank white page — no error, no
+# console warning, nothing to see. It is the worst kind of broken: silent, and
+# indistinguishable from a slow load.
+#
+# This is not hypothetical. On 11 Aug 2026 a "Your profile" button was committed
+# while the #s-profile screen it pointed at was still mid-flight in another
+# session's edit, and the synced copy carried the button without the screen.
+# Caught by eye that time.
+#
+# Checked on the shippable copy: the root copy is generated from it by
+# sync-preview.pl, so a dangling target here becomes a dangling target there.
+sub check_preview_routes {
+    my $html = slurp($PREVIEW);
+
+    my %screens = map { $_ => 1 } ( $html =~ /id="s-([a-z0-9-]+)"/g );
+    my @targets = ( $html =~ /data-go="([a-z0-9-]+)"/g );
+
+    return ("no screens found in $PREVIEW — this check can no longer see what it guards")
+        unless %screens;
+
+    return ("no data-go targets found in $PREVIEW — this check can no longer see what it guards")
+        unless @targets;
+
+    my ( %seen, @dangling );
+
+    for my $t (@targets) {
+        next if $seen{$t}++;
+        push @dangling, $t unless $screens{$t};
+    }
+
+    return () unless @dangling;
+
+    return (
+        "$PREVIEW has data-go target(s) with no matching screen: "
+        . join( ', ', map { qq{"$_" (no #s-$_)} } @dangling )
+        . ' — the router hides every screen and shows none, so clicking these blanks the page silently'
+    );
 }
