@@ -453,6 +453,13 @@ border-color:hsl(var(--accent)/.35);border-left-color:hsl(var(--accent))}
 .notice a{color:inherit;font-weight:600;text-decoration:underline;
 text-decoration-thickness:1px;text-underline-offset:2px;cursor:pointer}
 .notice a:hover{color:inherit;text-decoration-thickness:2px}
+/* Mock-only demo controls: styled as annotation, not product UI, so nobody
+   reads them as something the live site renders. */
+.demostate{margin:1rem 0 0;font-family:var(--font-mono);font-size:.66rem;line-height:1.6;
+letter-spacing:.02em;color:hsl(var(--text-faint))}
+.demostate button{border:0;background:none;padding:0;font:inherit;color:hsl(var(--brand));
+text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.demostate button:hover{color:hsl(var(--brand-strong))}
 
 /* ===================== 404 ===================== */
 .nf{min-height:56vh;display:grid;place-items:center;text-align:center;padding:3rem 1.5rem}
@@ -1058,6 +1065,11 @@ color:hsl(var(--text-muted));font-weight:600}
         <span class="eyebrow">Welcome back</span>
         <h1>Sign in</h1>
         <p class="lede">Pick up where you left off — your library, quiz history and assistant are waiting.</p>
+        <!-- The failed-state notice is injected on demand (see the demostate
+             control below the card) rather than rendered permanently: a page
+             that always shows an error reads as broken — which was the
+             owner's literal complaint about the old version. -->
+        <div id="li-notice"></div>
         <div class="field">
           <label for="li-user">Username or e-mail</label>
           <!-- Prefilled to demonstrate the post-bounce refill state: a failed
@@ -1075,6 +1087,11 @@ color:hsl(var(--text-muted));font-weight:600}
         </div>
         <button class="btn btn--primary btn--lg" style="width:100%" data-go="dashboard">Sign in</button>
         <p class="auth__alt">New here? <a href="#" data-go="register">Create an account</a></p>
+        <p class="demostate">
+          <button type="button" id="demo-fail">Show the failed sign-in state</button>
+          — mock-only control; the live site renders that notice after a wrong
+          password, with the typed username refilled.
+        </p>
       </form>
     </div>
   </div>
@@ -2684,6 +2701,26 @@ document.getElementById('mic').onclick=function(){
   send();
  },1500);
 };
+
+/* ---------- sign-in failed-state demo ----------
+   On-demand instead of permanent: the always-on error notice made the page
+   read as broken (the owner's literal complaint). The injected copy is the
+   production string from scholaris_auth_notices(), reset link included. */
+var demoFail=document.getElementById('demo-fail');
+if(demoFail){
+ demoFail.onclick=function(){
+  var host=document.getElementById('li-notice');
+  if(host.firstChild){
+   host.innerHTML='';
+   demoFail.textContent='Show the failed sign-in state';
+   return;
+  }
+  host.innerHTML='<p class="notice notice--error" role="status">That password is not right for this account. Try again, or <a href="#" data-go="forgot">reset it</a>.</p>';
+  var l=host.querySelector('[data-go]');
+  if(l) l.onclick=function(e){e.preventDefault();go('forgot');};
+  demoFail.textContent='Hide the failed sign-in state';
+ };
+}
 
 greet();
 </script>
