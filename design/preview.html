@@ -800,7 +800,7 @@ color:hsl(var(--text-muted));font-weight:600}
   <div class="pagehero"><div class="wrap">
     <p class="crumbs">Home / Summarise</p>
     <h1 class="mb0">Summarise</h1>
-    <p class="muted mt-m mb0">Upload a PDF, PowerPoint, Word or text file â€” or paste the text â€” and get study notes in the style you need.</p>
+    <p class="muted mt-m mb0">Upload a PDF, PowerPoint, Word or text file — or paste the text — and get study notes in the style you need.</p>
   </div></div>
   <div class="wrap section">
     <div class="card card--flush" style="max-width:680px;margin-inline:auto">
@@ -834,7 +834,7 @@ color:hsl(var(--text-muted));font-weight:600}
   <div class="pagehero"><div class="wrap">
     <p class="crumbs">Home / AiCalc</p>
     <h1 class="mb0">AiCalc</h1>
-    <p class="muted mt-m mb0">Pure arithmetic is computed exactly, in code, with every step shown. Symbolic and worded problems go to the model â€” and the answer always says which path it took.</p>
+    <p class="muted mt-m mb0">Pure arithmetic is computed exactly, in code, with every step shown. Symbolic and worded problems go to the model — and the answer always says which path it took.</p>
   </div></div>
   <div class="wrap section">
     <div style="max-width:720px;margin-inline:auto">
@@ -2808,9 +2808,15 @@ function setAuth(v){
  if(i) i.hidden = v;
  if(a) a.hidden = !v;
  if(o) o.hidden = !v;
- /* The footer's auth links are for signed-out visitors only. */
- document.querySelectorAll('.ftr__link[data-go="login"], .ftr__link[data-go="register"]')
-  .forEach(function(l){ l.hidden = v; });
+ /* The footer row is deliberately NOT touched here. It looks like product
+    chrome but it is the preview's own screen index — it sits beside a link to
+    the 404 screen, under "Static preview of the EduAi design system". Hiding
+    two of its four entries removed the only way to reach the sign-in and
+    register screens, and left their " · " separators behind as orphans: the
+    signed-in footer measured "· · Reset password · 404".
+    The product's footer does swap (footer.php:40-46, "My progress"/"Sign out"
+    against "Sign in"/"Create an account"), but this row does not represent
+    that section, so hiding entries here bought no truthfulness. */
 }
 
 ['li-submit','reg-submit'].forEach(function(id){

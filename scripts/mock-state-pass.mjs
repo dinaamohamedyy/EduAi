@@ -138,22 +138,30 @@ const INSTALL = `window.__hdr = function () {
   var shown = function (el) {
     return !!el && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
   };
-  var ftr = Array.from(document.querySelectorAll('.ftr__link[data-go="login"], .ftr__link[data-go="register"]'));
+  var row = document.querySelector('.ftr p');
   return {
     flag: signedIn,
     authin: shown(document.getElementById('authin')),
     authacct: shown(document.getElementById('authacct')),
     authout: shown(document.getElementById('authout')),
-    ftrAuthShown: ftr.some(shown),
+    /* The footer row is the preview's screen index, not product chrome, so it
+       does NOT track the session — see the note at setAuth(). Session state
+       used to hide two of its four entries, which orphaned their separators
+       ("· · Reset password · 404"). Asserted as text, because counting the
+       links would have called that footer correct. */
+    ftrLinks: Array.from(document.querySelectorAll('.ftr__link')).filter(shown).length,
+    ftrText: row ? row.innerText.trim() : '',
     onScreen: document.querySelector('.screen.on').id,
   };
 }; true`;
+/* Orphaned or doubled separators: a leading "·", or two with only space between. */
+const ftrIntact = (h) => h.ftrLinks === 4 && !/^\s*·/.test(h.ftrText) && !/·\s*·/.test(h.ftrText);
 
 // Signed out: Sign in shown, account + Sign out gone, footer auth links shown.
 // Signed in: the inverse. Anything else is a header lying about the session.
-const consistent = (h) => h.flag
-  ? (!h.authin && h.authacct && h.authout && !h.ftrAuthShown)
-  : (h.authin && !h.authacct && !h.authout && h.ftrAuthShown);
+const consistent = (h) => (h.flag
+  ? (!h.authin && h.authacct && h.authout)
+  : (h.authin && !h.authacct && !h.authout)) && ftrIntact(h);
 
 const results = [];
 function check(name, pass, detail) {
