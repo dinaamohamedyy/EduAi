@@ -73,6 +73,7 @@ my @checks = (
     [ 'gated-screens-pinned'   => \&check_gated_screens ],
     [ 'hidden-attribute-works' => \&check_hidden_attribute ],
     [ 'no-mojibake'            => \&check_no_mojibake ],
+    [ 'lede-copy-parity'       => \&check_lede_copy ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1707,6 +1708,90 @@ sub check_no_mojibake {
                 "$rel:$line has double-encoded UTF-8 (text read as Windows-1252 and re-encoded): $text";
         }
         close($fh);
+    }
+
+    return @problems;
+}
+
+# The third edge of a three-way sync. The four tool-page ledes exist as copy in
+# TWO places: the mock's page heroes, and setup.sh's set_lede calls that put
+# them in the database. page-drift.php guards setup.sh against the live site,
+# and needs a running stack to do it. Nothing guarded the mock against setup.sh
+# — so editing a lede here would leave setup.sh on the old string, page-drift
+# would stay green because IT still agrees with the database, and the mock
+# would silently diverge from the site. That is the exact drift that produced
+# the three-heading report this all started from.
+#
+# This edge is the cheap one: pure text, no stack, no PHP, no Docker.
+#
+# The screen-id-to-slug map is the part that cannot be derived — the Q&A screen
+# is `qa` in the mock and `ask` on the site, and no amount of parsing reveals
+# that. /progress/ is deliberately absent: its hero is title-only, and the
+# orienting line lives in the dashboard card the shortcode renders beneath it.
+sub check_lede_copy {
+    my %screen_slug = (
+        summarise => 'summarise',
+        calc      => 'calc',
+        qa        => 'ask',
+        prepare   => 'prepare',
+    );
+
+    my $mock  = slurp($PREVIEW);
+    my $setup = slurp('scripts/setup.sh');
+    my @problems;
+
+    my %declared;
+    while ( $setup =~ /^set_lede\s+"([^"]+)"\s+"([^"]*)"/mg ) {
+        $declared{$1} = $2;
+    }
+    return ('scripts/setup.sh declares no set_lede calls — this check would pass vacuously')
+        unless %declared;
+
+    my $normalise = sub { my $s = shift; $s =~ s/\s+/ /g; $s =~ s/^\s+|\s+$//g; return $s; };
+
+    for my $screen ( sort keys %screen_slug ) {
+        my $slug = $screen_slug{$screen};
+
+        # Bound the search to the screen's own block BEFORE looking for its
+        # hero. Anchoring on the id alone is not anchoring: `.*?` from the id to
+        # the next "pagehero" runs straight past the end of the screen, so a
+        # screen that loses its hero silently borrows the next one's. Mutation
+        # -tested — removing calc's hero reported a copy mismatch quoting the
+        # Q&A screen's lede, which is a wrong-object failure wearing the costume
+        # of a real finding. The lookahead stops at the next screen or EOF.
+        my ($block) = $mock =~ /id="s-\Q$screen\E"(.*?)(?=<div class="screen"|\z)/s;
+        unless ( defined $block ) {
+            push @problems, "$PREVIEW has no screen 's-$screen' — this check's subject is gone";
+            next;
+        }
+
+        my ($hero) = $block =~ /<div class="pagehero"><div class="wrap">(.*?)<\/div><\/div>/s;
+        unless ( defined $hero ) {
+            push @problems, "$PREVIEW has no page hero for screen '$screen' — the lede this check compares is gone";
+            next;
+        }
+        my ($copy) = $hero =~ /<p class="muted[^"]*">(.*?)<\/p>/s;
+        unless ( defined $copy ) {
+            push @problems, "$PREVIEW screen '$screen' has a hero but no lede paragraph";
+            next;
+        }
+
+        unless ( exists $declared{$slug} ) {
+            push @problems, "setup.sh has no set_lede for '$slug' but the mock shows a lede on screen '$screen' — that page renders bare";
+            next;
+        }
+
+        my $have = $normalise->($copy);
+        my $want = $normalise->( $declared{$slug} );
+        next if $have eq $want;
+        push @problems, "lede copy differs for '$slug' — mock: \"$have\" / setup.sh: \"$want\"";
+    }
+
+    # The inverse: copy seeded onto the site that the design never showed.
+    my %known = map { $screen_slug{$_} => 1 } keys %screen_slug;
+    for my $slug ( sort keys %declared ) {
+        next if $known{$slug};
+        push @problems, "setup.sh seeds a lede for '$slug' that the mock does not show — the site would say something the design does not";
     }
 
     return @problems;
