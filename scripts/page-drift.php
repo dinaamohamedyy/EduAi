@@ -49,8 +49,22 @@ if ( ! is_readable( $setup ) ) {
 $script = (string) file_get_contents( $setup );
 
 // make_page "Title" "slug" "content", with \" allowed inside any of the three.
+//
+// The gaps are [ \t]+ and not \s+, which matters more than it looks. \s matches
+// a newline, so with an unbounded gap this pattern will happily take its second
+// or third quoted string from a LATER LINE and report it as part of this call —
+// `^` anchors where the match starts and bounds nothing after it. Demonstrated:
+// against `make_page "Q&A" "ask"` followed by a quoted string on the next line,
+// the \s+ form matched and reported that string as /ask/'s expected content.
+// The report would have been confidently, quotably wrong, which is the failure
+// that survives review because the check looks like it is working.
+//
+// (Found by applying the lesson from lede-copy-parity's path four, where
+// anchoring on a screen id and then scanning onward ran past the end of the
+// screen into the next one. Same shape, different file: an anchor is not a
+// bound.)
 preg_match_all(
-	'/^make_page\s+"((?:[^"\\\\]|\\\\.)*)"\s+"((?:[^"\\\\]|\\\\.)*)"\s+"((?:[^"\\\\]|\\\\.)*)"/m',
+	'/^make_page[ \t]+"((?:[^"\\\\]|\\\\.)*)"[ \t]+"((?:[^"\\\\]|\\\\.)*)"[ \t]+"((?:[^"\\\\]|\\\\.)*)"/m',
 	$script,
 	$matches,
 	PREG_SET_ORDER
@@ -134,8 +148,10 @@ foreach ( $matches as $m ) {
  * different one is readable — but the next run of setup.sh will overwrite it,
  * so the warning says so rather than leaving the owner to discover it.
  */
+// [ \t]+ rather than \s+, for the reason given on the make_page pattern above:
+// a newline-crossing gap lets the lede be taken from a different line.
 preg_match_all(
-	'/^set_lede\s+"((?:[^"\\\\]|\\\\.)*)"\s+"((?:[^"\\\\]|\\\\.)*)"/m',
+	'/^set_lede[ \t]+"((?:[^"\\\\]|\\\\.)*)"[ \t]+"((?:[^"\\\\]|\\\\.)*)"/m',
 	$script,
 	$lede_matches,
 	PREG_SET_ORDER
