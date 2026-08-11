@@ -1617,18 +1617,47 @@ sub check_hidden_attribute {
 sub check_no_mojibake {
     my @problems;
 
-    # One signature per UTF-8 lead byte that this project's copy actually uses.
-    # The three are not interchangeable and missing one is not academic: the
-    # first version of this check carried only the first two, and a
-    # double-encoded middle dot — "Dr. Amany Fouad · 24 documents" in the
-    # library card — passed it clean and had to be caught by eye instead
-    # (3434ac0). The middle dot is this design's separator, so it is the single
-    # most likely character here to arrive corrupted.
-    my $punct    = "\x{00E2}\x{20AC}";              # e2 80 xx — dashes, curly
-                                                    # quotes, ellipsis, bullet
-    my $latin1   = "\x{00C2}[\x{00A0}-\x{00BF}]";   # c2 xx — ·, ©, °, ±, «, »,
-                                                    # ¡, ¿, non-breaking space
-    my $accented = "\x{00C3}[\x{00A0}-\x{00BF}]";   # c3 xx — é, ü, ñ, à…
+    # ONE RULE, NOT A LIST OF SPECIAL CASES. Double-encoding is mechanical: a
+    # UTF-8 lead byte becomes a lead CHARACTER, and the continuation byte
+    # becomes whatever Windows-1252 maps it to. So every instance is a lead
+    # from a set of three, followed by one character from a fixed set — and
+    # naming the two sets covers the whole class rather than the examples
+    # someone happened to find.
+    #
+    # Two earlier versions of this check enumerated instead, and each missed
+    # something real. The first knew only the e2 lead, so a double-encoded
+    # middle dot in the library card meta — this design's separator — passed
+    # clean and was caught by eye (3434ac0). The second added the c2 and c3
+    # leads but allowed only U+00A0-U+00BF after them, which silently excluded
+    # every CAPITAL accented letter: the continuation byte of À-ß is 0x80-0x9F,
+    # and Windows-1252 maps that range to typographic specials, not to Latin-1.
+    # A double-encoded É is U+00C3 U+2030, and the check passed it.
+    #
+    # The lead set. These are the only three UTF-8 lead bytes this project's
+    # copy produces — c2 (Latin-1 symbols), c3 (accented letters) and e2
+    # (General Punctuation).
+    my $lead = "[\x{00E2}\x{00C2}\x{00C3}]";
+
+    # The follower set: Windows-1252's reading of a UTF-8 continuation byte.
+    # 0xA0-0xBF passes through to Latin-1; 0x80-0x9F becomes the typographic
+    # specials below; the five positions CP1252 leaves undefined decode to
+    # their C1 control codepoints and are included because a control character
+    # mid-sentence is never legitimate either.
+    my $follower = '['
+        . "\x{00A0}-\x{00BF}"                                    # 0xA0-0xBF
+        . "\x{20AC}\x{201A}\x{0192}\x{201E}\x{2026}\x{2020}"     # 0x80-0x86
+        . "\x{2021}\x{02C6}\x{2030}\x{0160}\x{2039}\x{0152}"     # 0x87-0x8C
+        . "\x{017D}\x{2018}\x{2019}\x{201C}\x{201D}\x{2022}"     # 0x8E-0x95
+        . "\x{2013}\x{2014}\x{02DC}\x{2122}\x{0161}\x{203A}"     # 0x96-0x9B
+        . "\x{0153}\x{017E}\x{0178}"                             # 0x9C-0x9F
+        . "\x{0081}\x{008D}\x{008F}\x{0090}\x{009D}"             # CP1252 gaps
+        . ']';
+
+    # Requiring a follower is what keeps this exact rather than heuristic: the
+    # three lead characters are real letters in French, Portuguese, Welsh,
+    # Romanian and Vietnamese, so flagging them alone would fire on ordinary
+    # prose. Followed by a symbol, they are corruption.
+    my $mojibake = $lead . $follower;
 
     my @files;
     File::Find::find(
@@ -1668,7 +1697,7 @@ sub check_no_mojibake {
         my $line = 0;
         while ( my $text = <$fh> ) {
             $line++;
-            next unless $text =~ /$punct|$latin1|$accented/;
+            next unless $text =~ /$mojibake/;
 
             $text =~ s/\s+/ /g;
             $text =~ s/^\s+|\s+$//g;
