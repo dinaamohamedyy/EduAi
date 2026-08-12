@@ -206,6 +206,30 @@ $required = array(
 	'explanation', 'comment',
 );
 
+/* ---- control: the key list is test data, and test data can be weakened ----
+ *
+ * The assertion below reports "all %d keys present" using count( $required ),
+ * so deleting a key from that list makes it say "all 11 keys present" and pass
+ * — covering less while reading identically. Nothing else here would notice.
+ * Same shape as a crafted response whose planted lie has been made legal: the
+ * check still runs, against a target that has quietly shrunk.
+ *
+ * §3 names twelve keys and says every one appears on every result whatever the
+ * type. Pin that number, and name the four whose absence the rest of this file
+ * is specifically about, so a deletion fails here rather than passing there. */
+check(
+	'control: the required-key list still covers all twelve keys §3 names',
+	12 === count( $required ),
+	sprintf( 'the list holds %d keys — a shortened list makes the assertion below vacuous', count( $required ) )
+);
+
+$critical = array_diff( array( 'correct', 'expected', 'explanation', 'comment' ), $required );
+check(
+	'control: the keys carrying §3\'s guarantees are in the list',
+	empty( $critical ),
+	'missing from the list: ' . implode( ', ', $critical )
+);
+
 /* array_key_exists, never isset. `isset` returns false for a key that is
  * present and null — which is precisely the case §3 exists to guarantee, since
  * `correct` is null on every short answer. Writing the natural-looking
