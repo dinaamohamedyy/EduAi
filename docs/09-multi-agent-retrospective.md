@@ -155,6 +155,20 @@ The remedy for a recurring lesson is mechanical, not editorial:
 Two occurrences is a lesson. Three is a design problem — and the count is the
 signal that the write-up was the wrong intervention.
 
+**The same test applies to product copy, and it is sharper there:**
+
+> **A caveat is what you write when you have decided not to fix something.**
+
+Someone was drafting the wording for a warning about a transient exposure —
+uploaded files being briefly public "until the post is saved". Raising it as a
+technical item instead is what closed it: measured, found that *until the post is
+saved* means **forever if the editor abandons the draft**, and hooked the upload
+event directly. The sentence that would otherwise have been written would have
+shipped on every material forever, describing a hole rather than closing it.
+
+Before writing a caveat, check whether you are documenting a constraint or
+narrating a decision not to act.
+
 ---
 
 ## 3. Why multiple agents — and which ones actually earned their keep
@@ -317,6 +331,24 @@ Four separate instances in one week:
 Fix: **before believing a green, ask what would make it red.** Then make that
 happen and confirm it does. We added `register_shutdown_function` tripwires so a
 script that ends without reaching its assertions fails loudly.
+
+**Where these actually come from, which is not carelessness.** Nobody builds an
+un-failable check deliberately. They build a **backlog**, and the backlog
+completes:
+
+> Mine counted work not yet done — which drains to zero and then sits empty
+> forever. That is the un-failable check arrived at from the honest direction,
+> which is the more dangerous route.
+
+A column reading "materials not yet migrated" is genuine information until the
+migration finishes. From that moment it can never be non-empty again, and it
+reads as *"nothing is wrong"* rather than *"this can no longer tell you
+anything"* — the same pixels, opposite meanings, no announcement in between.
+
+The repair was to re-point it at a state the system **cannot reach on its own**:
+not work outstanding, but placement *failed*. A row appearing is then genuinely
+information, because nothing routine produces one. **Count the states that
+should never occur, not the ones you are working through.**
 
 ### 6.2 A 200 is not a working page
 
@@ -717,6 +749,43 @@ will reasonably conclude the column is redundant and remove it.
 
 That is §6.9's disease in a display rather than an exit code: **the absence of a
 signal is not a signal, unless something says which kind of absence it is.**
+
+**The remedy is not always to widen the frame, and pretending otherwise is how
+you get the opposite defect.** Defaulting every unattached upload to private
+would have swept up the theme's own images and every inline attachment —
+over-blocking, which is the failure the public-material control exists to catch.
+So the fix reports rather than places: an audit names the orphans, documents and
+video only, labelled as the heuristic it is. And the protection class now states
+in its own docblock **what it does not cover**, because "this file is protected"
+is a per-material claim and someone will generalise it.
+
+> Sometimes the remedy for a frame that excludes cases is not to widen it, but
+> to say out loud what it excludes — **where the person who would generalise is
+> standing.**
+
+### 6.11 What the whole catalogue adds up to
+
+One claim, and it is falsifiable — check it against the ten sections above:
+
+> **Not one of these was found by review.** Every one is a correct thing
+> measured, reported or scoped slightly wrong, and reading the code found none
+> of them.
+
+They were found by re-measuring at a different scale; by going to the artifact
+instead of a description of it; by approaching from the opposite direction; or
+by a control asserting the instrument could still see a known positive.
+
+If that holds — and the record is there to be checked — the consequence is
+uncomfortable and worth stating plainly: **reviewing a check tells you almost
+nothing about whether it works.** Review is good at intent, at readability, at
+whether a thing is a reasonable idea. It is close to useless against an
+instrument that is internally coherent and pointed slightly wrong, because there
+is nothing incoherent to notice.
+
+Which is also the answer to the question §3 opens with. The reason a second
+session kept being the thing that found the defect is not that the second person
+was sharper. It is that **they measured again instead of reading again** — and
+against this class of failure, only measuring works.
 
 ### Bonus: fixtures should be generators, not binaries
 
