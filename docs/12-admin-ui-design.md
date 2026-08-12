@@ -240,18 +240,27 @@ we most need him not to hold by accident.
 
 ### It is interim, and must be driven by one flag
 
-**This label has an end date.** Front-end measured that Apache satisfies
-byte-range requests *above* PHP, which removes the objection that a gated video
-would be unseekable — so restricted files are moving into an Apache-denied
-directory served only through the nonce-checked handler. Restricted upload
-becomes genuinely private for the first time.
+**Write this as production text, not as a placeholder.** An earlier draft of
+this section said the label had a near end date, on a measurement that has since
+been overturned: Apache appeared to satisfy byte ranges *above* PHP, which would
+have made gated video free. Re-measured at 2 MB rather than 86 bytes, the
+handler **ignores the range and sends the whole file from byte 0** — Apache only
+slices small buffered responses, and the boundary sits between 1 KB and 64 KB.
 
-So the boolean flips to false **after** back-end's work, not before, and the
-warning is real and needed until then. **Drive every part of it from that one
-flag** — the label, the list column, the remedy lines. I had planned this as
-insurance against the Tester's finding going either way; it is now load-bearing,
-because someone will need to switch it off and must not have to hunt for
-hard-coded copy to do it.
+The fix still works, but gated video now needs real streaming in PHP rather than
+something inherited for nothing. **The warning is live for considerably longer
+than first implied**, so it should read as finished copy that an owner relies on,
+not as scaffolding someone will delete next week.
+
+*(The measurement lesson is the same one this project keeps re-learning: 86
+bytes and 2 MB are not the same test. A probe run below the scale where the
+mechanism engages returns a confident answer about nothing — the sibling of the
+wp-cli upload check that reports a limit nobody is subject to.)*
+
+**Drive every part of it from one flag** — the label, the list column, the
+remedy lines. I had planned this as insurance against the Tester's finding going
+either way; it is load-bearing now, because whoever eventually switches it off
+must not have to hunt for hard-coded copy to do it.
 
 Worth knowing how bad the interim actually is, because it justifies the
 bluntness of the wording: `/wp-json/wp/v2/media` publishes `source_url` for
