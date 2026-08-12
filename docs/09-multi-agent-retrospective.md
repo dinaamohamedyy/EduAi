@@ -362,6 +362,81 @@ already shipped a green nightly over a live defect. And when a check has never
 once been observed red, you have no evidence about it at all — only about the
 code paths it happens to touch.
 
+**The stronger version, which three people reached independently.** Mutating a
+check once proves it *could* fail on the day someone checked. It says nothing
+after the refactor that quietly breaks the probe. So build the control into the
+check and re-prove it on every run:
+
+- The answer-key guard searches the **raw, unprojected** exam first and refuses
+  to believe any "absent" result unless the answers were found there. A mistyped
+  probe, a renamed field or a silently non-matching search turns the run red
+  instead of green.
+- The harness wrapper declares a manifest and reconciles against it, so a
+  harness that emits nothing is fatal and named. Deleting one call produced
+  `0 failed, 7 passed, exit 1` — a clean run turned red by an absence alone.
+- The rule that generalises both: **when a check reports absence, prove it can
+  see presence first.** "Not found anywhere" is also what a broken search says.
+
+Prefer a built-in known-positive control. Mutate only where one cannot be
+constructed.
+
+### 6.8 The assertion is sound; the input stopped posing the problem
+
+Distinct from §6.7, and the distinction is worth keeping. Those checks could not
+*reach* the mechanism. These reach it perfectly well — and pass because the
+thing they were pointed at quietly shrank.
+
+The Tester's three, from one sweep, one shape in three disguises:
+
+| Guard | What shrank | What it still reported |
+|---|---|---|
+| `download-gate` | no way to name the file | thorough about the door, blind to the wall |
+| `grade-adversarial` | the planted lie made legal | "the rule neutralised this" — with nothing to neutralise |
+| `submit-contract` | the required-key list shortened | "all N keys present", where N had shrunk |
+
+The clamp case is the cleanest. A crafted response claimed 99 marks on a 2-mark
+question; someone changed the 99 to a legal 2, and the harness reported:
+
+```
+ok    awarded clamped to the maximum (q3, worth 2, model said 99)
+```
+
+Green, comparing 2 against 2, exercising the clamp not at all — **and the label
+still said "model said 99", because the label is a string.** Seventeen
+assertions, no coverage.
+
+That last clause is the transferable part:
+
+> **A test's label is documentation, and documentation drifts from the data
+> silently.** "model said 99" was true when written and false afterwards, and no
+> run would ever say so. It is a comment outliving the code it describes, except
+> it is wearing a green tick.
+
+`submit-contract` is the same disease as a parity harness generated from its own
+reference: the count came from the list's own length rather than from the twelve
+keys the contract names, so deleting one key produced `ok: all 11 keys present`.
+Correct arithmetic about a diminished subject.
+
+**The mirror image — a control that was not a control.** Two arms of a test
+were compared, `/wp-admin/` with an admin cookie and without, and both returned
+identical redirects. The conclusion — that the redirect was unconditional —
+would have killed an entire architecture. It was an auth gate all along: the
+minted cookie lacked the `/wp-admin`-scoped one, so **both arms were
+unauthenticated**. The comparison was sound and the two things compared were the
+same thing.
+
+> **Agreement between two arms of a test is only informative if the arms
+> actually differ.**
+
+Both failures answer to the same discipline, and it is §6.7's rule pointed at
+the input rather than the instrument: **prove the probe can distinguish, before
+believing what it distinguished.** Assert that the planted defect really
+violates the rule. Assert that the two arms really differ. Assert that the
+iteration labelled "fresh" really took the fresh path — I wrote that exact
+defect into a guard twenty minutes after reading this section's source, labelled
+two iterations `fresh` and `reused` off a constant input where both took the
+reuse path, and caught it only because the finding was still in front of me.
+
 ### Bonus: fixtures should be generators, not binaries
 
 The test deck for PPTX extraction was a `.pptx` — a zip. Opaque in review,
