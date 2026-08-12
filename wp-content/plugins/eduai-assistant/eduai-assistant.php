@@ -199,6 +199,27 @@ final class EduAI_Assistant {
 	 * Front-end assets. Only loaded when the widget can actually be shown.
 	 */
 	public function assets(): void {
+		/*
+		 * The lesson panel has no shortcode to enqueue its stylesheet, so it
+		 * has to be done here or the markup renders unstyled inside Tutor's
+		 * document. Front-end measured chat.css × 0 on a lesson page — and
+		 * the more useful half of that report is what it did to their
+		 * measurements: the panel's frame read 150px at every viewport width,
+		 * which is the UA default for an <object>, not the rule they wrote.
+		 * A geometry pass over unstyled markup produces numbers that look
+		 * like results.
+		 *
+		 * Gated on the same predicate that decides whether the panel renders
+		 * at all, so a visitor who will not see it does not fetch a
+		 * stylesheet for it. One predicate, asked in a third place, still
+		 * beats a fourth opinion about who may read a lesson.
+		 *
+		 * Style only, no script: the panel is two links and a viewer.
+		 */
+		if ( is_singular( 'lesson' ) && EduAI_Scope::resolve( (int) get_queried_object_id() ) ) {
+			wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
+		}
+
 		// Only for the floating launcher now. [eduai_panel] enqueues these
 		// itself, because it used to rely on this running on every page — which
 		// stopped being true the moment the widget was retired.
