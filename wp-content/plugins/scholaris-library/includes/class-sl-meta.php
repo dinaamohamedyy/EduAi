@@ -113,6 +113,15 @@ class SL_Meta {
 	 * core or a plugin tomorrow reopens it silently. Withholding the whole
 	 * record closes the class instead of its instances.
 	 *
+	 * Field surgery here is also hostile ground, which is the second reason
+	 * not to go back to it: `media_details` is `new stdClass()` for a
+	 * non-image attachment (so the JSON emits `{}` rather than `[]`), and in
+	 * PHP 8 array-access on an object is fatal **even inside `isset()`** — a
+	 * plain `.txt` returned HTTP 500 from this route while that was being
+	 * attempted. Removing schema-declared keys such as `source_url` breaks
+	 * the response separately. Neither problem exists if the record is
+	 * simply not served.
+	 *
 	 * 404 rather than 403, matching core's own `rest_post_invalid_id`: a 403
 	 * would confirm that the id exists, which is the thing being withheld.
 	 *
