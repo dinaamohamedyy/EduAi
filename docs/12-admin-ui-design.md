@@ -113,18 +113,30 @@ strongest nudge available and costs nothing.
 
 Two meta keys, not one per source:
 
-- `_scholaris_video_type` — `none` | `link` | `upload`
-- `_scholaris_video` — the URL, or the attachment ID
+**Settled 10 Aug 2026 — these are the shipped keys, verified on the live stack.
+Use them; the names I originally proposed here were a fourth spelling and are
+gone.**
+
+- `_scholaris_video_source` — `''` | `link` | `file`
+- `_scholaris_video_url` — the URL
+- `_scholaris_video_id` — the attachment ID
 
 Storing the type explicitly is what makes the *consumer* unambiguous too. With
 one key per source the renderer has to guess precedence, and every guess is a
 place the two halves can disagree — the exact class of bug this project keeps
 finding. Back-end reached the same conclusion independently.
 
-**Agree the exact key names before anyone writes them.** Three sessions have now
-described this enum and each used a different name for it. A discriminator whose
-whole purpose is to be the single source of truth is a poor thing to have two
-spellings of; the names above are a proposal, not a claim on the namespace.
+Three sessions each described this enum under a different name, which is a poor
+fate for a field whose entire purpose is to be the single source of truth. It
+was settled by reading the shipped code rather than by choosing between
+proposals — the right tiebreak, since one of the four spellings was already
+running and verified and the others were only written down.
+
+Note the shape differs from what I proposed: the source and the two values live
+in **three** keys rather than two. The discriminator argument is unaffected —
+`_scholaris_video_source` is still the single thing the renderer reads to know
+which of the others to trust, and it never has to infer precedence from which
+field happens to be populated.
 
 **Switching source discards the other value on save, and the control says so
 before saving:** *"The link will be removed when you save."* Silent retention is
