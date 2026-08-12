@@ -876,10 +876,32 @@ class EduAI_REST {
 					);
 				}
 
+				/*
+				 * Fitted to what the provider will actually accept, which is
+				 * well under cap()'s 220 KB. Measured on material 143 against
+				 * the configured Groq tier: 35,928 characters → 413, 24,000 →
+				 * 413, 20,149 → 200. The ceiling is a REQUEST budget, not a
+				 * document one — `max_tokens => 3000` of output is spent from
+				 * the same allowance — so the default leaves real margin
+				 * rather than sitting just under the last value that failed.
+				 *
+				 * Truncating and saying so beats both alternatives. Failing
+				 * outright gives the student nothing; sending half quietly —
+				 * which is what reading the chunk index was doing before this
+				 * — gives them a summary that reads complete and covers a bit
+				 * over half the lecture, with no way to tell.
+				 *
+				 * A filter rather than a constant because the right number is
+				 * a property of the key in use, not of this code: a paid tier
+				 * or a long-context model should raise it.
+				 */
+				$budget   = (int) apply_filters( 'eduai_document_budget', 18000 );
+				$document = self::cap( $document, $budget );
+
 				$label     = $scope['title'];
 				$content[] = array(
 					'type' => 'text',
-					'text' => sprintf( "Lecture: %s\n\n", $scope['title'] ) . self::cap( $document ),
+					'text' => sprintf( "Lecture: %s\n\n", $scope['title'] ) . $document,
 				);
 			} else {
 				return new WP_Error( 'eduai_short', __( 'Paste at least a paragraph of the lecture, or attach a file.', 'eduai' ), array( 'status' => 400 ) );
@@ -929,39 +951,55 @@ class EduAI_REST {
 	 * cannot reach this function by any call that type-checks — the gate is
 	 * enforced by the signature instead of by remembering to call it.
 	 *
-	 * Reads the chunk index rather than re-extracting, so the summary is
-	 * built from the same text the assistant retrieves and there is no second
-	 * extraction path to drift. Falls back to the post body when nothing is
-	 * indexed — a lesson saved seconds ago, or a material whose document
-	 * yielded no text layer.
+	 * Extracts from the document, and NOT from the chunk index. Reassembling
+	 * chunks looks like the tidy reuse — same text the assistant retrieves,
+	 * no second extraction path — and it is wrong twice over. Chunks overlap
+	 * by 200 characters by design, so the seams come back as duplicated
+	 * sentences; measured on material 143, seven long sentences appeared
+	 * twice in the reassembly. And the index is a cache of the document
+	 * rather than the document: the same material reassembled to 20,149
+	 * characters against 35,928 in the file, so a summary built from it would
+	 * silently cover a bit over half the lecture and read as complete.
 	 *
-	 * This belongs on EduAI_Knowledge beside the writer that produced the
-	 * rows; it lives here only because that file is owned and in flight
-	 * elsewhere. Moving it is a rename, not a redesign.
+	 * `_scholaris_file_id` is the authority for which attachment is the
+	 * document — the same meta EduAI_Knowledge::index_post() reads. NOT
+	 * get_children(), which returns whatever is attached in whatever order:
+	 * material 123 has an unrelated mp4 that comes back first and extracts to
+	 * nothing.
+	 *
+	 * Takes the RESOLVED scope array rather than an id, deliberately. The
+	 * only way to obtain one is EduAI_Scope::resolve(), so an ungated id
+	 * cannot reach this function by any call that type-checks — the gate is
+	 * enforced by the signature instead of by remembering to call it.
 	 *
 	 * @param array{id:int,title:string} $scope Resolved, gated scope.
 	 */
 	private static function scoped_source_text( array $scope ): string {
-		global $wpdb;
-
-		$table = EduAI_Knowledge::table();
-
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$chunks = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT chunk_text FROM {$table} WHERE post_id = %d ORDER BY chunk_index ASC",
-				(int) $scope['id']
-			)
-		);
-		// phpcs:enable
-
-		if ( $chunks ) {
-			return trim( implode( "\n\n", $chunks ) );
-		}
-
 		$post = get_post( (int) $scope['id'] );
 
-		return $post ? trim( wp_strip_all_tags( strip_shortcodes( (string) $post->post_content ) ) ) : '';
+		if ( ! $post ) {
+			return '';
+		}
+
+		$parts = array();
+
+		// A lesson carries its text in the body; a material usually does not.
+		$body = trim( wp_strip_all_tags( strip_shortcodes( (string) $post->post_content ) ) );
+		if ( '' !== $body ) {
+			$parts[] = $body;
+		}
+
+		$file_id = (int) get_post_meta( (int) $post->ID, '_scholaris_file_id', true );
+		$path    = $file_id ? get_attached_file( $file_id ) : '';
+
+		if ( $path ) {
+			$text = EduAI_PDF::extract( $path );
+			if ( strlen( trim( $text ) ) > 40 ) {
+				$parts[] = $text;
+			}
+		}
+
+		return trim( implode( "\n\n", $parts ) );
 	}
 
 	/**
@@ -1118,9 +1156,29 @@ class EduAI_REST {
 
 		// Degrees arrive as a superscripted command, so the caret has to go with
 		// it or "90 °C" comes out as "90 ^°C".
-		$text = str_replace( array( '^\\circ', '^{\\circ}' ), '\\circ', $text );
+		// `^(\circ)` is in this list because the brace pass above rewrites
+		// `^{\circ}` before this line ever sees it — so the braced form, the
+		// one a model actually emits, was reaching students as `90^(°)C`.
+		// That is the general trap for every command-specific superscript
+		// below: by here, `^{X}` is already `^(X)`.
+		$text = str_replace( array( '^\\circ', '^{\\circ}', '^(\\circ)' ), '\\circ', $text );
+
+		// Transpose, same shape as degrees and for the same reason — it is a
+		// superscript, so the caret has to travel with it. Note the form with
+		// PARENTHESES: the brace pass above has already turned `^{\top}` into
+		// `^(\top)` by the time we get here, which is why a plain symbol-map
+		// entry renders `x_i^(T)` rather than the `x_i^T` a student writes.
+		// Unavoidable in any linear-algebra deck; observed on the page as
+		// `x_i^(\top)`.
+		$text = str_replace(
+			array( '^(\\top)', '^{\\top}', '^\\top', '^(\\intercal)', '^{\\intercal}', '^\\intercal' ),
+			'^T',
+			$text
+		);
 
 		$symbols = array(
+			// Bare, without a caret — `A \top B` and friends.
+			'\\top' => 'T', '\\intercal' => 'T',
 			'\\times' => ' x ', '\\cdot' => '·', '\\div' => ' ÷ ',
 			'\\leq' => ' <= ', '\\geq' => ' >= ', '\\neq' => ' != ',
 			'\\approx' => ' ~ ', '\\pm' => ' +/- ', '\\infty' => 'infinity',
