@@ -75,6 +75,7 @@ my @checks = (
     [ 'no-mojibake'            => \&check_no_mojibake ],
     [ 'lede-copy-parity'       => \&check_lede_copy ],
     [ 'doc-citations-resolve'  => \&check_doc_citations ],
+    [ 'injected-js-escapes'    => \&check_injected_escapes ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1793,6 +1794,76 @@ sub check_lede_copy {
     for my $slug ( sort keys %declared ) {
         next if $known{$slug};
         push @problems, "setup.sh seeds a lede for '$slug' that the mock does not show — the site would say something the design does not";
+    }
+
+    return @problems;
+}
+
+# Regex classes inside a template literal, which is where JS source gets built
+# before being injected into a page over CDP.
+#
+# THE BUG THIS REMOVES, three occurrences in one day before it was mechanised:
+# `\s` is not a recognised escape in a string or template literal, so it
+# collapses to the bare letter. `.replace(/\s+/g, ' ')` written inside a
+# template literal becomes `.replace(/s+/g, ' ')` in the page — a regex that
+# matches the LETTER s. It does not throw. It returns a plausible string with
+# letters missing: a footer read back as "Re et pa word", a heading as
+# "Cour e Categorie". Twice I nearly filed those as defects in the page.
+#
+# `\b` is worse, because it IS a valid escape: it becomes a backspace
+# character rather than a word boundary, so the regex silently matches
+# something real and wrong.
+#
+# The fix is String.raw`...`, which passes backslashes through untouched. This
+# check exists because knowing the rule demonstrably did not stop me applying
+# it — the write-up was the wrong intervention, three times over.
+#
+# Deliberately scoped INSIDE template literals only: a regex literal in the
+# harness's own Node code (`!/^\s*·/.test(x)`) is correct and must not be
+# flagged. mock-state-pass.mjs:193 is exactly that case and stays green.
+sub check_injected_escapes {
+    my @problems;
+
+    my $dir = File::Spec->catdir( $root, 'scripts' );
+    opendir( my $dh, $dir ) or return ("cannot read scripts/ — this check would pass vacuously");
+    my @files = sort grep { /\.mjs$/ } readdir($dh);
+    closedir($dh);
+
+    return ('scripts/ contains no .mjs harnesses — this check would pass vacuously')
+        unless @files;
+
+    for my $file (@files) {
+        my $src = slurp("scripts/$file");
+
+        # Walk every template literal, remembering whether String.raw tagged it.
+        while ( $src =~ /(String\.raw[ \t]*)?`((?:[^`\\]|\\.)*)`/gs ) {
+            my $tagged = $1;
+            my $body   = $2;
+            my $end    = pos($src);
+
+            next if defined $tagged;
+
+            my %bad;
+            while ( $body =~ /\\([sSdDwWbB])/g ) {
+                $bad{"\\$1"} = 1;
+            }
+            next unless %bad;
+
+            my $line  = 1 + ( substr( $src, 0, $end ) =~ tr/\n// );
+            my @found = sort keys %bad;
+
+            # Say what each one actually does, because they do not all do the
+            # same thing and a message that misdescribes its own failure is
+            # the defect this suite keeps finding elsewhere.
+            my $why = ( grep { '\\b' eq $_ } @found )
+                ? '\\b is a VALID escape and becomes a backspace character, not a word boundary'
+                : 'they collapse to the bare letter, so \\s reaches the page as s and the regex matches letters instead of whitespace';
+
+            push @problems,
+                "scripts/$file:~$line a template literal contains "
+                . join( ', ', @found )
+                . " — $why. Tag the literal String.raw`...`.";
+        }
     }
 
     return @problems;
