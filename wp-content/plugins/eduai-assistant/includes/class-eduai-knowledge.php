@@ -29,6 +29,56 @@ class EduAI_Knowledge {
 		add_action( 'save_post', array( __CLASS__, 'on_save_post' ), 20, 2 );
 		add_action( 'before_delete_post', array( __CLASS__, 'delete_for_post' ) );
 		add_action( 'eduai_reindex_event', array( __CLASS__, 'reindex_all' ) );
+
+		// Gated content must not escape through the page's own metadata.
+		foreach ( array( 'wpseo_metadesc', 'wpseo_opengraph_desc', 'wpseo_twitter_description' ) as $eduai_desc ) {
+			add_filter( $eduai_desc, array( __CLASS__, 'protect_description' ), 20 );
+		}
+	}
+
+	/**
+	 * Keep gated content out of the description meta tags.
+	 *
+	 * A lesson withholds its body from anyone not enrolled — and then the SEO
+	 * plugin builds `og:description` from `post_content` and prints it in the
+	 * head of the same page, to everyone, logged in or not. Measured on a
+	 * published lesson: the body reached an anonymous visitor twice, in full,
+	 * from a page that was correctly refusing to render it.
+	 *
+	 * This is the same failure the retrieval filter exists to prevent, one
+	 * surface over. The assistant was going to become the bypass for the file
+	 * gating; the meta tag already was one. It matters more now than it did
+	 * yesterday, because lesson bodies are about to be generated in bulk and
+	 * every one of them would carry its own leak into the page head.
+	 *
+	 * Same authority as everything else — may_read(). A separate rule here
+	 * would be a second definition of "who may see this" and the first
+	 * divergence would be silent.
+	 *
+	 * The title is deliberately still served: a course listing its lesson
+	 * titles to a visitor deciding whether to enrol is the product working.
+	 * What must not ship is the teaching.
+	 *
+	 * @param string $description Description the SEO plugin assembled.
+	 */
+	public static function protect_description( $description ) {
+		if ( ! is_singular() ) {
+			return $description;
+		}
+
+		$post_id = (int) get_queried_object_id();
+
+		if ( ! $post_id || ! in_array( get_post_type( $post_id ), self::indexed_post_types(), true ) ) {
+			return $description;
+		}
+
+		if ( self::may_read( $post_id ) ) {
+			return $description;
+		}
+
+		// Not an empty string: an empty og:description is a bug report waiting
+		// to be filed, and the title says nothing the listing does not already.
+		return wp_strip_all_tags( (string) get_the_title( $post_id ) );
 	}
 
 	/**
