@@ -220,6 +220,32 @@ run_wp "rate-limit         the assistant's quota is per user, not shared" rate-l
 # existing pages and editing copy in wp-admin is expected rather than wrong.
 run_wp "page-drift         the running site has the pages setup.sh declares" page-drift.php
 
+# TWO THINGS ABOUT THIS ONE THAT ARE NOT VISIBLE FROM THE CALL.
+#
+# 1. IT TAKES NO --url AND STILL FOLLOWS $URL. That looks like a bug and is
+#    not. download-gate.sh builds its fixtures through `docker compose … cli`,
+#    so it inherits COMPOSE_PROJECT_NAME / COMPOSE_FILE, and the URLs it then
+#    fetches come from the site's own siteurl. Point this wrapper at a second
+#    stack and the harness follows. Verified rather than assumed, because an
+#    invocation that could silently test the wrong site is exactly the shape
+#    that has cost this project days: during a run against a fresh stack on
+#    :8090, every URL in its output was :8090 and none :8080. If you ever doubt
+#    it again, that is the check — grep its output for the port.
+#
+# 2. ITS RESULT IS STACK-AGE DEPENDENT, so a green from it means nothing on its
+#    own. It passed on the long-lived developer stack for as long as anyone had
+#    run it, while a FRESH install served gated study material to anyone with
+#    the URL. The difference was history: `uploads/scholaris-private/` existed
+#    on the old stack from months of use and was never created on a new one,
+#    because placement hung off `save_post_study_material` and programmatic
+#    creation writes the post first and the meta after — so at save_post there
+#    was no file to place, and no later save came. Fixed in a714af5 by hooking
+#    the meta values placement depends on.
+#
+#    The lesson outlives that bug: when this harness is green, record WHICH
+#    STACK it was green on. Green on a long-lived stack is evidence about that
+#    stack's history, not about what a deployment would do. The nightly's fresh
+#    stack is the one whose verdict transfers to a real install.
 if bash scripts/download-gate.sh >/tmp/lc.dg.$$ 2>&1; then
   ok "download-gate      a link copied from one student fails for another"
 else
