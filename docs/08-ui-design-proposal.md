@@ -361,7 +361,7 @@ edit.
    first.
 3. **Token aliasing and one measure** (§1) — **promoted ahead of 2, 4 and 5.**
    It turned out to be the highest-value item once `library.css` proved to
-   carry the same drift. See docs/09 §3.4.
+   carry the same drift. See docs/09-ui-implementation-specs.md §3.4.
 4. **Q&A sheds the widget shell** (§2).
 5. **PrepareME report on `.stat` / `.meter`** (§5).
 

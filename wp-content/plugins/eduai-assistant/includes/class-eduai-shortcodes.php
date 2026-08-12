@@ -171,7 +171,7 @@ class EduAI_Shortcodes {
 			// embed are unaffected.
 			'tabs'   => 'all',
 			// page="1" sheds the widget shell: one scroll context, no head
-			// bar (docs/09 §4). Separate from tabs — different questions.
+			// bar (docs/09-ui-implementation-specs.md §4). Separate from tabs — different questions.
 			'page'   => '',
 		), (array) $atts, 'eduai_panel' );
 

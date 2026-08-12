@@ -74,6 +74,7 @@ my @checks = (
     [ 'hidden-attribute-works' => \&check_hidden_attribute ],
     [ 'no-mojibake'            => \&check_no_mojibake ],
     [ 'lede-copy-parity'       => \&check_lede_copy ],
+    [ 'doc-citations-resolve'  => \&check_doc_citations ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1170,7 +1171,7 @@ sub check_abspath_tripwires {
 # one computes to nothing. The failure is quiet in the worst way: a primary
 # button's background falls to transparent while its text, inherited from the
 # theme body, still looks deliberate. Until now that rule was prose with nothing
-# enforcing it, which is the same shape as the guards in docs/08 §4.
+# enforcing it, which is the same shape as the guards in docs/08-handoff.md §4.
 #
 # The test is not "is every block in the list". Blocks nested inside another
 # root inherit its properties, and .eduai-dock legitimately styles nothing with
@@ -1795,4 +1796,84 @@ sub check_lede_copy {
     }
 
     return @problems;
+}
+
+# A bare docs/NN citation must resolve to exactly one file.
+#
+# docs/ has grown two files per number more than once (08-handoff and
+# 08-ui-design-proposal; 09-multi-agent-retrospective and
+# 09-ui-implementation-specs), and the moment that happens every existing
+# bare citation of that number in the codebase silently stops resolving. Six
+# were already broken before anyone noticed — and worse, they still LOOK like
+# citations, so a reader follows one, lands in the wrong document, and finds a
+# section by that number waiting there too.
+#
+# This comment deliberately does not spell an example out in the broken form.
+# The scan covers every committed source file, including this one, so quoting it
+# made the suite fail on its own documentation — which is the check working. A
+# citation is a citation wherever it appears.
+#
+# The fix chosen deliberately is NOT renumbering. Renumbering breaks the
+# citations that name a file in full — the ones that work — to repair the ones
+# that do not, and leaves the next collision free to form.
+#
+# It is also NOT "ban bare numbers". Fifty citations point at docs/06 and
+# docs/07, which are unique files and resolve correctly today; rewriting all of
+# them buys nothing and would make this check a chore rather than a signal.
+#
+# So: a bare number is fine while it is unambiguous, and becomes an error the
+# instant a second file claims that number. Adding docs/06-anything.md turns
+# every docs/06 citation red at once, which is the correct moment to be told.
+sub check_doc_citations {
+    my $dir = File::Spec->catdir( $root, 'docs' );
+
+    opendir( my $dh, $dir ) or die "cannot read docs/: $!";
+    my @docs = grep { /^\d{2}-.*\.md$/ } readdir $dh;
+    closedir $dh;
+
+    return ('docs/ contains no NN-named files — this check can no longer see what it guards')
+        unless @docs;
+
+    my %by_number;
+    for my $doc (@docs) {
+        my ($n) = $doc =~ /^(\d{2})-/;
+        push @{ $by_number{$n} }, $doc;
+    }
+
+    my @ambiguous = sort grep { @{ $by_number{$_} } > 1 } keys %by_number;
+
+    return () unless @ambiguous;
+
+    # Only now is it worth scanning the tree: a number with one file cannot be
+    # cited wrongly, however many times it appears.
+    my @problems;
+    my $checked = 0;
+
+    for my $rel ( source_files() ) {
+        my $text = eval { slurp($rel) };
+        next unless defined $text;
+        $checked++;
+
+        for my $n (@ambiguous) {
+            while ( $text =~ /docs\/$n\s+§([0-9.]+)/g ) {
+                push @problems,
+                    "$rel cites \"docs/$n §$1\", but docs/ has "
+                    . scalar( @{ $by_number{$n} } ) . " files numbered $n ("
+                    . join( ', ', sort @{ $by_number{$n} } )
+                    . ') — name the file in full';
+            }
+        }
+    }
+
+    return ("scanned no source files — this check examined nothing") unless $checked;
+
+    return @problems;
+}
+
+# Every committed file a citation could live in. Deliberately not a hardcoded
+# list: a check that only looks where someone remembered to point it is the
+# shape this suite exists to replace.
+sub source_files {
+    my $out = `git -C "$root" ls-files 2>/dev/null`;
+    return grep { /\.(php|css|js|mjs|pl|sh|md)$/ } split /\n/, $out;
 }

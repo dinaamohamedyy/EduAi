@@ -753,7 +753,7 @@
 /* ------------------------------------------------------ page mode (/ask/) --
    [eduai_panel page="1"]: the panel IS the page, not a widget on one. The
    defect this exists to prevent is two scroll contexts — a fixed-height box
-   with internal scroll on a page that also scrolls (docs/09 §4.0). There is
+   with internal scroll on a page that also scrolls (docs/09-ui-implementation-specs.md §4.0). There is
    no correct height value; the fix is auto. The composer stays reachable by
    sticking to the viewport bottom instead. */
 .eduai-app--page {

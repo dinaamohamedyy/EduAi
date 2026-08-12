@@ -3,7 +3,7 @@
    Inherits the Scholaris theme tokens; falls back to the same "modern
    academia" values (ink, paper, laurel, bronze) elsewhere.
 
-   Token migration (docs/09 §3): spacing, type and radius literals resolve
+   Token migration (docs/09-ui-implementation-specs.md §3): spacing, type and radius literals resolve
    through the alias block below. The aliases MUST live on the same
    scoping list — putting one on :root or on a subset means it resolves
    in some contexts and silently falls back in others, per page. Every class

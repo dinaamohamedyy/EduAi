@@ -221,7 +221,7 @@ not done regardless of how much the diff removed.
 
 `/ask/` is created by `setup.sh:149` as `[eduai_panel height="600" tabs="chat"]`,
 and `panel.php:31` already honours `tabs="chat"` to suppress the internal tab
-strip, with a comment giving the same reasoning docs/08 §2 does. **Do not
+strip, with a comment giving the same reasoning docs/08-ui-design-proposal.md §2 does. **Do not
 re-do that.** An earlier draft of the proposal said the page "should pass"
 `tabs="chat"`; it already does.
 
