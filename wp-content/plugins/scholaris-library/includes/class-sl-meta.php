@@ -171,11 +171,44 @@ class SL_Meta {
 	}
 
 	/**
-	 * The one sentence the owner has to be told, printed wherever a file is
-	 * attached — document or video, because the leak we actually measured was
-	 * a document. Warning only on video would label the case we were thinking
-	 * about and leave unlabelled the case we proved (docs/07 §3.3).
+	 * Say what is actually true of this material's files, right now.
+	 *
+	 * This started as a single warning: "the file itself is not protected".
+	 * That was true when it was written and became FALSE when SL_Private
+	 * landed — a members-only file is moved into a denied directory and
+	 * answers 403. A label that overstates the danger is not the safe
+	 * direction to be wrong in: it steers the owner off a feature that
+	 * works, and nothing ever fails on it, so nobody finds out. So the box
+	 * reports measured state rather than a fixed sentence.
+	 *
+	 * @param int    $material_id Material.
+	 * @param string $kind        'document' or 'video', for the remedy line.
+	 * @param string $url         Public address, when one is worth offering.
 	 */
+	private static function print_file_state( int $material_id, string $kind, string $url = '' ): void {
+		$access = (string) get_post_meta( $material_id, '_scholaris_access', true ) ?: 'members';
+
+		if ( 'members' !== $access ) {
+			return; // Public material is public. Nothing to promise or warn about.
+		}
+
+		// The honest question is not "is this restricted?" but "is the file
+		// where being restricted requires it to be?"
+		$secured = ! class_exists( 'SL_Private' ) || SL_Private::is_secured( $material_id );
+
+		if ( $secured ) {
+			?>
+			<p class="description" style="margin-top:6px;padding:6px 8px;border-left:3px solid #00a32a;background:#f0f6f1">
+				<strong><?php esc_html_e( 'This file is protected.', 'scholaris-library' ); ?></strong>
+				<?php esc_html_e( 'It is stored outside the public folder and served only to signed-in students, through this page.', 'scholaris-library' ); ?>
+			</p>
+			<?php
+			return;
+		}
+
+		self::print_reach_warning( $kind, $url );
+	}
+
 	private static function file_reach_warning( string $kind = 'document' ): string {
 		// One job for the warning: the label no longer needs un-teaching,
 		// because "Show the download button to" says what the setting does.
@@ -302,8 +335,8 @@ class SL_Meta {
 			<?php
 			// Keyed on "a file is attached", never on "the file is a video" —
 			// the measured leak was a .txt on a document.
-			if ( $file_id && 'members' === $access ) {
-				self::print_reach_warning( 'document', (string) $url );
+			if ( $file_id ) {
+				self::print_file_state( (int) $post->ID, "document", (string) $url );
 			}
 			?>
 		</p>
@@ -364,8 +397,8 @@ class SL_Meta {
 				<button type="button" class="button" id="sl_clear_video"><?php esc_html_e( 'Remove', 'scholaris-library' ); ?></button>
 			</p>
 			<?php
-			if ( $vid && 'members' === $access ) {
-				self::print_reach_warning( 'video', (string) $vurl );
+			if ( $vid ) {
+				self::print_file_state( (int) $post->ID, "video", (string) $vurl );
 			}
 			?>
 		</div>
