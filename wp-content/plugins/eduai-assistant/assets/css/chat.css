@@ -553,6 +553,26 @@
 /* ---------------------------------------------------------- Summarise ---- */
 /* A page, not a tab inside a widget (docs/06 §2.1). The drop zone leads
    because attaching a lecture is the common path; pasting is the fallback. */
+/* Scope banner — says what the tool is pointed at before it is used.
+   Renders only when the server resolved AND gated a source, so its presence
+   is the difference between "summarise this lesson" and "summarise whatever
+   you upload". A student who cannot see what a tool read cannot trust what it
+   says, which is why this is a line of text and not an icon.
+   min-width:0 on the name so a long lecture title ellipsises instead of
+   pushing the row wider than the column. */
+.eduai-scope {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem;
+  margin: 0; padding: var(--eduai-space-xs) var(--eduai-space-s);
+  background: hsl(var(--eduai-brand) / 0.06);
+  border-left: 3px solid hsl(var(--eduai-brand));
+  border-radius: var(--eduai-radius-s);
+}
+.eduai-scope__label {
+  font-family: var(--eduai-mono); font-size: 0.68rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: hsl(var(--eduai-muted)); flex: none;
+}
+.eduai-scope__name { min-width: 0; overflow-wrap: anywhere; }
+
 .eduai-sum { display: grid; gap: var(--eduai-space-s); max-width: var(--eduai-measure); }
 .eduai-sum__form { display: grid; gap: var(--eduai-space-xs); }
 .eduai-sum__drop {

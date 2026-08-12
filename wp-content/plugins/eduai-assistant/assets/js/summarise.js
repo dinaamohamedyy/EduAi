@@ -42,6 +42,16 @@
 		this.idleLabel = this.button.textContent;
 		this.busy = false;
 
+		/* The scope id is read off the banner the server rendered, NOT off
+		   location.search. The server resolved ?source= and applied that post
+		   type's gate before printing it, so the banner existing IS the
+		   authorisation. Re-deriving the id from the URL here would make a
+		   second source of truth for one question, and would let anyone type
+		   ?source=<id> and have us send an id the server refused. No banner,
+		   no id — see the contract note in templates/summarizer.php. */
+		var scopeEl = root.querySelector('[data-eduai-scope]');
+		this.scopeId = scopeEl ? parseInt(scopeEl.getAttribute('data-eduai-scope'), 10) || 0 : 0;
+
 		this.bind();
 	}
 
@@ -107,7 +117,10 @@
 			this.note('eduai-error', escapeHtml(T.loginPrompt));
 			return;
 		}
-		if (!file && pasted.length < 80) {
+		/* A scoped page already HAS its source — that is the whole feature, so
+		   demanding a file or pasted text there would refuse the one request
+		   the student came to make. Unscoped, the guard is unchanged. */
+		if (!this.scopeId && !file && pasted.length < 80) {
 			this.note('eduai-error', escapeHtml(T.needSource));
 			return;
 		}
@@ -122,6 +135,12 @@
 		if (file) { body.append('file', file); }
 		if (pasted) { body.append('text', pasted); }
 		body.append('style', this.style.value);
+		/* Sent as `source`, the same word wp_eduai_chunks already uses for the
+		   thing an answer is grounded in. The endpoint re-gates it: this id
+		   came from the server, but arriving back over the wire it is input
+		   again, and the second call site must ask the same one predicate the
+		   first did rather than a second one that agrees today. */
+		if (this.scopeId) { body.append('source', String(this.scopeId)); }
 
 		this.busy = true;
 		this.button.disabled = true;

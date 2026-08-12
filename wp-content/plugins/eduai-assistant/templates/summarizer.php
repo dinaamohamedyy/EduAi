@@ -19,6 +19,36 @@ $eduai_sum_id = 'eduai-sum-' . wp_unique_id();
 ?>
 <div class="eduai-sum" id="<?php echo esc_attr( $eduai_sum_id ); ?>" data-eduai-sum>
 
+	<?php
+	/*
+	 * Scope banner — and the id that makes the request scoped travels WITH it.
+	 *
+	 * VARIABLE CONTRACT: $eduai_scope is an array of [ id, title ], supplied by
+	 * the shortcode handler ONLY after it has resolved ?source= and applied the
+	 * gate for that post type. Absent, empty, or ungated means this block does
+	 * not render, and the page below is exactly today's page.
+	 *
+	 * That is why the id lives in the markup rather than in a JS parse of
+	 * location.search. The scope has to survive one gate, not two agreeing
+	 * ones: if the script read the URL itself it would be a second source of
+	 * truth for the same question, and a student could type ?source=<anything>
+	 * and have the client send an id the server never authorised. No banner,
+	 * no id, no scoped request — the fall-through is structural rather than a
+	 * condition somebody has to remember to write.
+	 *
+	 * (This reverses my own earlier recommendation to parse it off location as
+	 * prepare.js does for ?exam=. That parameter selects a retake on a page
+	 * that serves both entry points and is authorised separately downstream;
+	 * this one IS the authorisation decision, so it must not be re-derived.)
+	 */
+	if ( ! empty( $eduai_scope['title'] ) && ! empty( $eduai_scope['id'] ) ) :
+		?>
+		<p class="eduai-scope" data-eduai-scope="<?php echo esc_attr( (string) $eduai_scope['id'] ); ?>">
+			<span class="eduai-scope__label"><?php esc_html_e( 'Summarising', 'eduai' ); ?></span>
+			<strong class="eduai-scope__name"><?php echo esc_html( $eduai_scope['title'] ); ?></strong>
+		</p>
+	<?php endif; ?>
+
 	<form class="eduai-sum__form" data-eduai-sum-form>
 
 		<div class="eduai-sum__drop" data-eduai-sum-drop tabindex="0" role="button"
