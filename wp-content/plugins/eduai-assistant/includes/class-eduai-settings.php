@@ -333,6 +333,52 @@ class EduAI_Settings {
 				</p>
 			</div>
 
+			<?php
+			/*
+			 * Partial indexing used to be invisible. A document could sit in the
+			 * table missing a tenth of its chunks while the only number on this
+			 * screen — passages indexed — counted the ones that made it and
+			 * reported a healthy total. Every grounded answer from that document
+			 * was quietly partial and nothing said so for weeks.
+			 *
+			 * So the screen now says when a document is short, in the place the
+			 * person who uploaded it is already looking.
+			 */
+			$eduai_partial = EduAI_Knowledge::incomplete();
+			?>
+			<?php if ( $eduai_partial ) : ?>
+				<div class="notice notice-warning inline" style="margin:16px 0;padding:10px 12px">
+					<p style="margin:0 0 6px">
+						<strong><?php esc_html_e( 'Some documents are only partly indexed.', 'eduai' ); ?></strong>
+						<?php esc_html_e( 'The assistant answers from what it has, so questions about these will be answered from part of the document without saying so. Rebuilding the index usually fixes it.', 'eduai' ); ?>
+					</p>
+					<ul style="margin:0;padding-left:18px;list-style:disc">
+						<?php foreach ( $eduai_partial as $eduai_doc ) : ?>
+							<li>
+								<strong><?php echo esc_html( $eduai_doc['title'] ?: '#' . $eduai_doc['post_id'] ); ?></strong>
+								—
+								<?php
+								if ( $eduai_doc['expected'] ) {
+									printf(
+										/* translators: 1: passages held 2: passages expected */
+										esc_html__( 'holding %1$s of %2$s passages.', 'eduai' ),
+										'<code>' . esc_html( (string) $eduai_doc['have'] ) . '</code>',
+										'<code>' . esc_html( (string) $eduai_doc['expected'] ) . '</code>'
+									);
+								} else {
+									printf(
+										/* translators: %s: passages held */
+										esc_html__( 'holding %s passages with gaps between them.', 'eduai' ),
+										'<code>' . esc_html( (string) $eduai_doc['have'] ) . '</code>'
+									);
+								}
+								?>
+							</li>
+						<?php endforeach; ?>
+					</ul>
+				</div>
+			<?php endif; ?>
+
 			<form method="post" action="options.php">
 				<?php settings_fields( 'eduai_group' ); ?>
 

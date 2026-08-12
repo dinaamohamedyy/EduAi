@@ -242,6 +242,15 @@ class EduAI_Knowledge {
 		// Report what landed, not what was attempted. The old return value was
 		// count( $chunks ), so the settings screen and every caller believed
 		// the optimistic number while the table held half of it.
+		// What the document SHOULD hold, recorded at the moment we know it.
+		//
+		// Contiguity alone cannot answer this. It catches a hole in the middle —
+		// which is what happened to material 143 — but a document whose LAST
+		// chunks all fail comes back as 0..n-1 with no gap and reads as
+		// complete. Storing the expected count turns "are there holes" into
+		// "is anything missing", which is the question actually being asked.
+		update_post_meta( $post_id, '_eduai_chunks_expected', count( $chunks ) );
+
 		if ( $lost ) {
 			/**
 			 * Fires when part of a document could not be indexed.
@@ -337,6 +346,75 @@ class EduAI_Knowledge {
 		// phpcs:enable
 
 		return array( 'docs' => $docs, 'chunks' => $chunks );
+	}
+
+	/**
+	 * Documents the index is not holding in full.
+	 *
+	 * This exists because the failure it looks for hid for weeks behind a
+	 * number that could not express it. Coverage was reported as chunk
+	 * characters over file characters, and the deliberate 200-character overlap
+	 * pushes that above 100% — so a document missing a tenth of its chunks
+	 * measured 112% and was read, and relayed to the owner, as complete. A
+	 * metric that cannot fall below 100% when content is lost is not an
+	 * instrument.
+	 *
+	 * Two questions are asked, because either alone has a blind spot:
+	 *
+	 *   - a HOLE: chunk_index does not run 0..n-1. This is what material 143
+	 *     looked like — gaps at 0, 1, 5, 6, 7, matching the rejected chunks one
+	 *     for one.
+	 *   - a SHORTFALL: fewer rows than index_post() said it produced. A
+	 *     document whose LAST chunks all failed is contiguous and still
+	 *     incomplete, so contiguity would call it healthy.
+	 *
+	 * The expected count is only recorded from the fix onward, so a document
+	 * indexed before it reports on holes alone until it is next rebuilt. That
+	 * is stated rather than hidden: `expected` comes back 0 where it is unknown.
+	 *
+	 * @return array<int,array{post_id:int,title:string,have:int,expected:int,holes:bool}>
+	 */
+	public static function incomplete(): array {
+		global $wpdb;
+
+		$table = self::table();
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( $exists !== $table ) {
+			return array();
+		}
+
+		$rows = $wpdb->get_results(
+			"SELECT post_id, COUNT(*) AS have, MIN(chunk_index) AS lo, MAX(chunk_index) AS hi
+			 FROM {$table}
+			 GROUP BY post_id",
+			ARRAY_A
+		);
+		// phpcs:enable
+
+		$out = array();
+
+		foreach ( (array) $rows as $row ) {
+			$post_id  = (int) $row['post_id'];
+			$have     = (int) $row['have'];
+			$holes    = $have !== ( (int) $row['hi'] - (int) $row['lo'] + 1 ) || 0 !== (int) $row['lo'];
+			$expected = (int) get_post_meta( $post_id, '_eduai_chunks_expected', true );
+
+			if ( ! $holes && ( ! $expected || $have >= $expected ) ) {
+				continue;
+			}
+
+			$out[] = array(
+				'post_id'  => $post_id,
+				'title'    => (string) get_the_title( $post_id ),
+				'have'     => $have,
+				'expected' => $expected,
+				'holes'    => $holes,
+			);
+		}
+
+		return $out;
 	}
 
 	/**
