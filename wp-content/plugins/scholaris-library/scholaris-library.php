@@ -27,6 +27,7 @@ require_once SL_DIR . 'includes/class-sl-meta.php';
 require_once SL_DIR . 'includes/class-sl-templates.php';
 require_once SL_DIR . 'includes/class-sl-library.php';
 require_once SL_DIR . 'includes/class-sl-private.php';
+require_once SL_DIR . 'includes/class-sl-catalog.php';
 require_once SL_DIR . 'includes/class-sl-bank.php';
 require_once SL_DIR . 'includes/class-sl-console.php';
 require_once SL_DIR . 'includes/class-sl-quiz-history.php';
