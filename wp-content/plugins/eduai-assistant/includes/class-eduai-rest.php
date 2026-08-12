@@ -783,6 +783,11 @@ class EduAI_REST {
 		$files       = $request->get_file_params();
 		$content     = array();
 		$label       = '';
+		// Initialised here so the response key is present on every path,
+		// including the ones that never truncate. An absent key and a null
+		// one are the same value in JS, which is the whole reason docs/07
+		// requires every result key to exist.
+		$truncated   = null;
 
 		// Re-gated here and not trusted from the render pass. The banner and
 		// this call are one predicate invoked twice, never two predicates
@@ -878,12 +883,23 @@ class EduAI_REST {
 
 				/*
 				 * Fitted to what the provider will actually accept, which is
-				 * well under cap()'s 220 KB. Measured on material 143 against
-				 * the configured Groq tier: 35,928 characters → 413, 24,000 →
-				 * 413, 20,149 → 200. The ceiling is a REQUEST budget, not a
-				 * document one — `max_tokens => 3000` of output is spent from
-				 * the same allowance — so the default leaves real margin
-				 * rather than sitting just under the last value that failed.
+				 * well under cap()'s 220 KB.
+				 *
+				 * BE CAREFUL WHAT YOU CONCLUDE FROM A FAILING SIZE HERE. The
+				 * first pass at this read 35,928 → 413, 24,000 → 413, 20,149
+				 * → 200 and recorded it as a measured context ceiling. It is
+				 * not one. Re-run later the same value both passed and failed,
+				 * and the failures arrived as 429 naming a per-minute token
+				 * allowance — so what those numbers actually measured was how
+				 * much of the free tier's minute was left, which a bigger
+				 * request exhausts sooner. Both hypotheses predict "large
+				 * fails, small passes"; only the error code tells them apart.
+				 *
+				 * So this number is a pragmatic fit, not a discovered
+				 * boundary: big enough to be worth reading, small enough to
+				 * leave room for 3,000 output tokens from the same allowance.
+				 * The filter is the real answer, because the right value is a
+				 * property of the key in use.
 				 *
 				 * Truncating and saying so beats both alternatives. Failing
 				 * outright gives the student nothing; sending half quietly —
@@ -895,8 +911,8 @@ class EduAI_REST {
 				 * a property of the key in use, not of this code: a paid tier
 				 * or a long-context model should raise it.
 				 */
-				$budget   = (int) apply_filters( 'eduai_document_budget', 18000 );
-				$document = self::cap( $document, $budget );
+				$truncated = self::truncation_of( $document );
+				$document  = self::fit( $document );
 
 				$label     = $scope['title'];
 				$content[] = array(
@@ -936,10 +952,15 @@ class EduAI_REST {
 		EduAI_Conversation::add( get_current_user_id(), $thread_id, 'assistant', $result['text'], array(), $result['usage'] );
 
 		return new WP_REST_Response( array(
-			'summary' => $result['text'],
-			'html'    => self::to_html( $result['text'] ),
-			'label'   => $label,
-			'style'   => $style,
+			'summary'   => $result['text'],
+			'html'      => self::to_html( $result['text'] ),
+			'label'     => $label,
+			'style'     => $style,
+			// { used, of } or null. Reports what was actually read, which can
+			// differ from what the page predicted at render: an explicit
+			// upload overrides the scope, and then the render-time figure
+			// describes a deck that was never opened.
+			'truncated' => $truncated,
 		), 200 );
 	}
 
@@ -974,7 +995,98 @@ class EduAI_REST {
 	 *
 	 * @param array{id:int,title:string} $scope Resolved, gated scope.
 	 */
-	private static function scoped_source_text( array $scope ): string {
+	public static function source_budget(): int {
+		return max( 1000, (int) apply_filters( 'eduai_document_budget', 18000 ) );
+	}
+
+	/**
+	 * `{ used, of }` when a document will not fit, null when it will.
+	 *
+	 * ALWAYS RETURNED, null rather than absent, per docs/07's rule that every
+	 * result key is present: in JS an absent key and a false one read the
+	 * same, so "no truncation" and "this build is too old to tell you" become
+	 * indistinguishable at exactly the moment the distinction matters.
+	 *
+	 * Two numbers rather than a percentage or a phrase — the ratio is the
+	 * caller's to word, and "about the first half" is something a student can
+	 * act on where "18,000 characters" is not.
+	 *
+	 * @param string $document Full source text.
+	 * @return array{used:int,of:int}|null
+	 */
+	private static function truncation_of( string $document ): ?array {
+		// Bytes, because the budget is in bytes — it was measured against
+		// what the provider accepts, and counting characters instead let a
+		// deck with maths glyphs through at 18,000 characters and rather more
+		// than 18,000 bytes, which 413'd again. Units are part of the
+		// measurement.
+		$full   = strlen( $document );
+		$budget = self::source_budget();
+
+		return $full > $budget ? array( 'used' => $budget, 'of' => $full ) : null;
+	}
+
+	/**
+	 * Trim a document to the request budget, on a character boundary.
+	 *
+	 * mb_strcut rather than cap()'s substr, and rather than mb_substr either.
+	 * substr cuts UTF-8 mid-sequence and leaves a broken byte that
+	 * wp_json_encode refuses to encode, turning a long lecture into an empty
+	 * response — and lecture decks are exactly where the multibyte characters
+	 * live, the maths glyphs and ligatures that were silently costing the
+	 * chunk index whole rows this morning. mb_substr fixes that but counts
+	 * CHARACTERS, which overshoots a byte budget and 413s on the decks most
+	 * likely to need trimming. mb_strcut is the one that respects a byte
+	 * limit without splitting a character.
+	 *
+	 * @param string $document Full source text.
+	 */
+	private static function fit( string $document ): string {
+		$budget = self::source_budget();
+
+		if ( strlen( $document ) <= $budget ) {
+			return $document;
+		}
+
+		return mb_strcut( $document, 0, $budget )
+			. "\n\n[…truncated: the document was longer than one request allows…]";
+	}
+
+	/**
+	 * What a scoped page can say BEFORE the student presses anything.
+	 *
+	 * The response reports what was used; this reports what will be, and only
+	 * the second one can change a decision — somebody who learns at render
+	 * time that their lecture is too long can attach the section they
+	 * actually need instead of waiting out the slowest call in the product
+	 * for a partial answer.
+	 *
+	 * Cached, because it costs a PDF extraction and this runs on a page
+	 * render rather than in a request the student has already committed to.
+	 * Keyed on the attachment id so replacing the document invalidates it by
+	 * construction rather than by remembering to purge.
+	 *
+	 * @param array{id:int,title:string} $scope Resolved, gated scope.
+	 * @return array{used:int,of:int}|null
+	 */
+	public static function scope_truncation( array $scope ): ?array {
+		$post_id = (int) $scope['id'];
+		$file_id = (int) get_post_meta( $post_id, '_scholaris_file_id', true );
+		$key     = 'eduai_srclen_' . $post_id . '_' . $file_id;
+		$length  = get_transient( $key );
+
+		if ( false === $length ) {
+			// Bytes, matching source_budget()'s units — see truncation_of().
+			$length = strlen( self::scoped_source_text( $scope ) );
+			set_transient( $key, $length, DAY_IN_SECONDS );
+		}
+
+		$budget = self::source_budget();
+
+		return (int) $length > $budget ? array( 'used' => $budget, 'of' => (int) $length ) : null;
+	}
+
+	public static function scoped_source_text( array $scope ): string {
 		$post = get_post( (int) $scope['id'] );
 
 		if ( ! $post ) {

@@ -219,6 +219,15 @@ class EduAI_Shortcodes {
 		// are the same answer rendered twice, not two answers that match.
 		$eduai_scope = EduAI_Scope::for_script();
 
+		if ( $eduai_scope ) {
+			// Summarise-only, so it is added here rather than inside
+			// for_script(): chat boosts and prepare has its own source, and
+			// neither has a document budget to overrun. A key that is
+			// meaningless on two of three surfaces invites being read on all
+			// three.
+			$eduai_scope['truncated'] = EduAI_REST::scope_truncation( $eduai_scope );
+		}
+
 		wp_localize_script( 'eduai-summarise', 'EduAISumConfig', array(
 			'root'        => esc_url_raw( rest_url( EduAI_REST::NS ) ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
