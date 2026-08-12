@@ -311,20 +311,44 @@ the exact pattern in `docs/09` §6.7.
 column is not empty today and it is not decorative:
 
 - Every material created before `SL_Private` shipped and not re-saved since —
-  nothing has changed its meta, so nothing has reconciled it. `migrate()` exists
-  and sweeps every material, but I could find **no caller for it** in the plugin
-  or in `scripts/`, so on any site where nobody has run it by hand, every legacy
-  file is still public.
+  nothing has changed its meta, so nothing has reconciled it.
 - Any material whose move **failed**.
 
-It empties as migration completes, and that is a completion signal rather than a
-dead check. When it is empty, the migration is genuinely done — which is a fact
-worth being able to see, and which nobody can currently establish at all.
+**On `migrate()` — my earlier claim that it had no caller was stale, and the
+correction makes the point sharper rather than dissolving it.** It is called at
+`scholaris-library.php:73`, inside `activate()`, added in `a714af5`. But
+`activate()` fires on **plugin activation**, and the plugin was already active
+when that code landed — so on this site, and on every existing install,
+**`migrate()` has still never run.** Every correctly-placed file got there
+through `reconcile()` on a meta write, not through the sweep. The sweep protects
+fresh installs, which is what its comment says it is for; it does nothing for
+the install we have.
 
-**Whoever picks this up: confirm whether `migrate()` has been run on the live
-site.** If it has not, the reassurance in state 2 is correct for new materials
-and state 3 is correct for every older one — which is exactly why the copy must
-ask the predicate rather than the setting.
+Measured on the live stack, state 3 is currently **empty for attached
+materials** — but empty because everything happened to be edited today, not
+because the migration ran. That is the "empty today" this column is designed to
+distinguish from "empty forever": it is reporting a real condition that happens
+to be clear, which is what a working check looks like.
+
+When it is empty *and* the sweep has run, migration is genuinely done — a fact
+nobody can currently establish at all.
+
+### What the reassurance deliberately does not claim
+
+State 2 says "**this file** is protected", not "your uploads are protected", and
+the narrowness is load-bearing — **do not broaden it in a later copy pass.**
+
+The reason is a gap outside this control's frame entirely: media uploaded
+straight into the library and attached to **no material** has no access setting,
+no editor screen and no `is_secured()` answer, because there is no material to
+ask about. Measured on the live stack, a 4.6 MB PDF in that state answered
+**HTTP 200 anonymously** and appeared in the public `/wp-json/wp/v2/media` index.
+
+A sentence on the material screen cannot fix files that are not on the material
+screen, and attempting it would be the wrong instrument. But an owner who reads
+a broad reassurance may reasonably conclude it covers everything he uploads, and
+it does not. Scoped to "this file", the sentence stays true. Raised with
+back-end as its own item, alongside the REST index.
 
 ### It warns, it does not block
 
