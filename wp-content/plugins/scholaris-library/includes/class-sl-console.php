@@ -33,6 +33,64 @@ class SL_Console {
 		// with this plugin off, the theme sends the owner to plain wp-admin —
 		// a worse landing, but a working one.
 		add_filter( 'scholaris_admin_home_url', array( __CLASS__, 'home_url' ) );
+
+		// Backs status()['without_media_url']. A link that promises a
+		// filtered list and delivers the whole list is worse than no link:
+		// the owner counts rows, finds more than the number he clicked, and
+		// stops believing the number.
+		add_action( 'pre_get_posts', array( __CLASS__, 'filter_media_none' ) );
+	}
+
+	/**
+	 * `edit.php?post_type=study_material&sl_media=none` — the published
+	 * materials with neither a document nor a video.
+	 *
+	 * Resolved in PHP rather than as a meta_query because "has media" is not
+	 * a meta value: it is file_id OR (source=link AND url) OR (source=file
+	 * AND id). Expressing that in SQL would be a fourth definition of the
+	 * rule 0a3e143 collapsed to one, and it would be the one that silently
+	 * disagrees.
+	 *
+	 * `publish` matches status(), and that matters: measured before fixing
+	 * it, the strip counted published only while this used `any`, so a draft
+	 * with nothing attached appeared in the list but not the count — click a
+	 * 1, get 2, stop trusting the strip. A draft with no media is unfinished
+	 * work, not a fault.
+	 *
+	 * @param WP_Query $query Current query.
+	 */
+	public static function filter_media_none( $query ): void {
+		if ( ! is_admin() || ! $query->is_main_query() ) {
+			return;
+		}
+
+		if ( 'study_material' !== $query->get( 'post_type' ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only list filter.
+		if ( 'none' !== ( $_GET['sl_media'] ?? '' ) ) {
+			return;
+		}
+
+		$without = array();
+
+		foreach ( get_posts( array(
+			'post_type'     => 'study_material',
+			'post_status'   => 'publish',
+			'numberposts'   => -1,
+			'fields'        => 'ids',
+			'no_found_rows' => true,
+		) ) as $material_id ) {
+			if ( ! SL_Meta::has_media( $material_id ) ) {
+				$without[] = $material_id;
+			}
+		}
+
+		// An empty result must stay empty: WP_Query ignores post__in => array()
+		// and would show everything, which is the failure this filter exists
+		// to prevent.
+		$query->set( 'post__in', $without ?: array( 0 ) );
 	}
 
 	public static function home_url(): string {
@@ -189,6 +247,12 @@ class SL_Console {
 			// Rendered in the web container, so this is the real ceiling —
 			// pre-answering "why did my upload fail".
 			'max_upload'    => size_format( wp_max_upload_size() ),
+			// The one count that implies an action, so the one worth linking:
+			// a number the owner then has to go and find is a report, not a
+			// dashboard. Additive on purpose — the template is front-end's
+			// file and they are editing it; they adopt the link when ready,
+			// and nothing breaks in the meantime.
+			'without_media_url' => admin_url( 'edit.php?post_type=study_material&sl_media=none' ),
 		);
 	}
 

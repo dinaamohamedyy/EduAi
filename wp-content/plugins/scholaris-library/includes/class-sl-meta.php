@@ -93,11 +93,23 @@ class SL_Meta {
 			return $args;
 		}
 
-		$gated = self::gated_attachment_ids();
-
-		if ( $gated ) {
-			$args['post__not_in'] = array_merge( (array) ( $args['post__not_in'] ?? array() ), $gated );
-		}
+		/*
+		 * Anonymous callers get nothing from this index.
+		 *
+		 * The narrower version — exclude only gated attachments — still lets
+		 * an anonymous caller enumerate every other file on the site, and
+		 * "nothing legitimate consumes this" is a statement about today. An
+		 * anonymous consumer of a media index is a search engine or someone
+		 * mapping uploads/, and this site is published through a public
+		 * tunnel with the owner's lecture PDF in exactly that listing.
+		 *
+		 * Signed-in callers are untouched, which is what makes this safe to
+		 * be wrong about: an anonymous client breaks visibly and this is one
+		 * line to revert, where leaving it open fails silently and the
+		 * failure is a file listing. Verified by dispatching the route with a
+		 * controlled user — dina 7 entries, a student 7, anonymous 0.
+		 */
+		$args['post__in'] = array( 0 );
 
 		return $args;
 	}
@@ -591,6 +603,22 @@ class SL_Meta {
 	 * obviously wrong. When they disagree the symptom is the blank material
 	 * page the §2.4 restructure just fixed, or a lecture the console counts
 	 * and the listing will not show.
+	 *
+	 * WHY IT DOES NOT FALL BACK TO `_scholaris_video_id`. Asked after a
+	 * fixture wrote the id without the source and produced a material that
+	 * streamed correctly and rendered nothing. The reason is not "one source
+	 * of truth" — it is that an id with no source is a state this plugin
+	 * creates DELIBERATELY: switching the radio to None keeps the attachment
+	 * id, so an editor who changes their mind twice does not lose their pick.
+	 * Verified — choose a video: source=file, id=112; switch to None:
+	 * source='', id=112. A fallback would resurrect a video the editor had
+	 * just switched off, on every material anyone had ever done that to,
+	 * which is a worse bug than the one it fixes.
+	 *
+	 * So the source is the switch and the id is the remembered selection. A
+	 * programmatic writer must set BOTH — and cannot be reported as faulty
+	 * if it does not, because "id present, source empty" is
+	 * indistinguishable from a deliberate None.
 	 *
 	 * @param int $material_id Material ID.
 	 */
