@@ -437,6 +437,59 @@ defect into a guard twenty minutes after reading this section's source, labelled
 two iterations `fresh` and `reused` off a constant input where both took the
 reuse path, and caught it only because the finding was still in front of me.
 
+### 6.9 The check knew. The plumbing dropped it.
+
+Every failure above is a check that could not *see* something — by scale,
+configuration, construction, imagination, a filter, a shrunken target, an
+unverified label. This one sees perfectly, diagnoses correctly, phrases it
+better than a person would, and then throws the result away at the reporting
+boundary.
+
+The page-drift guard, mutated three ways:
+
+| mutation | expected | actual |
+|---|---|---|
+| a page set to draft | fail | exit 1, names the missing page |
+| copy reworded, shortcode intact | warn only | exit 0 |
+| **shortcode stripped entirely** | fail | **exit 0** |
+
+With the shortcode gone the Library renders nothing at all, and the harness
+prints exactly the right sentence:
+
+```
+LIKELY BROKEN: [scholaris_library] not present on the page,
+               so that feature renders nowhere
+```
+
+…and exits 0. The exit code derived only from missing pages and missing ledes;
+the array holding that diagnosis never reached it. In a nightly job — which
+reads exit codes, not prose — that sentence is written to nobody.
+
+**The closing detail is the whole argument.** That guard's own docblock cites
+the incident it was written for: a page sitting on another plugin's login form
+for days, with the shortcode registered and rendering nowhere. **The guard
+written to catch that exact failure would not catch it today.** Nothing makes
+the point better than a check whose motivating example it can no longer detect.
+
+**It pairs with the manifest fix, which is the same disease one level up.** A
+skipped harness contributes no output line, so counting passes is structurally
+incapable of noticing an absence — deleting one call produced `0 failed, 7
+passed, exit 1` only once the wrapper declared what it owed and reconciled
+first. Here, a computed warning contributes no exit code, so reading exit codes
+is structurally incapable of noticing a known break.
+
+Both are **the reporting layer losing information the check already had**. That
+is a different question from "can this check fail", and it needs asking
+separately:
+
+> Everything this check can conclude — does *all* of it reach the caller? Or
+> does some of it end in a variable nobody reads?
+
+The remedy generalises: declare what you owe before you start, and reconcile
+against that declaration before emitting a verdict. A verdict computed only from
+the paths someone remembered to wire is a summary of the wiring, not of the
+system.
+
 ### Bonus: fixtures should be generators, not binaries
 
 The test deck for PPTX extraction was a `.pptx` — a zip. Opaque in review,
