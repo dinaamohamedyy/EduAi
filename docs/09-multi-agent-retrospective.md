@@ -289,7 +289,7 @@ earlier, and then committed it myself. That is how structural it is.
 
 ## 6. The failure catalogue — the genuinely transferable part
 
-Eleven patterns, each of which bit this project more than once. These generalise to
+Twelve patterns, each of which bit this project more than once. These generalise to
 any agent-assisted codebase.
 
 **Read this first, because it is why the other ten survive.** Every section below
@@ -832,9 +832,49 @@ nothing at all — they are three different problems.
 > **mechanically**, not what makes them look the same. "They all do X
 > syntactically" is a shape, not a class.
 
-### 6.12 What the whole catalogue adds up to
+### 6.12 This list will make you misdiagnose things
 
-One claim, and it is falsifiable — check it against the eleven sections above:
+The entry about the entries, and the only one that gets **more** dangerous the
+better the rest of the document is.
+
+Eleven named shapes make a reader faster at recognising — which is the same
+faculty, exactly, as being faster at *mis*recognising. An anomaly now has eleven
+familiar silhouettes to fall into, and it will find one whether or not it
+belongs.
+
+It happened while this section was being written. A newly-added hook reported
+`NOT PUSHED — 3 commit(s)`, and the push a moment later said `Everything
+up-to-date`. The contradiction snapped instantly onto a documented shape: *a
+count computed from a stale tracking ref*, catalogued twice, fits perfectly.
+Wrong. The hook asks the remote directly with `git ls-remote`, and its own
+comments explain why it does not use the tracking ref. It was correct when it
+ran; another session had pushed in the gap. A defect was one message away from
+being filed against a well-built check by someone who had spent the day
+cataloguing defects.
+
+> **A contradiction that resembles a known shape is a hypothesis, not a
+> diagnosis.**
+
+The remedy is cheaper than it sounds, and it is the same move that stopped a
+false report against another session two hours earlier: **read the thing, then
+name its disease.** Not the reverse. The list is for generating candidates, and
+a candidate that survives contact with the artifact is a finding — one that
+does not is a near miss nobody hears about.
+
+**And the credit for those near misses goes to a habit, not to character.** The
+session that retracted a false defect that day was explicit about it: what made
+it retractable was not scrupulousness but a routine — *check what makes the empty
+thing non-empty*. They had a measurement that supported the finding; the
+measurement was of the wrong thing. Restraint they would have had to exercise;
+the habit ran on its own.
+
+That distinction matters for anyone copying this. **Habits survive being tired,
+being certain, and being under pressure to produce a result. Character does
+not.**
+
+### 6.13 What the whole catalogue adds up to
+
+One claim, and it is falsifiable — check it against the twelve sections above:
 
 > **Not one of these was found by review.** Every one is a correct thing
 > measured, reported or scoped slightly wrong, and reading the code found none
