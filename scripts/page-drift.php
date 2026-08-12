@@ -78,6 +78,7 @@ if ( ! $matches ) {
 $unescape = static fn( string $s ): string => str_replace( array( '\\"', '\\$' ), array( '"', '$' ), $s );
 
 $missing = array();
+$uncomparable = array();
 $differs = array();
 $ok      = 0;
 
@@ -97,7 +98,14 @@ foreach ( $matches as $m ) {
 
 	// A shell variable in the expected content cannot be compared without
 	// re-implementing setup.sh's environment, so say so rather than guess.
+	//
+	// It said neither: the skip was silent, so `content differs: 0` was a
+	// statement about 12 of 13 pages and the reader had no way to know it was
+	// not all of them. Counted and reported below — the number is unbounded in
+	// the wrong direction, since adding a `$` to two more page bodies would
+	// shrink the coverage with no change to the report.
 	if ( false !== strpos( $content, '$' ) ) {
+		$uncomparable[] = $slug;
 		continue;
 	}
 
@@ -124,6 +132,47 @@ foreach ( $matches as $m ) {
 			'absent' => $absent,
 			'owner'  => page_owner_hint( $page ),
 		);
+	}
+}
+
+/*
+ * THE REVERSE DIRECTION: pages this site has that a fresh install would not.
+ *
+ * Everything above asks "does this site have what setup.sh declares?". It never
+ * asked the opposite, and the opposite is the one that matters at launch —
+ * this file's own header says setup.sh describes a FRESH install rather than
+ * this one, and the host the product ships to is a fresh install.
+ *
+ * A page created in wp-admin carrying one of our shortcodes exists here and
+ * not in the script. Nothing above notices, because a check that starts from
+ * the declaration can only ever find things missing FROM the site, never
+ * things missing from the declaration. On the new host that feature renders
+ * nowhere and nothing fails — the same shape as SL_Private::ensure_denied()
+ * firing only from reconcile(): correct on a used site, absent on a new one,
+ * invisible to any instrument that starts from the wrong end.
+ *
+ * ADVISORY, not fatal, and for the same reason content drift is: creating a
+ * page in wp-admin is a legitimate thing for an owner to do, and a check that
+ * reddens for it gets ignored. But it must be SAID, because the consequence
+ * lands at migration and not before.
+ */
+$declared_slugs = array();
+foreach ( $matches as $m ) {
+	$declared_slugs[] = $unescape( $m[2] );
+}
+
+$undeclared = array();
+
+foreach ( get_posts( array(
+	'post_type'      => 'page',
+	'post_status'    => 'publish',
+	'posts_per_page' => -1,
+) ) as $page ) {
+	if ( in_array( $page->post_name, $declared_slugs, true ) ) {
+		continue;
+	}
+	if ( preg_match_all( '/\[((?:scholaris|eduai)_[a-z0-9_]+)/i', (string) $page->post_content, $sc ) ) {
+		$undeclared[] = array( 'slug' => $page->post_name, 'tags' => array_unique( $sc[1] ) );
 	}
 }
 
@@ -210,6 +259,11 @@ printf( "pages declared in setup.sh: %d\n", count( $matches ) );
 printf( "  present on this site    : %d\n", $ok );
 printf( "  missing                 : %d\n", count( $missing ) );
 printf( "  content differs         : %d\n", count( $differs ) );
+printf(
+	"  content not comparable  : %d%s\n",
+	count( $uncomparable ),
+	$uncomparable ? ' (' . implode( ', ', $uncomparable ) . ' — expected body contains a shell variable)' : ''
+);
 printf( "ledes declared in setup.sh: %d\n", count( $lede_matches ) );
 printf( "  missing from the site   : %d\n", count( $lede_bare ) );
 printf( "  differs                 : %d\n\n", count( $lede_differs ) );
@@ -222,6 +276,19 @@ if ( $lede_differs ) {
 		printf( "      site    : %s\n", substr( $d['has'], 0, 90 ) );
 	}
 	print "\n";
+}
+
+if ( $undeclared ) {
+	print "ON THIS SITE BUT NOT IN setup.sh (warning — a fresh install would not have these):\n";
+	foreach ( $undeclared as $u ) {
+		printf(
+			"  /%s/  carries %s\n",
+			$u['slug'],
+			implode( ', ', array_map( static fn( $t ) => "[$t]", $u['tags'] ) )
+		);
+	}
+	print "\n  These render here and would render nowhere on a new host, with nothing\n";
+	print "  failing. Add a make_page call to setup.sh if the page is meant to ship.\n\n";
 }
 
 if ( $differs ) {
@@ -245,7 +312,7 @@ if ( $differs ) {
 /*
  * WHICH SIGNALS DECIDE THE EXIT CODE, AND WHY — read this before adding one.
  *
- * This file computes five things. Three are fatal, two are advisory, and the
+ * This file computes seven things. Three are fatal, four are advisory, and the
  * difference is a judgement about make_page/set_lede's semantics, not about
  * severity of language:
  *
@@ -258,6 +325,17 @@ if ( $differs ) {
  *                            check that reddened for it would be ignored.
  *   ADVISORY  $lede_differs  set_lede converges, so the next setup.sh run
  *                            overwrites the site's anyway.
+ *   ADVISORY  $undeclared    a page here carries one of our shortcodes and is
+ *                            not in setup.sh, so a fresh install would not
+ *                            have it. Creating a page in wp-admin is
+ *                            legitimate; the consequence lands at migration.
+ *   ADVISORY  $uncomparable  the expected body holds a shell variable and
+ *                            cannot be compared without re-implementing
+ *                            setup.sh's environment. Reported as a COUNT
+ *                            because it bounds what "content differs: 0"
+ *                            covers — it was 12 of 13 pages while claiming
+ *                            nothing, and adding a `$` to two more bodies
+ *                            would shrink that with no change to the report.
  *
  * Both advisories state that reasoning in their own output. That is the
  * convention: an advisory signal must say why it is advisory where the reader
