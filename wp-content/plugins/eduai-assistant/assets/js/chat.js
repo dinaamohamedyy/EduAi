@@ -278,7 +278,21 @@
 				message: text,
 				thread_id: self.thread,
 				post_id: self.postId,
-				agent: self.agent || ''
+				agent: self.agent || '',
+				/* The scope the server resolved and gated, echoed back. Read
+				   from CFG and never from location.search: ?source= IS the
+				   authorisation decision, so re-deriving it here would be a
+				   second source of truth and would let anyone send an id the
+				   server refused. 0 when unscoped, which is the whole story —
+				   "no parameter" and "refused" arrive identically on purpose,
+				   because telling them apart would reveal whether a given post
+				   exists and is closed.
+
+				   This is the line the owner was missing: the link carried
+				   ?source= and chat.js never looked, so Ask rendered the
+				   ordinary assistant on a page that had already resolved a
+				   lesson. Summarise read it; this did not. */
+				source: (CFG.scope && CFG.scope.id) ? parseInt(CFG.scope.id, 10) || 0 : 0
 			})
 		})
 			.then(function (res) {

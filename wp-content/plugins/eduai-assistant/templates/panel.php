@@ -89,6 +89,46 @@ $eduai_page = ! empty( $eduai_atts['page'] );
 
 	<!-- ----------------------------------------------------------- chat tab -->
 	<div class="eduai-pane is-active" data-eduai-pane="chat">
+
+		<?php
+		/*
+		 * Scope banner for Ask, and the WORDING is the load-bearing part.
+		 *
+		 * On Summarise the scope is exclusive — that lecture is what gets
+		 * summarised, so "Summarising: X" is a true and complete account. On
+		 * Ask it is a BOOST, not a filter: retrieval prefers this source but
+		 * legitimately quotes elsewhere in the course, because scoping a
+		 * question to one lesson hides the definition three sections back.
+		 *
+		 * So this says "Focused on" and never "answers come from". The obvious
+		 * copy — "sources are all from this lecture" — is true on the other
+		 * surface and would be a confident lie here, on the one screen where a
+		 * student is most likely to check a citation against what it claims.
+		 *
+		 * Rendered only when the server resolved AND gated a source, same as
+		 * the summariser: absent means today's page, unchanged.
+		 */
+		/*
+		 * Asked directly rather than passed in, and that is safe BECAUSE the
+		 * resolver memoises: EduAI_Scope::current() resolves once per request
+		 * and every consumer — the banner, the localized config, the endpoint's
+		 * re-check — is the same predicate asked again, not a second one that
+		 * agrees today. Adding a template variable would have been a second
+		 * copy of the same answer.
+		 */
+		$eduai_scope = class_exists( 'EduAI_Scope' ) ? EduAI_Scope::for_script() : null;
+
+		if ( ! empty( $eduai_scope['title'] ) ) :
+			?>
+			<p class="eduai-scope">
+				<span class="eduai-scope__label"><?php esc_html_e( 'Focused on', 'eduai' ); ?></span>
+				<strong class="eduai-scope__name"><?php echo esc_html( $eduai_scope['title'] ); ?></strong>
+				<span class="eduai-scope__part">
+					<?php esc_html_e( 'Answers prefer this lecture and may still cite others from the course.', 'eduai' ); ?>
+				</span>
+			</p>
+		<?php endif; ?>
+
 		<div class="eduai-log" data-eduai-log role="log" aria-live="polite" aria-atomic="false"></div>
 
 		<div class="eduai-suggestions" data-eduai-suggestions></div>
