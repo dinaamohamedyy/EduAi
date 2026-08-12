@@ -192,11 +192,24 @@ const INSTALL = `window.__hdr = function () {
 /* Orphaned or doubled separators: a leading "·", or two with only space between. */
 const ftrIntact = (h) => h.ftrLinks === 4 && !/^\s*·/.test(h.ftrText) && !/·\s*·/.test(h.ftrText);
 
-// Signed out: Sign in shown, account + Sign out gone, footer auth links shown.
-// Signed in: the inverse. Anything else is a header lying about the session.
+// Signed out: Sign in shown, the avatar gone. Signed in: the inverse.
+// Anything else is a header lying about the session.
+//
+// There is no header sign-out to assert, and its absence is the point rather
+// than an omission. Two text buttons here made the signed-in header 278px
+// against 162px signed out, and it overflowed at every phone width — 110px over
+// at 320. header.php has one avatar-width control and puts sign-out on the
+// profile screen; the mock now matches, so `authout` is asserted ABSENT in both
+// states rather than dropped from the check (12 Aug 2026).
 const consistent = (h) => (h.flag
-  ? (!h.authin && h.authacct && h.authout)
-  : (h.authin && !h.authacct && !h.authout)) && ftrIntact(h);
+  ? (!h.authin && h.authacct)
+  : (h.authin && !h.authacct)) && !h.authout && ftrIntact(h);
+
+// Sign out the way the product allows: through the avatar to the profile, then
+// its own control. Not a setAuth(false) shortcut — that would assert the flag
+// while skipping the only route a student actually has, which is the class of
+// test this harness exists to avoid.
+const SIGN_OUT = `(() => { go('profile'); document.getElementById('pf-signout').click(); return __hdr(); })()`;
 
 const results = [];
 function check(name, pass, detail) {
@@ -240,16 +253,17 @@ try {
   h = await evalIn(`(() => { go('login'); document.getElementById('li-submit').click(); return __hdr(); })()`);
   check('login submit: dashboard, flag true, header flips', h.onScreen === 's-dashboard' && h.flag === true && consistent(h), h);
 
-  /* 3. Header sign out. */
-  h = await evalIn(`(() => { document.getElementById('authout').click(); return __hdr(); })()`);
-  check('header Sign out: home, flag false, header restores', h.onScreen === 's-home' && h.flag === false && consistent(h), h);
+  /* 3. Sign out through the only route the product has: avatar -> profile -> its control. */
+  h = await evalIn(SIGN_OUT);
+  check("sign out via profile: home, flag false, header restores", h.onScreen === "s-home" && h.flag === false && consistent(h), h);
 
   /* 4. Deep entry to a gated screen gates (the GATED literal in go()). */
   h = await evalIn(`(() => { go('dashboard'); return __hdr(); })()`);
   check('deep entry to dashboard: auto-gated, header consistent', h.onScreen === 's-dashboard' && h.flag === true && consistent(h), h);
 
   /* 5. Sign out, then deep-link the profile (the other GATED member). */
-  h = await evalIn(`(() => { document.getElementById('authout').click(); go('profile'); return __hdr(); })()`);
+  await evalIn(SIGN_OUT);
+  h = await evalIn(`(() => { go("profile"); return __hdr(); })()`);
   check('deep entry to profile: auto-gated, header consistent', h.onScreen === 's-profile' && h.flag === true && consistent(h), h);
 
   /* 6. The profile's own sign-out control. */
@@ -276,7 +290,7 @@ try {
   check('420px signed out: only Sign in rendered', m1.flag === false && consistent(m1), m1);
   const m2 = await evalIn(`(() => { go('dashboard'); return __hdr(); })()`);
   check('420px gate: flag flips, header consistent, Sign out reachable', m2.flag === true && consistent(m2), m2);
-  const m3 = await evalIn(`(() => { document.getElementById('authout').click(); return __hdr(); })()`);
+  const m3 = await evalIn(SIGN_OUT);
   check('420px sign out: cleared, header restores', m3.flag === false && consistent(m3), m3);
 
   const failed = results.filter((r) => !r.pass).length;
