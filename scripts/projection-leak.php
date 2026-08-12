@@ -60,6 +60,14 @@ function check( string $rule, bool $ok, string $detail ): void {
  * Found by the control added above it, on its first run, which is the argument
  * for controls in one line.
  *
+ * The mismatch can be closed from either end — escape every needle, or
+ * un-escape the haystack — and this is the haystack end on purpose. A needle
+ * pinned to one exact representation only ever matches that representation, so
+ * a leak that reached the response through some other encoding walks straight
+ * past it. For a leak detector, narrower is the wrong direction: the cost of
+ * being broad is a false positive somebody investigates, and the cost of being
+ * narrow is an answer key on the wire that nothing reports.
+ *
  * @param mixed $data Response data or fixture.
  */
 function leak_searchable( $data ): string {
@@ -260,6 +268,13 @@ $generated = wp_json_encode( array(
 
 $format = EduAI_Claude::provider()['format'];
 
+/* The three wp_json_encode() calls below are deliberately NOT leak_searchable().
+ * They build the stubbed provider response — a model reply standing in for
+ * Groq or Anthropic — so they must encode exactly the way a real provider does,
+ * escapes and all. leak_searchable() is for haystacks the probes are searched
+ * against; this is an input to the code under test, not something inspected.
+ * Anyone tidying "the last three inconsistent encode calls" would be making the
+ * stub less faithful than the thing it impersonates. */
 add_filter(
 	'pre_http_request',
 	static function ( $pre, $args, $url ) use ( $generated, $format ) {
