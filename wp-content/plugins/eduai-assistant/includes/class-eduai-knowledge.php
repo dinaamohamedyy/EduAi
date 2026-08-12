@@ -245,13 +245,92 @@ class EduAI_Knowledge {
 	 * @param int    $limit Max passages.
 	 * @return array<int,array{title:string,url:string,text:string,score:float}>
 	 */
-	public static function retrieve( string $query, int $limit = 6 ): array {
+	/**
+	 * May the current user read this material's contents?
+	 *
+	 * The assistant quotes indexed passages back to whoever asked, so retrieval
+	 * is a read of the source document by another route. Until now nothing here
+	 * checked that — indexing gated on `publish` and search gated on nothing,
+	 * which was safe only because `can_use()` refuses anonymous visitors and
+	 * `members` happens to mean exactly "logged in". Those two coinciding is a
+	 * coincidence, not a design: make access per-course, per-enrolment, or turn
+	 * `logged_in_only` off in Settings, and the assistant starts reading out
+	 * material the asker cannot open — becoming the bypass for the file gating
+	 * rather than a consumer of it.
+	 *
+	 * This calls the OWNING component's authority rather than restating its
+	 * rule. `SL_Meta::can_download()` is where "who may have this document"
+	 * lives; a second copy of that logic here would be one more place to update
+	 * and one more place to forget, and the first divergence would be silent.
+	 *
+	 * Absent authority is a refusal, not a pass. If the library plugin is not
+	 * loaded then `study_material` is not a registered type and its content is
+	 * unreachable by every other route — serving it here would make the
+	 * assistant the one door left open.
+	 *
+	 * @param int $post_id Source material.
+	 */
+	public static function may_read( int $post_id ): bool {
+		static $cache = array();
+
+		if ( $post_id <= 0 ) {
+			return false;
+		}
+
+		// One question per material, not per chunk: nine chunks of one deck ask
+		// the same thing nine times, and capability checks hit the database.
+		$key = get_current_user_id() . ':' . $post_id;
+
+		if ( isset( $cache[ $key ] ) ) {
+			return $cache[ $key ];
+		}
+
+		$post = get_post( $post_id );
+
+		if ( ! $post || 'publish' !== $post->post_status ) {
+			return $cache[ $key ] = false;
+		}
+
+		if ( 'study_material' === $post->post_type ) {
+			$allowed = class_exists( 'SL_Meta' ) && method_exists( 'SL_Meta', 'can_download' )
+				? (bool) SL_Meta::can_download( $post_id )
+				: false;
+		} else {
+			// Everything else answers to WordPress, which already knows about
+			// private posts, drafts and restricted types.
+			$allowed = current_user_can( 'read_post', $post_id );
+		}
+
+		/**
+		 * Filter whether the current user may be served passages from a source.
+		 *
+		 * The hook for per-enrolment access: return false and the assistant
+		 * stops quoting that material without anything else changing.
+		 *
+		 * @param bool $allowed Decision so far.
+		 * @param int  $post_id Source material.
+		 */
+		return $cache[ $key ] = (bool) apply_filters( 'eduai_may_read_source', $allowed, $post_id );
+	}
+
+	/**
+	 * @param string $query Student question.
+	 * @param int    $limit Passages wanted.
+	 * @param int    $scope Restrict to one material, or 0 for the whole library.
+	 */
+	public static function retrieve( string $query, int $limit = 6, int $scope = 0 ): array {
 		global $wpdb;
 
 		$query = trim( wp_strip_all_tags( $query ) );
 		if ( strlen( $query ) < 3 ) {
 			return array();
 		}
+
+		// Over-fetch, because the access filter below removes rows AFTER the
+		// database has ranked them. Asking for exactly $limit and then dropping
+		// two would quietly hand the student four passages instead of six —
+		// a worse answer, with nothing to indicate why.
+		$fetch = max( $limit, min( 200, $limit * 5 ) );
 
 		$table = self::table();
 
@@ -261,17 +340,18 @@ class EduAI_Knowledge {
 			return array();
 		}
 
+		$scope_sql  = $scope > 0 ? ' AND post_id = %d' : '';
+		$scope_args = $scope > 0 ? array( $scope ) : array();
+
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT source_title, source_url, chunk_text,
+				"SELECT post_id, source_title, source_url, chunk_text,
 					MATCH(chunk_text) AGAINST (%s IN NATURAL LANGUAGE MODE) AS score
 				 FROM {$table}
-				 WHERE MATCH(chunk_text) AGAINST (%s IN NATURAL LANGUAGE MODE)
+				 WHERE MATCH(chunk_text) AGAINST (%s IN NATURAL LANGUAGE MODE)" . $scope_sql . '
 				 ORDER BY score DESC
-				 LIMIT %d",
-				$query,
-				$query,
-				$limit
+				 LIMIT %d',
+				array_merge( array( $query, $query ), $scope_args, array( $fetch ) )
 			),
 			ARRAY_A
 		);
@@ -296,13 +376,20 @@ class EduAI_Knowledge {
 					$args[]  = '%' . $wpdb->esc_like( $term ) . '%';
 				}
 
-				$args[] = $limit;
+				$like = '(' . implode( ' OR ', $where ) . ')';
+
+				if ( $scope > 0 ) {
+					$like  .= ' AND post_id = %d';
+					$args[] = $scope;
+				}
+
+				$args[] = $fetch;
 
 				$rows = $wpdb->get_results(
 					$wpdb->prepare(
-						"SELECT source_title, source_url, chunk_text, 0 AS score
+						"SELECT post_id, source_title, source_url, chunk_text, 0 AS score
 						 FROM {$table}
-						 WHERE " . implode( ' OR ', $where ) . '
+						 WHERE " . $like . '
 						 LIMIT %d',
 						$args
 					),
@@ -314,12 +401,22 @@ class EduAI_Knowledge {
 
 		$out = array();
 		foreach ( (array) $rows as $row ) {
+			// The gate. Ranked by the database, filtered by who is asking.
+			if ( ! self::may_read( (int) $row['post_id'] ) ) {
+				continue;
+			}
+
 			$out[] = array(
-				'title' => (string) $row['source_title'],
-				'url'   => (string) $row['source_url'],
-				'text'  => (string) $row['chunk_text'],
-				'score' => (float) $row['score'],
+				'post_id' => (int) $row['post_id'],
+				'title'   => (string) $row['source_title'],
+				'url'     => (string) $row['source_url'],
+				'text'    => (string) $row['chunk_text'],
+				'score'   => (float) $row['score'],
 			);
+
+			if ( count( $out ) >= $limit ) {
+				break;
+			}
 		}
 
 		/**
