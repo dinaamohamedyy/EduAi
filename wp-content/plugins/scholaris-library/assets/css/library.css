@@ -176,26 +176,6 @@
 .sl-course__meta { margin: 0; color: hsl(var(--sl-muted)); font-size: var(--sl-step--1); }
 /* The source deck, muted: it orients rather than competes with the title.
    min-width:0 so a long lecture name ellipsises instead of widening the card. */
-/* Capped at five in the template, so this list has a bounded height whatever
-   the course contains — the card stays scannable without hiding the lessons. */
-.sl-course__lessons {
-  margin: var(--sl-space-2xs) 0 0;
-  padding: 0 0 0 var(--sl-space-s);
-  list-style: none;
-  display: grid; gap: var(--sl-space-3xs);
-  border-left: 1px solid hsl(var(--sl-border));
-}
-.sl-course__lessons li { margin: 0; min-width: 0; }
-.sl-course__lessons a {
-  color: hsl(var(--sl-text)); text-decoration: none;
-  font-size: var(--sl-step--1);
-  /* One line each: a long lesson title should not double the row and undo the
-     cap's whole purpose. */
-  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.sl-course__lessons a:hover { color: hsl(var(--sl-brand)); text-decoration: underline; }
-.sl-course__more { margin: var(--sl-space-3xs) 0 0; font-size: var(--sl-step--1); }
-
 .sl-course__from { margin: var(--sl-space-2xs) 0 0; font-size: var(--sl-step--1); min-width: 0; }
 .sl-course__fromlabel {
   font-family: var(--sl-mono); font-size: 0.66rem; letter-spacing: 0.07em;

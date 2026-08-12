@@ -73,69 +73,6 @@ foreach ( $sl_courses as $sl_course ) {
 
 						<?php
 						/*
-						 * LESSONS ON THE CARD — and this reverses my own earlier
-						 * call, for a reason that only appeared by measuring.
-						 *
-						 * I argued lessons belonged on the course page, not the
-						 * card, because a card whose height varies with content
-						 * stops being scannable. That was sound while the course
-						 * page was assumed to list them. It does not: Tutor
-						 * renders each lesson as a NON-CLICKABLE <h5> inside a
-						 * collapsed accordion — no anchor anywhere — verified on
-						 * /courses/machine-learning/ as both anonymous and the
-						 * owner, who sees exactly what a visitor sees. The
-						 * titles are in the page; nothing links to them.
-						 *
-						 * So the choice was not "card or course page", it was
-						 * "card or nowhere". The owner asked for the library to
-						 * consist of courses and each course to consist of
-						 * lessons; leaving them unreachable to protect the
-						 * card's height is optimising the wrong thing.
-						 *
-						 * The scannability objection is answered by the cap
-						 * rather than by omission: height is bounded at five
-						 * whatever the course contains, and the remainder is a
-						 * count rather than a scroll.
-						 */
-						$sl_lessons = array();
-
-						foreach ( (array) ( $sl_course['topics'] ?? array() ) as $sl_topic ) {
-							foreach ( (array) ( $sl_topic['lessons'] ?? array() ) as $sl_lesson ) {
-								$sl_lessons[] = $sl_lesson;
-							}
-						}
-
-						if ( $sl_lessons ) :
-							$sl_shown = array_slice( $sl_lessons, 0, 5 );
-							?>
-							<ul class="sl-course__lessons">
-								<?php foreach ( $sl_shown as $sl_lesson ) : ?>
-									<li>
-										<a href="<?php echo esc_url( (string) ( $sl_lesson['url'] ?? '' ) ); ?>">
-											<?php echo esc_html( (string) ( $sl_lesson['title'] ?? '' ) ); ?>
-										</a>
-									</li>
-								<?php endforeach; ?>
-							</ul>
-							<?php if ( count( $sl_lessons ) > count( $sl_shown ) ) : ?>
-								<p class="sl-course__more">
-									<a href="<?php echo esc_url( (string) $sl_course['url'] ); ?>">
-										<?php
-										printf(
-											esc_html(
-												/* translators: %d: how many further lessons the course has */
-												_n( '%d more lesson', '%d more lessons', count( $sl_lessons ) - count( $sl_shown ), 'scholaris-library' )
-											),
-											(int) ( count( $sl_lessons ) - count( $sl_shown ) )
-										);
-										?>
-									</a>
-								</p>
-							<?php endif; ?>
-						<?php endif; ?>
-
-						<?php
-						/*
 						 * The deck it was built from, because that is the thing
 						 * the owner recognises — he uploaded it. Deliberately
 						 * NOT a progress bar: a percentage on a browse screen
