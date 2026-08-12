@@ -15,10 +15,17 @@
  *               accounts
  *
  * The contract is the point of this docblock, so it lists exactly what this
- * template reads and nothing else. max_upload left with the count it fed: the
- * largest upload the server accepts is infrastructure trivia on a screen about
+ * template reads and nothing else. The upload-size count left the strip: the
+ * largest upload a server accepts is infrastructure trivia on a screen about
  * running a course, and belongs beside the upload control where it changes a
- * decision. SL_Console may still supply it; this template no longer reads it.
+ * decision. SL_Console may still supply that key; nothing here reads it.
+ *
+ * Its identifier is deliberately not written above. Naming a removed key in
+ * the comment that explains its removal makes every grep for it report it as
+ * still present — which is precisely how a comment quoting the conditions it
+ * replaced got filed as live dead code by two sessions this morning. Second
+ * time in one day, both mine: a comment about absent code should not contain
+ * the string someone would search for to find that code.
  *
  * @package ScholarisLibrary
  */
