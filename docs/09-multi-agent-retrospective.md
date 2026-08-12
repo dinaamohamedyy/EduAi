@@ -429,6 +429,39 @@ A mutation performed once could not have caught this. It proves a check could
 fail on the day someone checked; it says nothing about what a second correct
 change does to it next week.
 
+**And when a mutation is unavoidable, its breadth is the whole result.** The
+tester who had used the technique most found the limit in their own verdict, and
+stated it against themselves:
+
+> I planted at the head of the function — which kills the projection on *every*
+> route at once. A guard watching any one route catches that. So the plant
+> confirmed exactly what a whole-function plant can confirm — that the detector
+> fires — and was structurally incapable of revealing which routes it watches.
+>
+> **A broad mutation proves less than a narrow one.** Breaking everything gets
+> caught by a guard that watches almost nothing. The mutation has to be as
+> narrow as the coverage question you are actually asking, and mine was shaped
+> like the answer I already believed.
+
+That is why the same guard passed one person's mutation and failed another's.
+Stripping the projection from *one* route, leaving the others intact, gave the
+blind spot nowhere to hide — and the guard turned out to watch one route of
+four while reporting twelve green assertions.
+
+This closes the arc §6.6 opens. There, the instrument could not reach the
+mechanism. Here it reaches it perfectly and is too **blunt** to distinguish
+which part of it responded: a correct positive that proves far less than the
+reader assumes. Both are the same underlying failure — *an instrument that
+cannot discriminate between the hypotheses returns a confident result about
+neither.*
+
+**One practice worth copying from the same episode.** When the redundant
+mechanism was finally removed, the commit recorded that the removal was
+deliberate and why. Without that, the absence is indistinguishable from an
+oversight, and the next careful reader restores it. That is §6.9's disease in a
+third place: knowledge that exists only as an absence has to be written down
+somewhere, or it decays back.
+
 ### 6.8 The assertion is sound; the input stopped posing the problem
 
 Distinct from §6.7, and the distinction is worth keeping. Those checks could not
