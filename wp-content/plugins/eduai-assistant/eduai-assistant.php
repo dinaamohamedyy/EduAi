@@ -60,6 +60,22 @@ final class EduAI_Assistant {
 		add_action( 'wp_enqueue_scripts', array( $this, 'assets' ) );
 		add_action( 'template_redirect', array( $this, 'redirect_superseded_pages' ) );
 		add_action( 'wp_footer', array( $this, 'render_launcher' ), 20 );
+
+		/*
+		 * The assistant panel on a Tutor lesson — the owner's sentence was
+		 * "when I'm inside the course I selected, when I click summarise,
+		 * summarise the lesson I'm opening directly."
+		 *
+		 * This hook and not wp_footer, and the reason is structural rather
+		 * than tidiness. Tutor's learning area emits its OWN document, and on
+		 * the no-access path it returns early leaving two complete documents
+		 * on the response — so anything on wp_footer fires twice for a
+		 * visitor who may not read the lesson. `tutor_single_content_lesson`
+		 * fires after that early return, inside the content column, so the
+		 * panel is gated by construction and cannot appear on the doubled
+		 * document at all.
+		 */
+		add_action( 'tutor_single_content_lesson', array( $this, 'render_lesson_panel' ) );
 		add_action( 'admin_notices', array( $this, 'setup_notice' ) );
 	}
 
@@ -79,6 +95,66 @@ final class EduAI_Assistant {
 		}
 
 		$this->maybe_upgrade();
+	}
+
+	/**
+	 * Ask and Summarise, scoped to the lesson being read.
+	 *
+	 * Re-gated through EduAI_Scope even though Tutor's early return already
+	 * decided it. That is one predicate asked twice rather than two that
+	 * agree today — and it costs a cached capability check, against the risk
+	 * that this hook is ever reached from somewhere with a different idea of
+	 * who may read a lesson.
+	 *
+	 * @param WP_Post|null $lesson Post Tutor passes to the hook.
+	 */
+	public function render_lesson_panel( $lesson = null ): void {
+		$lesson = $lesson instanceof WP_Post ? $lesson : get_post();
+
+		if ( ! $lesson instanceof WP_Post || 'lesson' !== $lesson->post_type ) {
+			return;
+		}
+
+		$scope = EduAI_Scope::resolve( (int) $lesson->ID );
+
+		if ( ! $scope ) {
+			return;
+		}
+
+		$eduai_lesson_id    = $scope['id'];
+		$eduai_lesson_title = $scope['title'];
+		$eduai_ask_url      = eduai_ask_url( $scope['id'] );
+		$eduai_summarise_url = eduai_summarise_url( $scope['id'] );
+
+		$template = EDUAI_DIR . 'templates/lesson-panel.php';
+
+		// The markup is front-end's file. If it is ever absent the two links
+		// are still the entire point, so degrade to them rather than to a
+		// fatal — same arrangement as the console screen.
+		if ( is_readable( $template ) ) {
+			include $template;
+			return;
+		}
+
+		printf(
+			'<p class="eduai-lesson-panel"><a href="%s">%s</a> &middot; <a href="%s">%s</a></p>',
+			esc_url( $eduai_summarise_url ),
+			esc_html(
+				sprintf(
+					/* translators: %s: lesson title */
+					__( 'Summarise “%s”', 'eduai' ),
+					$eduai_lesson_title
+				)
+			),
+			esc_url( $eduai_ask_url ),
+			esc_html(
+				sprintf(
+					/* translators: %s: lesson title */
+					__( 'Ask about “%s”', 'eduai' ),
+					$eduai_lesson_title
+				)
+			)
+		);
 	}
 
 	public function load_textdomain(): void {
