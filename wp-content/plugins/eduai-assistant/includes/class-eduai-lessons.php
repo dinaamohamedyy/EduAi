@@ -49,6 +49,16 @@ class EduAI_Lessons {
 	private const MARKER = '/^next\s+topic\s*:?\s*(.+)$/i';
 
 	/**
+	 * How many times to wait out a per-minute token ceiling, and for how long.
+	 *
+	 * 25 seconds against a 60-second window: long enough that two lessons of
+	 * ~3,300 tokens each stop competing inside one window, short enough that a
+	 * three-lesson deck finishes in under two minutes.
+	 */
+	private const RATE_RETRIES = 3;
+	private const RATE_WAIT    = 25;
+
+	/**
 	 * Slides that are about running the course rather than about the subject.
 	 *
 	 * Dropped deterministically rather than left for the model to ignore. A deck
@@ -278,6 +288,212 @@ class EduAI_Lessons {
 		$first = preg_split( '/[.:]\s/', $slide )[0] ?? $slide;
 
 		return mb_substr( $first, 0, 70 );
+	}
+
+	/**
+	 * Create a topic and its lessons under a course.
+	 *
+	 * One deck becomes one topic; each of its sections becomes a lesson beneath
+	 * it. Tutor's own post types and parentage are used rather than restated —
+	 * `tutor()->topics_post_type` and `->lesson_post_type` — because guessing
+	 * `topic` when the plugin says `topics` produces posts that exist, publish
+	 * and 404, which is the failure mode that looks like success.
+	 *
+	 * Refuses rather than half-builds. A deck with no declared sections must not
+	 * arrive as one lesson containing the lecture, and a partially written topic
+	 * is worse than none: it looks finished to whoever opens the course next.
+	 *
+	 * @param int    $course_id  Tutor course.
+	 * @param int    $post_id    Source material.
+	 * @param string $topic_name Topic title, or blank to use the material's.
+	 * @param bool   $with_bodies Generate lesson prose (a model call per lesson).
+	 * @return array|WP_Error { topic_id, lessons: [ {id,title,url} ], skipped }
+	 */
+	public static function write( int $course_id, int $post_id, string $topic_name = '', bool $with_bodies = true ) {
+		if ( ! function_exists( 'tutor' ) ) {
+			return new WP_Error( 'eduai_no_tutor', __( 'Tutor LMS is not active, so there is nowhere to put lessons.', 'eduai' ) );
+		}
+
+		$course = get_post( $course_id );
+
+		if ( ! $course || tutor()->course_post_type !== $course->post_type ) {
+			return new WP_Error( 'eduai_no_course', __( 'That course does not exist.', 'eduai' ) );
+		}
+
+		$segmented = self::segment( $post_id );
+
+		// The guard that stops a non-segmentation being published as one. A
+		// deck the lecturer never divided comes back as a single section
+		// containing everything, which would become one lesson called "the
+		// whole lecture" and read as though it had worked.
+		if ( ! self::has_markers( $segmented ) ) {
+			return new WP_Error(
+				'eduai_no_sections',
+				__( 'That lecture does not announce its own sections, so it cannot be split into lessons yet. Nothing was created.', 'eduai' ),
+				array( 'slides' => $segmented['slides'], 'markers' => $segmented['markers'] )
+			);
+		}
+
+		if ( ! $segmented['paginated'] ) {
+			return new WP_Error(
+				'eduai_not_paginated',
+				__( 'The text of that lecture did not come out one block per page, so the section boundaries cannot be trusted. Nothing was created.', 'eduai' )
+			);
+		}
+
+		$topic_name = '' !== trim( $topic_name )
+			? trim( $topic_name )
+			: trim( wp_strip_all_tags( (string) get_the_title( $post_id ) ) );
+
+		$topic_id = wp_insert_post( array(
+			'post_type'    => tutor()->topics_post_type,
+			'post_status'  => 'publish',
+			'post_title'   => $topic_name,
+			'post_content' => '',
+			'post_parent'  => $course_id,
+			'menu_order'   => self::next_order( $course_id, tutor()->topics_post_type ),
+		), true );
+
+		if ( is_wp_error( $topic_id ) ) {
+			return $topic_id;
+		}
+
+		$lessons = array();
+		$skipped = array();
+
+		foreach ( $segmented['sections'] as $section ) {
+			$body = '';
+
+			if ( $with_bodies ) {
+				$written = self::body_with_retry( $section, $post_id, $topic_name );
+
+				if ( is_wp_error( $written ) ) {
+					// One section failing must not abandon a half-written topic
+					// silently — record it and carry on, then report which.
+					$skipped[] = array(
+						'title'  => $section['title'],
+						'reason' => $written->get_error_message(),
+					);
+					continue;
+				}
+
+				$body = $written;
+			}
+
+			$lesson_id = wp_insert_post( array(
+				'post_type'    => tutor()->lesson_post_type,
+				'post_status'  => 'publish',
+				'post_title'   => $section['title'],
+				'post_content' => $body,
+				'post_parent'  => $topic_id,
+				'menu_order'   => (int) $section['order'],
+			), true );
+
+			if ( is_wp_error( $lesson_id ) ) {
+				$skipped[] = array( 'title' => $section['title'], 'reason' => $lesson_id->get_error_message() );
+				continue;
+			}
+
+			// Tutor resolves a lesson's course through this meta as well as
+			// through parentage; both are set because its own utils read both
+			// depending on the call path.
+			update_post_meta( $lesson_id, '_tutor_course_id_for_lesson', $course_id );
+
+			// Where this lesson's teaching came from, for the tools that scope
+			// to a source rather than to a lesson.
+			update_post_meta( $lesson_id, '_eduai_source_material', $post_id );
+
+			$lessons[] = array(
+				'id'    => (int) $lesson_id,
+				'title' => $section['title'],
+				'url'   => (string) get_permalink( $lesson_id ),
+			);
+		}
+
+		if ( ! $lessons ) {
+			// Nothing was written, so leave nothing behind.
+			wp_delete_post( $topic_id, true );
+
+			return new WP_Error(
+				'eduai_no_lessons',
+				__( 'No lesson could be written from that lecture, so the topic was removed rather than left empty.', 'eduai' ),
+				array( 'skipped' => $skipped )
+			);
+		}
+
+		return array(
+			'topic_id' => (int) $topic_id,
+			'topic'    => $topic_name,
+			'lessons'  => $lessons,
+			'skipped'  => $skipped,
+		);
+	}
+
+	/**
+	 * lesson_body(), waiting out the per-minute token ceiling.
+	 *
+	 * Writing a whole deck is the one operation in this product that trips a
+	 * limit a single chat message never comes near. Groq's free tier allows
+	 * 8,000 tokens per MINUTE, and a lesson costs roughly 3,300 — so the first
+	 * lesson succeeds, the second is borderline, and the third is refused.
+	 * Measured exactly that: one lesson written, two skipped with "Limit 8000,
+	 * Used 5068, Requested 3304".
+	 *
+	 * This is not the gateway's problem to solve. A single request never hits
+	 * TPM, and adding a sleep there would slow every chat message to fix a
+	 * bulk-write defect. The caller doing the bulk write is what knows it is
+	 * about to make N requests in a row, so the pacing lives here.
+	 *
+	 * The provider tells us how long to wait — "Please try again in 2.79s" —
+	 * but that figure is the moment the window slides enough for THIS request,
+	 * measured before our own next request adds to it. Waiting the stated time
+	 * lands exactly on the edge; the window is a minute wide, so waiting a
+	 * sensible fraction of it is what actually clears.
+	 *
+	 * @param array  $section Section to write.
+	 * @param int    $post_id Source material.
+	 * @param string $subject Topic name.
+	 * @return string|WP_Error
+	 */
+	private static function body_with_retry( array $section, int $post_id, string $subject ) {
+		$attempts = 0;
+
+		while ( true ) {
+			$body = self::lesson_body( $section, $post_id, $subject );
+
+			if ( ! is_wp_error( $body ) ) {
+				return $body;
+			}
+
+			// Only a rate limit is worth waiting out. A bad key, an unreadable
+			// section or a truncated reply will fail identically next time, and
+			// sleeping on them turns a fast error into a slow one.
+			if ( 'eduai_api_429' !== $body->get_error_code() || $attempts >= self::RATE_RETRIES ) {
+				return $body;
+			}
+
+			++$attempts;
+			sleep( self::RATE_WAIT );
+		}
+	}
+
+	/**
+	 * Next menu_order under a course, so a second deck lands after the first.
+	 *
+	 * @param int    $course_id Course.
+	 * @param string $type      Post type.
+	 */
+	private static function next_order( int $course_id, string $type ): int {
+		$siblings = get_posts( array(
+			'post_type'      => $type,
+			'post_parent'    => $course_id,
+			'posts_per_page' => -1,
+			'fields'         => 'ids',
+			'post_status'    => 'any',
+			'no_found_rows'  => true,
+		) );
+
+		return count( $siblings ) + 1;
 	}
 
 	/**
