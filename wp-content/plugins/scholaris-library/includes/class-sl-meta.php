@@ -494,6 +494,19 @@ class SL_Meta {
 	}
 
 	/**
+	 * Same as flag(), reachable from other classes — SL_Private needs to tell
+	 * the editor when a file could not be moved out of the public folder,
+	 * and that failure must not be silent just because it happened in a
+	 * different file.
+	 *
+	 * @param int    $post_id Post the notice belongs to.
+	 * @param string $message What to say.
+	 */
+	public static function flag_public( int $post_id, string $message ): void {
+		self::flag( $post_id, $message );
+	}
+
+	/**
 	 * Queue an editor-facing notice for the next admin screen.
 	 *
 	 * @param int    $post_id Post the notice belongs to.

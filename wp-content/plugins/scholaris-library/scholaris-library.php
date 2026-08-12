@@ -26,6 +26,7 @@ require_once SL_DIR . 'includes/class-sl-post-types.php';
 require_once SL_DIR . 'includes/class-sl-meta.php';
 require_once SL_DIR . 'includes/class-sl-templates.php';
 require_once SL_DIR . 'includes/class-sl-library.php';
+require_once SL_DIR . 'includes/class-sl-private.php';
 require_once SL_DIR . 'includes/class-sl-quiz-history.php';
 
 /**
@@ -38,6 +39,7 @@ final class Scholaris_Library {
 		SL_Meta::init();
 		SL_Templates::init();
 		SL_Library::init();
+		SL_Private::init();
 		SL_Quiz_History::init();
 
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
