@@ -304,6 +304,13 @@ class EduAI_Settings {
 
 		$s       = self::all();
 		$indexed = EduAI_Knowledge::stats();
+
+		// Computed here rather than at the notice below, because the "every
+		// document is complete" line above it reads this too — and an undefined
+		// variable there is falsy, which would have printed the reassurance
+		// unconditionally, including for a broken index. The healthy claim and
+		// the warning have to come from one evaluation of one detector.
+		$eduai_partial = EduAI_Knowledge::incomplete();
 		?>
 		<div class="wrap">
 			<h1><?php esc_html_e( 'EduAI Assistant', 'eduai' ); ?></h1>
@@ -321,6 +328,24 @@ class EduAI_Settings {
 						'<code>' . esc_html( number_format_i18n( $indexed['chunks'] ) ) . '</code>',
 						'<code>' . esc_html( number_format_i18n( $indexed['docs'] ) ) . '</code>'
 					);
+					?>
+					<?php
+					/*
+					 * Say so when everything is whole, not only when it is not.
+					 *
+					 * A health report nobody has ever seen succeed is one nobody
+					 * trusts the first time it fires: with no positive state,
+					 * silence means both "checked, fine" and "never ran", and
+					 * the reader cannot tell which. The warning below is the
+					 * same detector — this line is the evidence it is awake.
+					 */
+					if ( $indexed['docs'] && ! $eduai_partial ) :
+						?>
+						<span style="color:#00844a">
+							<?php esc_html_e( 'Every document is complete.', 'eduai' ); ?>
+						</span>
+						<?php
+					endif;
 					?>
 					<a class="button button-secondary" style="margin-left:8px"
 						href="<?php echo esc_url( wp_nonce_url( admin_url( 'options-general.php?page=eduai&eduai_action=reindex' ), 'eduai_reindex' ) ); ?>">
@@ -344,7 +369,6 @@ class EduAI_Settings {
 			 * So the screen now says when a document is short, in the place the
 			 * person who uploaded it is already looking.
 			 */
-			$eduai_partial = EduAI_Knowledge::incomplete();
 			?>
 			<?php if ( $eduai_partial ) : ?>
 				<div class="notice notice-warning inline" style="margin:16px 0;padding:10px 12px">
