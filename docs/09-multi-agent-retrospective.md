@@ -140,6 +140,48 @@ that became checks, and *"only the habit does"* was a confession that this one
 had not yet. **If a section of a retrospective can be deleted by twenty lines of
 shell, it was a bug report wearing a lesson's clothes.**
 
+**The standing condition nobody chose, and it biased everything.** Six sessions
+spent a week reading this product from an administrator account, on a database
+where no student had ever done anything. Not a mistake — nobody decided it — and
+it silently skews every observation any of us made about what a *student* can do.
+
+It produced two wrong reports to the owner in one day, both in the same
+direction: that no enrolment path existed, and that a set of tools was
+owner-only. Neither was true. The cause was not inattention:
+
+> **An install that has never done the thing looks identical to an install that
+> cannot.**
+
+Zero rows in an enrolment table reads as *"enrolment doesn't work"* when it means
+*"nobody has tried"*. Replaying the button a student actually clicks produced a
+row — the first on that install, ever.
+
+**It is the same mechanism as two failures already catalogued, running in the
+other direction.** A download guard passed on a long-lived stack and failed on a
+fresh one: accumulated state making the product look *more* capable than it was.
+This is the absence of accumulated state making it look *less*. Both are **the
+environment's history masquerading as the product's capability**, and both times
+the reader credited the code with what belonged to the database. A permission
+check falling through to an administrator capability is a third face of it: it
+denies the enrolled student, admits the administrator, and **would test green
+from an admin session forever.**
+
+Two things to take from it, and the second is the one that gets used:
+
+> Before concluding a feature does not work, check whether anyone has ever made
+> it work. **Zero rows is a question, not an answer.**
+
+And the sharper one, offered by the session it caught — three times in one day:
+
+> **Grepping for the variant you have already seen produces a confident zero.**
+
+They searched a signed-in page for the field name they had seen on the anonymous
+one, got nothing, and were a step from reporting that signed-in students had no
+enrolment path. The two forms name the same field differently. The zero was
+confident *precisely because* they had seen the real thing once. What caught it
+was dumping every form verbatim instead of counting matches — the same move as
+reading the artifact instead of the description, at the scale of a single grep.
+
 **When a documented lesson recurs, that is evidence about the medium, not the
 reader.** These harnesses inject JavaScript as a string, so escapes are
 processed twice: `\s` inside a template literal is not a recognised escape and
