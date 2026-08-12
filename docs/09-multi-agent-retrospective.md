@@ -75,6 +75,32 @@ the entire coordination mechanism. No shared memory, no message bus, no locking.
    are duplicating each other's reading, less. This is a genuine expense and the
    owner of this project raised it directly.
 
+**The collision you will actually hit, and why it is not carelessness.** Three
+sessions edited one file within an hour, each believing it unowned. The manager
+mentioned a gap without saying it was assigned; a second session picked it up
+without asking; the third assumed ownership because they had written the
+original. That third session had been giving other people the "a quiet file is
+not an unowned file" advice all week, and the second had it written in their own
+notes — and neither rule fired, because **nothing prompted the question.**
+
+That is a mechanism failure, not three lapses. The map lived in the manager's
+head while messages crossed faster than it could be relayed, so "is anyone in
+this file?" had no answer except asking, and asking requires already suspecting.
+
+Three things helped, in increasing order of usefulness:
+
+- **Stand down rather than sweep.** When a file is moving under you, hand your
+  hunks over as a specification and stop. Ours survived to be built on precisely
+  because nobody committed a 289-line file of mixed authorship.
+- **Disclose what rode along.** `git commit <paths>` takes whole files, so a
+  co-edited file carries the other session's hunks whatever you do. Read
+  `git diff --numstat --ignore-all-space` against what you know you wrote, then
+  say what came with it.
+- **A written claim beats a remembered one** — with the caveat the manager put
+  in the file itself: a hand-maintained ledger is exactly the artefact that once
+  sent an engineer to wire five already-wired guards. It is a lookup, not an
+  authority. Verify against the tree before acting on it.
+
 ---
 
 ## 3. Why multiple agents — and which ones actually earned their keep
@@ -379,6 +405,29 @@ check and re-prove it on every run:
 
 Prefer a built-in known-positive control. Mutate only where one cannot be
 constructed.
+
+**The case that settles it is one no review could have caught.** Two sessions
+independently fixed the same real defect in a leak detector: the answer texts
+were raw UTF-8 while the payload was JSON-escaped, so three of ten probes could
+not match and those answers could have leaked in full under a green "none appear
+verbatim". One session escaped the needle; the AI engineer un-escaped the
+haystack. **Either fix works alone. Applied together they cancel**, and the
+detector went blind again.
+
+Neither diff was wrong. No reviewer reading either change would have found
+anything to object to, because the defect existed only in the *pair*. What
+noticed was the control asserting that the probes must fire on known-positive
+data — an assertion about the test's own machinery, with nothing to do with the
+product.
+
+The surviving mechanism is the AI engineer's, and their reason for it is the
+general one: a needle pinned to one exact representation misses a leak that
+arrived in another encoding, and **in a leak detector, narrower is the wrong
+direction.**
+
+A mutation performed once could not have caught this. It proves a check could
+fail on the day someone checked; it says nothing about what a second correct
+change does to it next week.
 
 ### 6.8 The assertion is sound; the input stopped posing the problem
 
