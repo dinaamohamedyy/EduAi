@@ -366,6 +366,23 @@ class SL_Private {
 	/**
 	 * Nonced URL for streaming a material's media.
 	 *
+	 * READS `_scholaris_video_id` FIRST, falling back to
+	 * `_scholaris_file_id`. This is the video route.
+	 *
+	 * Not interchangeable with SL_Library::download_url(), which reads
+	 * `_scholaris_file_id` only — point a <video> at that one and a material
+	 * carrying both a document and a video feeds the PDF to the player.
+	 * Unplayable, on exactly the materials most likely to exist, and
+	 * invisible in review. The two are one character apart at the call site,
+	 * hence this note.
+	 *
+	 * Also note the URL has no file extension, deliberately: it is a query
+	 * route, not a path. wp_video_shortcode() sniffs an extension and will
+	 * not emit a player for it — use a plain <video> element. Giving the
+	 * stream a file-shaped path to satisfy the shortcode would mean a second
+	 * URL form reaching the same gated bytes, which is the thing this class
+	 * exists to avoid.
+	 *
 	 * @param int $material_id Material.
 	 */
 	public static function stream_url( int $material_id ): string {

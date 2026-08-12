@@ -133,6 +133,12 @@ class SL_Library {
 	/**
 	 * Signed download URL for a material's file.
 	 *
+	 * READS `_scholaris_file_id` ONLY. This is the document route.
+	 *
+	 * Not interchangeable with SL_Private::stream_url(), which resolves
+	 * `_scholaris_video_id` first: on a video-only material this one 404s,
+	 * and it has no Range support, so a player pointed here cannot seek.
+	 *
 	 * @param int $post_id Material ID.
 	 */
 	public static function download_url( int $post_id ): string {

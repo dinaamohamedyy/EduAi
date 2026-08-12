@@ -59,6 +59,70 @@ add_filter( 'lostpassword_url', function ( string $lostpassword_url ) {
 } );
 
 /**
+ * Where someone who can edit lands after signing in.
+ *
+ * Filterable so the plugin that owns the console supplies the destination
+ * and the theme does not have to know the page exists — same
+ * resolver-with-honest-fallback shape as scholaris_progress_url(). With the
+ * library plugin off, this stays plain wp-admin: a worse landing, but a
+ * working one.
+ */
+function scholaris_admin_home_url(): string {
+	return (string) apply_filters( 'scholaris_admin_home_url', admin_url() );
+}
+
+/**
+ * Send staff to their console instead of the student progress page.
+ *
+ * TWO THINGS HERE ARE EASY TO GET WRONG.
+ *
+ * 1. It keys on CAPABILITY, never on a username, and never on the requested
+ *    URL being admin_url(). page-templates/auth-signin.php emits a hidden
+ *    redirect_to on EVERY sign-in through /sign-in/, set to the progress
+ *    page — so the "only override when the request is bare wp-admin" version
+ *    of this filter never fires even once. Capability also works on every
+ *    route into login, not just the themed form.
+ *
+ * 2. An explicitly requested destination WINS. `login_redirect` also fires
+ *    when someone was sent to sign in from a specific page — a gated
+ *    material emits wp_login_url( get_permalink() ) for exactly that — so
+ *    keying on capability alone would mean an administrator clicking "Sign
+ *    in to watch this lecture" silently landing on the console instead of
+ *    the lecture. Only the three DEFAULT destinations are overridden.
+ *
+ * Students are untouched: `student` and `subscriber` lack edit_posts, while
+ * `tutor_instructor` and `editor` hold it, so a second lecturer works on
+ * their first day without anyone remembering this decision.
+ *
+ * Known edge, accepted and recorded so it is not later diagnosed as a bug:
+ * home_url('/') is in the defaults, so a lecturer who explicitly asks for
+ * the homepage gets the console. That is only reachable when the /progress/
+ * page is missing, which is scholaris_progress_url()'s own fallback.
+ *
+ * @param string           $to        Where WordPress means to send them.
+ * @param string           $requested What was asked for.
+ * @param WP_User|WP_Error $user      The user, or an error.
+ * @return string
+ */
+add_filter( 'login_redirect', function ( $to, $requested, $user ) {
+	if ( ! $user instanceof WP_User || ! user_can( $user, 'edit_posts' ) ) {
+		return $to;
+	}
+
+	$defaults = array_map( 'untrailingslashit', array(
+		scholaris_progress_url(),
+		admin_url(),
+		home_url( '/' ),
+	) );
+
+	if ( ! in_array( untrailingslashit( (string) $to ), $defaults, true ) ) {
+		return $to;
+	}
+
+	return scholaris_admin_home_url();
+}, 10, 3 );
+
+/**
  * Apply the auth templates by slug even when nobody assigned them in
  * the editor — the pages created by setup.sh work with zero configuration.
  */
