@@ -1,0 +1,85 @@
+name: Mock design pass
+
+# Checks on design/preview.html — the static mock — and nothing else.
+#
+# WHY THIS IS ITS OWN WORKFLOW, which is a category argument and not a
+# reliability one. The deploy workflow rsyncs exactly three directories:
+#
+#     wp-content/themes/scholaris/
+#     wp-content/plugins/eduai-assistant/
+#     wp-content/plugins/scholaris-library/
+#
+# `design/` is not among them and is referenced nowhere in that job. So
+# design/preview.html is never shipped, and a check on the mock was gating
+# deployment of the theme and the plugins — a thing that could not ship
+# blocking the things that do. That would have been wrong even if this step
+# were perfectly deterministic; an intermittent failure only made it visible.
+#
+# The distinction this rests on: demoting a check to a warning changes whether
+# it is BELIEVED. Moving it changes only what it BLOCKS. The first was rejected
+# and the second accepted, deliberately (Main's ruling, recorded in
+# ASSIGNMENTS.md).
+#
+# So this is a full-strength gate on its own terms:
+#   - it fails hard. No continue-on-error, no soft reporting. Red here means
+#     the mock is broken and someone looks.
+#   - it runs on push AND pull_request, the same triggers as the deploy
+#     workflow. A check that only ran nightly or on dispatch would be one
+#     nobody sees, which is demotion through the back door.
+#
+# WHAT IT DOES NOT MEAN. Its target is the MOCK. A pass here says nothing
+# about the real WordPress tab — the same caveat as visual-checks.js needing
+# both themes. Do not read a green from this as coverage of shipped UI.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  mock:
+    name: Mock session-state pass
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      # Pinned rather than inherited from whatever the runner image ships.
+      # mock-state-pass.mjs drives the browser over CDP and needs a global
+      # WebSocket, which is Node 22+ — on Node 20 it dies with "WebSocket is not
+      # defined" AFTER the browser has started, which reads like a harness bug
+      # rather than a version one. An unpinned toolchain also means this job's
+      # result can change without a commit, which is the opposite of what a gate
+      # is for.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Drives the mock's session machinery in a real headless browser and reads
+      # computed style rather than the `hidden` flag — the distinction that let
+      # `.btn{display:inline-flex}` defeat `hidden` at equal specificity, so the
+      # header rendered Sign in, Your account and Sign out at once while every
+      # `el.hidden` toggled exactly as designed.
+      #
+      # Needs no WordPress: its target is design/preview.html, committed and
+      # keyless, so a bare checkout suffices and ubuntu-latest's google-chrome
+      # is found unaided. That is also why it does not belong in
+      # scripts/live-checks.sh or the nightly — it is the only browser check
+      # that can run before anything is composed, and the regression it guards
+      # is CSS, so catching it overnight would mean it had already merged.
+      #
+      # THE INSTRUMENTATION STAYS, AND SO DOES THE INVESTIGATION. Moving this
+      # out of the deploy gate stops a flake blocking an unrelated deploy; it
+      # does not fix the flake. Two failures in roughly forty runs, about one in
+      # four when it goes, no named cause. The next occurrence must still print
+      # a phase and an elapsed-against-budget line, or it will be as unreadable
+      # as the last one.
+      - name: Mock session-state pass
+        run: node scripts/mock-state-pass.mjs

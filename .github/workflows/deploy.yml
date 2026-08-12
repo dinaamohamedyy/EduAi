@@ -26,13 +26,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Pinned rather than inherited from whatever the runner image ships.
-      # mock-state-pass.mjs drives the browser over CDP and needs a global
-      # WebSocket, which is Node 22+ — on Node 20 it dies with "WebSocket is not
-      # defined" AFTER the browser has started, which reads like a harness bug
-      # rather than a version one. An unpinned toolchain also means this job's
-      # result can change without a commit, which is the opposite of what a gate
-      # is for.
+      # Pinned rather than inherited from whatever the runner image ships: an
+      # unpinned toolchain means this job's result can change without a commit,
+      # which is the opposite of what a gate is for.
+      #
+      # The Node 22 floor was originally chosen for mock-state-pass.mjs, which
+      # needs a global WebSocket. That step now lives in mock.yml and carries
+      # the reason with it. The pin stays here on its own merit — the remaining
+      # node steps (`--check`, check-inline-js.js, calc-parity.js) want a fixed
+      # version, not a specific one — so do not read 22 as a requirement of
+      # theirs and do not drop the pin because its original reason moved.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -96,25 +99,20 @@ jobs:
       - name: Inline JavaScript syntax check (HTML pages)
         run: node scripts/check-inline-js.js
 
-      # Drives the mock's session machinery in a real headless browser and reads
-      # computed style rather than the `hidden` flag — the distinction that let
-      # `.btn{display:inline-flex}` defeat `hidden` at equal specificity, so the
-      # header rendered Sign in, Your account and Sign out at once while every
-      # `el.hidden` toggled exactly as designed.
+      # EVERY CHECK IN THIS JOB IS ABOUT CODE THAT SHIPS. Keep it that way.
       #
-      # It belongs HERE and not in scripts/live-checks.sh or the nightly. It
-      # needs no WordPress — its target is design/preview.html, committed and
-      # keyless, so a bare checkout suffices; ubuntu-latest's google-chrome is
-      # found unaided. And the regression it guards is shipped CSS: catching it
-      # overnight would mean it had already merged. This is the only browser
-      # check that can run before anything is composed, which is the whole
-      # reason to spend ten seconds on it here.
+      # The deploy job below rsyncs wp-content/themes/scholaris/ and the two
+      # plugins — nothing else leaves this repository. A check on anything
+      # outside those three directories, however good, gates the deployment of
+      # code on the state of code that cannot be deployed.
       #
-      # SCOPE: it renders the MOCK. A pass says nothing about the real tab —
-      # same caveat as visual-checks.js needing both themes.
-      - name: Mock session-state pass
-        run: node scripts/mock-state-pass.mjs
-
+      # That is not hypothetical: the mock session-state pass lived here and
+      # blocked deploys on the state of design/preview.html, which is never
+      # shipped. It now has its own workflow (.github/workflows/mock.yml) at
+      # full strength — hard failure, same push and pull_request triggers — so
+      # it is still believed, it just no longer blocks the theme. Adding a
+      # design/ or docs/ check back here for tidiness would recreate the
+      # category error; put it in mock.yml, or its own workflow, instead.
       - name: Shell syntax check
         run: bash -n scripts/setup.sh
 
