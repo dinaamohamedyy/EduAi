@@ -70,6 +70,29 @@ function check( string $rule, bool $ok, string $detail ): void {
  *
  * @param mixed $data Response data or fixture.
  */
+/**
+ * The needle for one secret: the opening characters of an answer, long enough
+ * to be unmistakable and short enough to survive reformatting.
+ *
+ * There is one of these because the CONTROL and the CHECKS have to agree by
+ * construction. The control's whole job is proving these probes can match where
+ * the answer is known to be present; if it derived its probe even slightly
+ * differently from the checks — a different length, a different trim — it would
+ * be validating a needle nobody searches with, and the checks would run
+ * unvalidated behind a green control. That is the same shape as a test which
+ * reimplements the logic it is testing: the assertion runs, is correct, and is
+ * about the wrong object.
+ *
+ * It also makes the Tester's warning automatic rather than remembered. Adding a
+ * secret to $secrets now reaches the control and the checks through the same
+ * function, so a new probe cannot be dead in one place and live in the other.
+ *
+ * @param string $text Full answer text from the fixture.
+ */
+function leak_probe( string $text ): string {
+	return trim( mb_substr( $text, 0, 40 ) );
+}
+
 function leak_searchable( $data ): string {
 	return (string) wp_json_encode( $data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
 }
@@ -176,7 +199,7 @@ check(
  * slip past. */
 $probe_control = array();
 foreach ( $secrets as $s ) {
-	$probe = trim( mb_substr( $s[1], 0, 40 ) );
+	$probe = leak_probe( $s[1] );
 	if ( '' === $probe || false === strpos( $raw_wire, $probe ) ) {
 		$probe_control[] = $s[0];
 	}
@@ -216,7 +239,7 @@ foreach ( $secrets as $s ) {
 	list( $label, $text ) = $s;
 	/* Same encoding as the control above — this is the search that would catch
 	 * a real leak, and it was the one silently unable to match three answers. */
-	$probe = trim( mb_substr( $text, 0, 40 ) );
+	$probe = leak_probe( $text );
 	if ( '' !== $probe && false !== strpos( $wire, $probe ) ) {
 		$leaked[] = $label;
 	}
@@ -568,7 +591,7 @@ if ( is_wp_error( $eduai_sit ) ) {
 	/* Renaming the field or inlining the text would pass every check above. */
 	$eduai_rt_leaked = array();
 	foreach ( $secrets as $eduai_s ) {
-		$eduai_probe = trim( mb_substr( $eduai_s[1], 0, 40 ) );
+		$eduai_probe = leak_probe( $eduai_s[1] );
 		if ( '' !== $eduai_probe && false !== strpos( (string) $eduai_rt_body, $eduai_probe ) ) {
 			$eduai_rt_leaked[] = $eduai_s[0];
 		}
