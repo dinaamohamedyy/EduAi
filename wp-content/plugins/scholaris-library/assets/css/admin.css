@@ -70,7 +70,11 @@
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
-  align-items: start;
+  /* stretch, not start. Found by looking at the rendered screen rather than
+     measuring it: with `start` each card takes its own content height, and a
+     row of four cards with four different bottom edges reads as unfinished.
+     Equal heights cost nothing but whitespace under the shortest card. */
+  align-items: stretch;
 }
 .sl-console__card {
   padding: 1rem 1.15rem 1.15rem;

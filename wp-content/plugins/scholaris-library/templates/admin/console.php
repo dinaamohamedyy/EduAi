@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
 	<ul class="sl-console__status">
 		<li>
 			<strong><?php echo esc_html( (string) $sl_status['materials'] ); ?></strong>
-			<span><?php esc_html_e( 'published materials', 'scholaris-library' ); ?></span>
+			<span><?php echo esc_html( _n( 'published material', 'published materials', (int) ['materials'], 'scholaris-library' ) ); ?></span>
 		</li>
 		<?php if ( $sl_status['without_media'] ) : ?>
 			<li class="sl-console__status--warn">
@@ -40,12 +40,12 @@ defined( 'ABSPATH' ) || exit;
 		<?php if ( null !== $sl_status['courses'] ) : ?>
 			<li>
 				<strong><?php echo esc_html( (string) $sl_status['courses'] ); ?></strong>
-				<span><?php esc_html_e( 'courses', 'scholaris-library' ); ?></span>
+				<span><?php echo esc_html( _n( 'course', 'courses', (int) ['courses'], 'scholaris-library' ) ); ?></span>
 			</li>
 		<?php endif; ?>
 		<li>
 			<strong><?php echo esc_html( (string) $sl_status['accounts'] ); ?></strong>
-			<span><?php esc_html_e( 'registered accounts', 'scholaris-library' ); ?></span>
+			<span><?php echo esc_html( _n( 'registered account', 'registered accounts', (int) ['accounts'], 'scholaris-library' ) ); ?></span>
 		</li>
 		<li>
 			<strong><?php echo esc_html( $sl_status['max_upload'] ); ?></strong>
