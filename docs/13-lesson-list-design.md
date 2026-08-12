@@ -7,41 +7,43 @@ pixel claim here is measured.
 
 ---
 
-## 1. The lessons are not on the library card
+## 1. The surface is the card — and its hazard is live
 
-The brief says the library card shows its lessons and they render as three bare
-text lines. **The card has had no lesson titles since `c4ba888`**, which
-reverted exactly that feature three commits ago.
-
-Fetched anonymously, `/library/` renders per course:
+**This section originally argued the opposite and was wrong by the time it was
+read.** The history is worth keeping, because the conclusion it produced is what
+matters now:
 
 ```
-sl-course__title · sl-course__meta ("3 lessons") · sl-course__from
+d505135  lessons on the card, with links
+c4ba888  reverted — "my premise was false"
+d3f2126  restored — the owner saw it on screen and approved it
 ```
 
-No lesson titles, no lesson links. The three lines the owner screenshotted are
-on **Tutor's course page**, `/courses/machine-learning/`:
+My check was made between `c4ba888` and `d3f2126`, so `/library/` genuinely had
+no lesson titles when I fetched it and had them again by the time the design
+arrived. The screenshot is the card, not Tutor's page — decisive tell: it shows
+three plain lines with **no lock icons**, and Tutor puts a lock on every row.
 
+### The hazard I raised is real and currently shipping
+
+Verified anonymously on `/library/` just now:
+
+```html
+<ul class="sl-course__lessons">
+  <li><a href=".../lessons/supervised-learning-round-2/">Supervised Learning Round 2</a></li>
+  <li><a href=".../lessons/least-squares-in-d-dimensions/">Least Squares in d-Dimensions</a></li>
+  <li><a href=".../lessons/matrix-notation/">Matrix Notation</a></li>
+</ul>
 ```
-3 × tutor-icon-lock-line     3 × Enroll     1 × tutor-course-entry-box
-Supervised Learning Round 2 · Least Squares in d-Dimensions · Matrix Notation
-```
 
-This also reads his words more naturally than the card does. *"Change the shape
-of the widget from outside… make the lessons from outside look better"* — the
-lessons belong to Tutor's widget, and "from outside" is our theme restyling
-someone else's markup. That is the job.
+Three anchors, no lock, served to a logged-out visitor. `c4ba888`'s sentence
+applies to this markup word for word — *"I replaced an honest lock with a link
+to a broken page"* — because those hrefs reach Tutor's learning area, which
+emits three concatenated documents to anyone without access. **The owner is not
+enrolled in his own course, so he is one of those people.**
 
-### Do not put them back on the card
-
-`c4ba888` reverted the card version for a reason that has not changed: the card's
-plain anchors went straight to lesson permalinks, **bypassing the padlock** and
-landing an unenrolled student on the learning area's no-access path. In its own
-words — *"I replaced an honest lock with a link to a broken page."*
-
-That is the failure this team has been fixing all week, and re-styling those
-links would make a more attractive version of it. The card as it stands —
-title, count, source deck — is correct and should not change.
+So the design brief and the defect are the same piece of work: §4 is not a note
+beside the visual treatment, it *is* the fix.
 
 ---
 
@@ -100,12 +102,25 @@ and should come back *beside* the number, not instead of it.
 
 ---
 
-## 4. Locked: dim the affordance, not the information
+## 4. Locked: dim the affordance, not the information — and this is the fix
 
-The brief's second question — should the card warn before the click? On this
-surface the question dissolves: **Tutor already says it**, three times over, with
-a lock per row, an entry box and an Enroll button. Nothing needs adding. What is
-needed is making the state legible instead of incidental.
+The brief's second question was whether the card should say so before the click.
+It should, and the answer resolves the live hazard in §1 rather than merely
+labelling it.
+
+**A row the viewer cannot open must not be a link.**
+
+Front-end already has the enrolment state, so the row has two forms:
+
+| Viewer | Row |
+|---|---|
+| Enrolled | Anchor to the lesson permalink, as today. |
+| Not enrolled | Same list, same legibility, **no anchor**, with a lock. |
+
+Nobody is promised a page they will be bounced from, and nobody loses the table
+of contents. It is the same shape as the access decision settled this morning:
+the server decides what the control *is*, not merely where it points. An href
+that 403s is the download button all over again.
 
 **The titles stay at full contrast. The lock is what dims.**
 
@@ -150,16 +165,29 @@ broken.
 
 ## Constraints — which still bind
 
-The brief's constraints were written for the card. The surface changed, so:
+All of the brief's constraints bind. An earlier draft relaxed two of them on the
+belief that the surface was Tutor's course page; on a card in a grid they hold:
 
-- **Bounded height / cap at five:** does not apply here. The cap existed so a
-  *card in a grid of cards* would not grow with content. A course page's own
-  lesson list is the page's subject; it should show every lesson.
-- **One line with ellipsis:** still binds, and matters more — see §4.
-- **One row at 1400 / 900 / 375, no horizontal overflow:** unchanged as a
-  requirement for the library grid, which this work does not touch.
-- **Titles link to permalinks:** **dropped, deliberately.** They are not links
-  on this surface and must not become them; see §1 and §4.
+- **Bounded height / cap at five, remainder as a count.** Applies. Its whole
+  purpose is that a card must not grow with its content, and this is a card.
+- **One line with ellipsis.** Binds, and matters more once a number sits in the
+  gutter — see §3.
+- **One row at 1400 / 900 / 375, no horizontal overflow.** Applies directly;
+  this work is inside those cards.
+- **Titles link to permalinks.** Not dropped — **earned by access.** Conditional
+  on enrolment, per §4.
+
+### One thing not to add
+
+`ab7f388` records which pages of the deck each lesson covers, and a page range
+would sit naturally beside a number — *"1 · Supervised Learning Round 2 ·
+pp. 1–12"*. **Leave it off the card.**
+
+The card is the tightest row on the page, titles already need ellipsis, and §3
+is spending the gutter. Adding a second piece of metadata to the narrowest
+column is how the wrap gets created that front-end then has to solve. The page
+range is good information on the lesson itself or on the course page, where
+there is room for it.
 
 **Nothing above is measured.** The numbered gutter adds width in a row that
 already has an icon slot, and long titles plus a duration and a status in one
