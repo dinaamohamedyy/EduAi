@@ -175,6 +175,47 @@ result="$(fetch "$SITE/?sl_download=$POST_MEMBERS" "$tmp/a.jar")"
   && ok "no nonce at all is refused ($result)" \
   || bad "no nonce at all is refused" "got $result"
 
+# --- the wall, not the door -------------------------------------------------
+#
+# Everything above probes ?sl_download=, which is the handler. None of it asks
+# the question an attacker asks first: can I just fetch the file?
+#
+# On 11 Aug 2026 the answer was yes. Members-only material in wp-content/uploads
+# returned 200 with its payload to an anonymous request, while the same file
+# through the handler returned 403 — the gate protected the route and never the
+# bytes. This harness scored 8/8 throughout, because it had no way to name the
+# file: seven probes of one door, none at the wall beside it.
+#
+# It is not even obscurity: /wp-json/wp/v2/media answers anonymously and
+# publishes source_url for every attachment, so the paths are indexed.
+#
+# These are the assertions that can go red on the real defect. Until they pass,
+# the README's claim that file URLs "cannot be shared outside the site" is false
+# for every document in the library.
+
+result="$(fetch "$FILE_MEMBERS")"
+[ "${result#*|}" = "withheld" ] \
+  && ok "the members-only FILE itself is refused anonymously ($result)" \
+  || bad "the members-only FILE itself is refused anonymously" \
+         "got $result — the bytes are served directly from wp-content/uploads, so the nonce handler is decoration. Every gated document in the library is public to anyone with the URL, and /wp-json/wp/v2/media hands out the URLs."
+
+result="$(fetch "$FILE_MEMBERS" "$tmp/b.jar")"
+[ "${result#*|}" = "withheld" ] \
+  && ok "the members-only FILE is refused to a signed-in non-member ($result)" \
+  || bad "the members-only FILE is refused to a signed-in non-member" \
+         "got $result — being signed in is not membership; this is the same hole with a session attached"
+
+# The anonymous media index is the other half: it publishes the paths. Even once
+# the bytes are protected, a public listing of every gated file's URL is a leak
+# worth failing on rather than tolerating.
+media="$(curl -s "$SITE/wp-json/wp/v2/media?per_page=100")"
+if printf '%s' "$media" | grep -q "$(basename "$FILE_MEMBERS")"; then
+  bad "the anonymous media index does not list gated files" \
+      "GET /wp-json/wp/v2/media returned $(basename "$FILE_MEMBERS") to an unauthenticated request"
+else
+  ok "the anonymous media index does not list gated files"
+fi
+
 # --- and the other side of the gate ----------------------------------------
 # A public document must still be reachable signed out, or "everything is
 # refused" would score full marks on a handler that simply denies everyone.

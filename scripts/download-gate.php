@@ -141,3 +141,18 @@ printf( "POST_MEMBERS=%d\n", $members );
 printf( "POST_PUBLIC=%d\n", $public );
 printf( "PERMALINK_MEMBERS=%s\n", get_permalink( $members ) );
 printf( "PERMALINK_PUBLIC=%s\n", get_permalink( $public ) );
+
+/*
+ * The raw file URL — the bytes, not the route to them.
+ *
+ * Absent until 11 Aug 2026, and its absence is why this harness scored 8/8
+ * while members-only material was being served to anonymous visitors: with no
+ * way to name the file, the guard could only ever probe ?sl_download=, which
+ * is the half that works. It tested one door seven ways and never checked
+ * whether the wall had a hole in it.
+ *
+ * Emitted for BOTH documents. The members URL is the defect; the public one is
+ * the control that stops "refuse everything" from scoring full marks.
+ */
+printf( "FILE_MEMBERS=%s\n", wp_get_attachment_url( (int) get_post_meta( $members, '_scholaris_file_id', true ) ) );
+printf( "FILE_PUBLIC=%s\n", wp_get_attachment_url( (int) get_post_meta( $public, '_scholaris_file_id', true ) ) );
