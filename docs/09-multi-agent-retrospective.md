@@ -131,6 +131,30 @@ for a real defect, one a CI hardening. Every guard in this project runs on push,
 so an unpushed commit is invisible to all of them. Nothing detects it. Only the
 habit does.
 
+**When a documented lesson recurs, that is evidence about the medium, not the
+reader.** These harnesses inject JavaScript as a string, so escapes are
+processed twice: `\s` inside a template literal is not a recognised escape and
+silently degrades to the letter `s`, turning a whitespace regex into a letter
+regex. One probe reported a heading as `"Cour e Categorie"`. That was the
+**third** occurrence on this project, and it was already written down after the
+first.
+
+The instinct is to document it harder. That instinct is wrong — it had been
+documented, by people who then hit it anyway, including the person who wrote the
+note. It is the same shape as the ownership collision above: *a rule you have to
+already suspect you need is not a rule that fires.*
+
+The remedy for a recurring lesson is mechanical, not editorial:
+
+- a shared helper that builds injected JS with `String.raw`, so the escape is
+  handled once in one place rather than remembered at every call site; or
+- a check that flags `\s`, `\d` or `\w` inside a template literal in injected
+  JS, so the third occurrence is caught by a machine rather than by a person
+  reading their own output carefully enough to notice a missing letter.
+
+Two occurrences is a lesson. Three is a design problem — and the count is the
+signal that the write-up was the wrong intervention.
+
 ---
 
 ## 3. Why multiple agents — and which ones actually earned their keep
