@@ -247,7 +247,7 @@ boolean on the access level:
 |---|---|
 | `public` + file | **Nothing.** The file being fetchable is the point of "Anyone"; a notice there is noise. |
 | `members` + file + `is_secured()` | Reassurance, below. |
-| `members` + file + **not** `is_secured()` | The old warning — still true, still needed, and now *actionable*. |
+| `members` + file + **not** `is_secured()` | A placement **failure**. Rare, real, and reportable from nothing else on screen. |
 
 **State 2 — the protection works:**
 
@@ -263,18 +263,27 @@ page**, and an error page shown to an owner without framing reads as *my file is
 broken*. Say what he will see before he clicks it, or the demonstration
 undermines the sentence it is meant to prove.
 
-**State 3 — intent and reality disagree:**
+**State 3 — a fault, not a backlog (revised 12 Aug 2026):**
 
-> **This file is not protected yet.** It is set to signed-in students, but the
-> file itself is still at a public address that anyone can open. Save this
-> material to move it.
+> **This file could not be protected.** It is set to signed-in students, but
+> moving it out of the public folder failed, so its address still works for
+> anyone. This one needs fixing on the server — file permissions or disk space
+> are the usual causes.
 
-That state is reachable in two real ways, which is why it must not be assumed
-away: a material created before `SL_Private` shipped and never re-saved (nothing
-has changed its meta, so nothing has reconciled it), and a move that **failed** —
+An earlier draft said *"not protected **yet** … Save this material to move it."*
+That was backlog framing, and it is now wrong in a way that would waste the
+owner's time: placement runs on upload, on meta change, on save, and on
+activation, plus `maybe_upgrade()` at `plugins_loaded` for sites that were
+already active. **"Exposed" is no longer a state the system reaches on its
+own**, so if `is_secured()` is false, something *tried and failed* —
 `reconcile()` returns a `failed` array precisely because moving a file can fail
-on permissions or disk, and a members material whose move errored is public
-while every setting on screen says otherwise.
+on permissions or disk. Telling him to save it again invites him to repeat an
+action that already didn't work and to conclude the warning is noise when it
+doesn't clear.
+
+So the copy must not imply an editor-side remedy. Name it as a server fault, say
+what usually causes it, and be honest that this is not one he fixes by clicking
+Update.
 
 ### Show him the URL — same mechanism, opposite conclusion
 
@@ -324,14 +333,21 @@ through `reconcile()` on a meta write, not through the sweep. The sweep protects
 fresh installs, which is what its comment says it is for; it does nothing for
 the install we have.
 
-Measured on the live stack, state 3 is currently **empty for attached
-materials** — but empty because everything happened to be edited today, not
-because the migration ran. That is the "empty today" this column is designed to
-distinguish from "empty forever": it is reporting a real condition that happens
-to be clear, which is what a working check looks like.
+**What the column reports has changed, and its wording should change with it.**
+It is no longer a migration backlog. Head it on placement rather than on
+exposure — *File placement*, values *OK* / *Failed* — because non-empty is now a
+**fault report**: this material tried to protect its file and could not.
 
-When it is empty *and* the sweep has run, migration is genuinely done — a fact
-nobody can currently establish at all.
+That is a better column than the one I proposed, and it is better for the reason
+that makes checks trustworthy: it reports a condition the system cannot reach on
+its own, so a row appearing is genuinely information. The version I designed
+would have counted work not yet done, which drains to zero and then sits empty
+forever — the un-failable check, arrived at from the honest direction.
+
+**Keep the epistemic note attached to it.** Empty-because-clear and
+empty-because-unable are the same data with opposite meanings, and only knowing
+*why* distinguishes them. A future reader who finds this column empty and
+concludes it can be deleted is one step from rebuilding the defect.
 
 ### What the reassurance deliberately does not claim
 
@@ -357,23 +373,30 @@ want, and hard-blocking a combination the platform can express only teaches him
 to route around the tool. What must be impossible is *arriving* there without
 having read what is true.
 
-### The upload window — a real residual, and copy is the wrong fix
+### The upload window — closed, and refusing to write around it is why
 
-The media modal uploads through `async-upload.php` before the material is saved,
-so a file sits at a public address until placement reconciles. Back-end's own
-header explains why deciding at upload time is impossible: on a new material the
-post does not exist yet, so `_scholaris_access` cannot be known.
+**Fixed in `3e49af2`; verified at `class-sl-private.php:84`.** Nothing here needs
+copy.
 
-It matters more than "brief" suggests. The window closes when the owner *saves*,
-which is user-controlled — he may upload, write a description, and save ten
-minutes later — and `/wp-json/wp/v2/media` publishes `source_url` anonymously, so
-during that window the file is not merely fetchable but **indexed**.
+It was worse than described when I declined to paper over it. "Until the post is
+saved" is user-controlled, and if the editor **abandons the draft it means
+forever** — with the file at a real, anonymously-indexed URL the whole time. It
+was a hole, not a transient.
 
-**It should not go in the label.** A permanent notice about a transient state is
-the same false-warning failure being fixed today, and it would be shown on every
-material forever to describe a condition that is over by the time he reads it.
+Worth recording *why* the technical fix was available when the material-shaped
+one was not, because it is the same frame problem as unattached media seen from
+the other side. It could not go through `reconcile()`: at `add_attachment` the
+material does not reference the file yet — `_scholaris_video_id` is written on
+save — so the material's own meta says there is nothing to move. The rule had to
+be about the **attachment**: *a file uploaded into restricted material is
+restricted from the moment it exists.* A control that reasons per material is
+blind to a file that has not been claimed by one yet.
 
-The honest mitigation is technical, not editorial: **restrict the anonymous
-media REST index**, which also removes the public path listing in general. That
-is worth raising as its own item rather than papering over with a sentence — I
-am flagging it rather than deciding it, since it is not a design question.
+**The general lesson for this document: a caveat is what you write when you have
+decided not to fix something.** Raising it as a technical item instead of
+drafting a careful sentence about it is what got it closed — and a sentence would
+have been on every material forever, describing a hole rather than closing it.
+
+`maybe_upgrade()` at `plugins_loaded` (same commit) closes the other gap I
+flagged: a plugin already active when new code arrives never fires `activate()`,
+which is the deploy shape of every existing site including this one.
