@@ -233,7 +233,8 @@ if ( $differs ) {
 
 		if ( $d['absent'] ) {
 			printf(
-				"      LIKELY BROKEN: %s not present on the page, so that feature renders nowhere\n",
+				"      BROKEN: %s not present on the page, so that feature renders nowhere\n"
+					. "              — reported as a failure below, not as this warning\n",
 				implode( ', ', array_map( static fn( $t ) => "[$t]", $d['absent'] ) )
 			);
 		}
@@ -241,17 +242,73 @@ if ( $differs ) {
 	print "\n";
 }
 
+/*
+ * WHICH SIGNALS DECIDE THE EXIT CODE, AND WHY — read this before adding one.
+ *
+ * This file computes five things. Three are fatal, two are advisory, and the
+ * difference is a judgement about make_page/set_lede's semantics, not about
+ * severity of language:
+ *
+ *   FATAL     $missing       the slug is not on the site at all
+ *   FATAL     $lede_bare     set_lede declares a lede, the page has none
+ *   FATAL     $broken        an expected shortcode is absent, so the feature
+ *                            renders nowhere
+ *   ADVISORY  $differs       the copy was reworded. make_page is create-only,
+ *                            so an editor changing wording is EXPECTED, and a
+ *                            check that reddened for it would be ignored.
+ *   ADVISORY  $lede_differs  set_lede converges, so the next setup.sh run
+ *                            overwrites the site's anyway.
+ *
+ * Both advisories state that reasoning in their own output. That is the
+ * convention: an advisory signal must say why it is advisory where the reader
+ * sees it. A signal that is computed, printed, and silently absent from this
+ * list is a bug, and was one — `absent` printed "LIKELY BROKEN: [tag] not
+ * present on the page, so that feature renders nowhere" and then exited 0.
+ * A nightly reads exit codes, so that sentence was written to nobody, and the
+ * guard whose docblock cites /dashboard/ sitting on Tutor's login form for
+ * days would not have caught /dashboard/ sitting on Tutor's login form.
+ *
+ * Reporting a failure and returning success is not a smaller version of
+ * passing. It is worse, because it looks examined.
+ */
+
+$broken = array_values( array_filter( $differs, static fn( $d ) => ! empty( $d['absent'] ) ) );
+
+// Accumulate, then exit once. Each of these used to exit where it printed, so
+// a site with missing pages AND missing ledes reported only the first and hid
+// the rest until the next run — the same shape as discarding a signal, one
+// level up: the information existed and did not reach the reader.
+$fatal = 0;
+
 if ( $missing ) {
+	$fatal++;
 	print "MISSING PAGES — these exist in setup.sh but not on this site:\n";
 	foreach ( $missing as $slug ) {
 		print "  $slug\n";
 	}
 	print "\n  Fix: re-run scripts/setup.sh. make_page is create-only, so it will\n";
-	print "  create what is absent and leave every existing page untouched.\n";
-	exit( 1 );
+	print "  create what is absent and leave every existing page untouched.\n\n";
+}
+
+if ( $broken ) {
+	$fatal++;
+	print "SHORTCODE MISSING — the page exists and the feature renders nowhere:\n";
+	foreach ( $broken as $d ) {
+		printf(
+			"  /%s/%s\n      absent: %s\n",
+			$d['slug'],
+			$d['owner'] ? '  — ' . $d['owner'] : '',
+			implode( ', ', array_map( static fn( $t ) => "[$t]", $d['absent'] ) )
+		);
+	}
+	print "\n  This is NOT the reworded-copy case above. The wording of a page is\n";
+	print "  the editor's; the shortcode is what makes it a feature rather than a\n";
+	print "  paragraph. Re-running setup.sh will NOT repair it — make_page skips\n";
+	print "  pages that already exist — so restore the shortcode in wp-admin.\n\n";
 }
 
 if ( $lede_bare ) {
+	$fatal++;
 	print "PAGES WITH NO LEDE — set_lede declares one, the site has none:\n";
 	foreach ( $lede_bare as $d ) {
 		printf( "  /%s/\n", $d['slug'] );
@@ -260,9 +317,13 @@ if ( $lede_bare ) {
 	print "\n  These render as a bare heading over a shortcode: page.php only emits\n";
 	print "  the lede when has_excerpt() is true.\n";
 	print "\n  Fix: re-run scripts/setup.sh. set_lede converges on every run, so it\n";
-	print "  fills these in without touching anything else.\n";
+	print "  fills these in without touching anything else.\n\n";
+}
+
+if ( $fatal > 0 ) {
+	printf( "%d kind(s) of drift that break the site. See above.\n", $fatal );
 	exit( 1 );
 }
 
-print "no missing pages, no missing ledes\n";
+print "no missing pages, no missing shortcodes, no missing ledes\n";
 exit( 0 );
