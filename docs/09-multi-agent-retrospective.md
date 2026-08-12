@@ -310,7 +310,7 @@ could have detected the thing **at the scale or in the place you ran it**. A
 probe below the threshold where the mechanism engages is not a weak test — it is
 a test of a different code path, and it returns a confident green.
 
-Four instances, and the first is the one that generalises furthest:
+Five instances, and the first is the one that generalises furthest:
 
 - **Thorough, and blind.** `download-gate.sh` held eight passing assertions
   while members-only files were being served to anonymous visitors. Seven of
@@ -329,10 +329,25 @@ Four instances, and the first is the one that generalises furthest:
   ever subject to. It misled two separate measurements.
 - **Expectations derived from the implementation.** A parity harness generated
   from the reference it validated. Its expectations could not disagree with it.
+- **Arithmetically incapable.** `scrollWidth - window.innerWidth`, the overflow
+  criterion in every layout harness here, run under mobile emulation. The layout
+  viewport *widens to fit overflowing content*, so both terms move together and
+  the difference is zero for any overflow that exists. A 900px box planted at a
+  420px viewport measured scrollWidth 900, innerWidth 900, difference 0, with
+  nothing clipping; `documentElement.clientWidth` stayed 420 and reported 480.
+  It had been certifying "no horizontal overflow on any of 14 screens at 420px"
+  while the signed-in header ran 10px over at 420 and 110px over at 320, on
+  every screen. The same expression is quietly wrong at desktop too, where
+  innerWidth includes the scrollbar and clientWidth does not: a clean page reads
+  `-15`, so up to 15px of real overflow scores as negative.
 
-The distinction worth holding: three of those four could not reach the mechanism
-by accident — of scale, of configuration, of construction. The first could not
-reach it by **imagination**. Nobody had thought of the file as something you
+The distinction worth holding: four of those five could not reach the mechanism
+by accident — of scale, of configuration, of construction, of arithmetic. The
+last of those is the cleanest specimen in the set, because it needs no accident
+at all: the expression is *identically zero* wherever the emulation applies, so
+the check could not have been right on any run, on any page, from the moment it
+was written. A test that fails sometimes is flaky; a test that cannot produce a
+failing value is decoration. The first could not reach it by **imagination**. Nobody had thought of the file as something you
 could simply fetch, so no amount of rigour along the axis they *had* thought of
 would ever have found it. Rigour is not coverage; it is depth along whichever
 axis already occurred to someone.
