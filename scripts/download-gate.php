@@ -101,7 +101,23 @@ function gate_material( string $slug, string $access ): int {
 	 * assertion. Three sessions reached the opposite conclusion from one small
 	 * file before this comment existed.
 	 */
-	if ( ! $file_id || ! get_attached_file( $file_id ) ) {
+	/*
+	 * file_exists(), not just get_attached_file().
+	 *
+	 * get_attached_file() returns the *recorded* path whether or not anything is
+	 * at it. So with the attachment row intact and the file deleted — which is
+	 * what a fresh stack, a wiped uploads directory or a restored database looks
+	 * like — this guard decided the fixture was present, skipped recreating it,
+	 * and the run died at the control with "got 404, every refusal below would be
+	 * meaningless". That reads as the gate being broken when it is the fixture
+	 * that is missing, and it cost somebody twenty minutes on the wrong file.
+	 *
+	 * A self-healing fixture that cannot detect its own absence is a control that
+	 * cannot see the state it asserts about — and this one failed loudly in the
+	 * wrong direction, which is worse than failing silently, because it sends the
+	 * reader somewhere confidently.
+	 */
+	if ( ! $file_id || ! file_exists( (string) get_attached_file( $file_id ) ) ) {
 		$uploads = wp_upload_dir();
 		$path    = trailingslashit( $uploads['path'] ) . $slug . '.txt';
 		$body    = "GATE-TEST-PAYLOAD for $slug — if you can read this line, the file was served.\n";
