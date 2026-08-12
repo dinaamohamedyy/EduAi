@@ -580,6 +580,47 @@
   font-size: 0.82rem;
   color: hsl(var(--eduai-muted));
 }
+/* ------------------------------------------------------------ lesson page */
+/* The slides ARE the lesson, so the viewer leads and the generated prose sits
+   under it. Height is viewport-relative rather than fixed: Tutor's learning
+   area is a narrower column than the material page, and a fixed px frame that
+   fits one does not fit the other. */
+.eduai-lesson { margin: 0 0 var(--eduai-space-m); }
+.eduai-lesson__viewer {
+  border: 1px solid hsl(var(--eduai-border));
+  border-radius: var(--eduai-radius-s);
+  overflow: hidden;
+  background: hsl(var(--eduai-surface));
+}
+.eduai-lesson__bar {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  justify-content: space-between; gap: var(--eduai-space-2xs);
+  padding: var(--eduai-space-2xs) var(--eduai-space-s);
+  background: hsl(var(--eduai-subtle) / 0.7);
+  border-bottom: 1px solid hsl(var(--eduai-border));
+}
+/* min-width:0 so a long lesson title shrinks rather than pushing the range
+   label out of the bar — the range is the part that stops being findable. */
+.eduai-lesson__name { min-width: 0; overflow-wrap: anywhere; }
+.eduai-lesson__range {
+  flex: none;
+  font-family: var(--eduai-mono); font-size: 0.68rem; letter-spacing: 0.06em;
+  color: hsl(var(--eduai-muted));
+}
+.eduai-lesson__frame {
+  display: block; width: 100%; height: min(70vh, 720px);
+  border: 0; background: hsl(var(--eduai-sunken));
+}
+.eduai-lesson__fallback {
+  padding: var(--eduai-space-m); text-align: center; color: hsl(var(--eduai-muted));
+}
+/* Wrap rather than scroll: two long scoped labels in one row would otherwise
+   push the second button off a narrow column. */
+.eduai-lesson__tools {
+  display: flex; flex-wrap: wrap; gap: var(--eduai-space-2xs);
+  margin: var(--eduai-space-2xs) 0 0;
+}
+
 /* A rate limit is not a failure of the student's lecture: warm rather than
    red, because red says "you did something wrong" and the remedy is to wait. */
 .eduai-sum__busy {

@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
 // Bump on every chat.css change: assets are cache-keyed on ?ver=, and a fix
 // the server has but the browser does not is indistinguishable from no fix.
 // 1.1.1 alias-scope fix · 1.1.2 item-3 token migration.
-define( 'EDUAI_VERSION', '1.1.5' );
+define( 'EDUAI_VERSION', '1.1.6' );
 define( 'EDUAI_FILE', __FILE__ );
 define( 'EDUAI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EDUAI_URL', plugin_dir_url( __FILE__ ) );

@@ -1,0 +1,147 @@
+<?php
+/**
+ * A lesson, as the owner defined it: the material page's viewer, scoped to
+ * this lesson's slides, with the tools beside it.
+ *
+ * His words, pointing at the material page: "inside the course it consists of
+ * lessons, each lesson consists of pages like this." So the slides ARE the
+ * lesson. The generated prose below them is the explanation of the slides,
+ * not the lesson itself.
+ *
+ * VARIABLES, supplied by EduAI_Scope's caller on tutor_single_content_lesson:
+ *
+ *   $eduai_lesson_id       int    gated and resolved before we are called
+ *   $eduai_lesson_title    string server-read and tag-stripped, never a URL
+ *   $eduai_ask_url         string .../ask/?source=<lesson>
+ *   $eduai_summarise_url   string .../summarise/?source=<lesson>
+ *
+ * This file renders only where Tutor has already granted content access: the
+ * hook sits after learning-area/index.php's early return at :107, so an
+ * unenrolled visitor never reaches it. That is why there is no capability
+ * check here — adding one would be a second opinion that has to agree with
+ * Tutor's, and the two-predicates-that-agree-today failure is the one this
+ * project has spent the most time repairing.
+ *
+ * @package EduAI
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+$eduai_src   = (int) get_post_meta( $eduai_lesson_id, '_eduai_source_material', true );
+$eduai_from  = (int) get_post_meta( $eduai_lesson_id, '_eduai_page_from', true );
+$eduai_to    = (int) get_post_meta( $eduai_lesson_id, '_eduai_page_to', true );
+$eduai_total = $eduai_src ? (int) get_post_meta( $eduai_src, '_scholaris_pages', true ) : 0;
+
+/*
+ * ABSENT RANGE IS A REAL STATE, NOT A BUG. The segmenter writes a range only
+ * when the extracted block count exactly matches the page count, because block
+ * 18 is page 19 only if every page produced exactly one block — one image-only
+ * slide shifts every number after it. Where that does not hold it stores
+ * nothing rather than something approximate, and a re-upload actively
+ * WITHDRAWS a range that has stopped being trustworthy.
+ *
+ * So an empty value means "we do not know which slides these are", and the
+ * honest response is the whole document with no range label — not page 0, and
+ * not a guess.
+ */
+$eduai_has_range = $eduai_from > 0 && $eduai_to >= $eduai_from;
+
+/*
+ * The viewer URL is the material's gated download route, the same one the
+ * material page uses. can_download() is the material's OWN gate: being
+ * enrolled in the course is not the same question as being allowed to open
+ * the deck, and conflating them is how a student ends up with a viewer frame
+ * that 403s.
+ */
+$eduai_can_view = $eduai_src
+	&& class_exists( 'SL_Meta' )
+	&& class_exists( 'SL_Library' )
+	&& SL_Meta::can_download( $eduai_src );
+
+$eduai_doc = $eduai_can_view ? SL_Library::download_url( $eduai_src ) : '';
+?>
+<div class="eduai-lesson">
+
+	<?php if ( $eduai_doc ) : ?>
+		<div class="eduai-lesson__viewer">
+			<div class="eduai-lesson__bar">
+				<strong class="eduai-lesson__name"><?php echo esc_html( $eduai_lesson_title ); ?></strong>
+
+				<?php if ( $eduai_has_range ) : ?>
+					<span class="eduai-lesson__range">
+						<?php
+						if ( $eduai_total > 0 ) {
+							printf(
+								/* translators: 1: first slide 2: last slide 3: slides in the whole deck */
+								esc_html__( 'Slides %1$d–%2$d of %3$d', 'eduai' ),
+								(int) $eduai_from,
+								(int) $eduai_to,
+								(int) $eduai_total
+							);
+						} else {
+							printf(
+								/* translators: 1: first slide 2: last slide */
+								esc_html__( 'Slides %1$d–%2$d', 'eduai' ),
+								(int) $eduai_from,
+								(int) $eduai_to
+							);
+						}
+						?>
+					</span>
+				<?php endif; ?>
+			</div>
+
+			<?php
+			/*
+			 * #page= OPENS at a slide; it cannot bound one. Restricting the
+			 * viewer to the range would mean shipping a JS PDF viewer and
+			 * owning paging, selection and print from then on — so the range is
+			 * stated in words instead, and scrolling past the end lands in the
+			 * next lesson's slides. That is a feature for someone finishing a
+			 * section, and the whole deck is one gated click away on the
+			 * material page regardless: nothing is exposed that was not.
+			 */
+			$eduai_frag = $eduai_has_range ? '#page=' . (int) $eduai_from . '&view=FitH' : '#view=FitH';
+			?>
+			<object class="eduai-lesson__frame"
+				data="<?php echo esc_url( $eduai_doc . $eduai_frag ); ?>"
+				type="application/pdf">
+				<div class="eduai-lesson__fallback">
+					<p><?php esc_html_e( 'Your browser cannot display these slides inline.', 'eduai' ); ?></p>
+					<a class="eduai-btn eduai-btn--primary" href="<?php echo esc_url( $eduai_doc ); ?>">
+						<?php esc_html_e( 'Open the slides', 'eduai' ); ?>
+					</a>
+				</div>
+			</object>
+		</div>
+	<?php endif; ?>
+
+	<?php
+	/*
+	 * The tools carry the LESSON id, not the deck's: a question about this
+	 * lesson should be answered from this lesson's slides, which is the whole
+	 * point of the scoping work. Labels name the lesson, so
+	 * scoped-link-honesty examines them rather than skipping them.
+	 */
+	?>
+	<p class="eduai-lesson__tools">
+		<a class="eduai-btn eduai-btn--primary" href="<?php echo esc_url( $eduai_summarise_url ); ?>">
+			<?php
+			printf(
+				/* translators: %s: lesson title */
+				esc_html__( 'Summarise this lesson: %s', 'eduai' ),
+				esc_html( $eduai_lesson_title )
+			);
+			?>
+		</a>
+		<a class="eduai-btn" href="<?php echo esc_url( $eduai_ask_url ); ?>">
+			<?php
+			printf(
+				/* translators: %s: lesson title */
+				esc_html__( 'Ask about this lesson: %s', 'eduai' ),
+				esc_html( $eduai_lesson_title )
+			);
+			?>
+		</a>
+	</p>
+</div>
