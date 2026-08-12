@@ -80,6 +80,52 @@ final class Scholaris_Library {
 	}
 }
 
+/**
+ * `wp scholaris secure-files` — place every material's files by its access
+ * level, then report what is still reachable.
+ *
+ * Exists because placement is otherwise only ever a side effect: of a save,
+ * an upload, an activation or a version bump. None of those is something an
+ * operator can *choose* to do after a restore, an import, or a bulk edit
+ * that bypassed the editor. A non-zero exit makes it usable from a cron or a
+ * deploy step rather than only by eye.
+ */
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	WP_CLI::add_command( 'scholaris secure-files', function () {
+		$moved = SL_Private::migrate();
+
+		WP_CLI::log( sprintf(
+			'placed: %d moved, %d already correct, %d failed, across %d materials',
+			$moved['moved'],
+			$moved['unchanged'],
+			$moved['failed'],
+			$moved['materials']
+		) );
+
+		$audit = SL_Private::audit();
+
+		foreach ( $audit['unplaced'] as $id => $title ) {
+			WP_CLI::warning( sprintf( 'material %d "%s" is restricted but its file is still reachable', $id, $title ) );
+		}
+
+		// Not a failure — a boundary. These have no material and therefore no
+		// access level, so there is nothing to honour. Reported so the
+		// boundary is visible rather than inferred.
+		foreach ( $audit['unattached'] as $id => $url ) {
+			WP_CLI::log( sprintf( '  outside the library: attachment %d is public and attached to no material — %s', $id, $url ) );
+		}
+
+		if ( $audit['unplaced'] || $moved['failed'] ) {
+			WP_CLI::error( sprintf( '%d material(s) could not be secured', count( $audit['unplaced'] ) + $moved['failed'] ) );
+		}
+
+		WP_CLI::success( sprintf(
+			'every material is placed correctly (%d file(s) outside the library, by design)',
+			count( $audit['unattached'] )
+		) );
+	} );
+}
+
 add_action( 'plugins_loaded', array( 'Scholaris_Library', 'init' ) );
 register_activation_hook( __FILE__, array( 'Scholaris_Library', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'Scholaris_Library', 'deactivate' ) );

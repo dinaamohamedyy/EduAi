@@ -32,6 +32,12 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Private storage and the range-capable streamer.
+ *
+ * WHAT THIS DOES NOT COVER, stated here so nobody infers otherwise from the
+ * "This file is protected" label: it places files that a **material**
+ * references, according to that material's access level. An attachment with
+ * no material has no access level to honour and is left alone. Run
+ * `wp scholaris secure-files` to see those; see audit().
  */
 class SL_Private {
 
@@ -78,6 +84,91 @@ class SL_Private {
 		add_action( 'add_attachment', array( __CLASS__, 'on_attachment_added' ) );
 
 		add_action( 'template_redirect', array( __CLASS__, 'handle_stream' ) );
+
+		// The upgrade path. activate() covers a fresh install, but a plugin
+		// that is ALREADY ACTIVE when new code arrives never fires it — which
+		// is the deploy shape for every existing site, including this one.
+		// Measured: migrate() had never run here; every correctly-placed file
+		// got there by being edited today. A site with legacy materials nobody
+		// touches would have every one of them still public, and nothing would
+		// say so.
+		add_action( 'plugins_loaded', array( __CLASS__, 'maybe_upgrade' ), 20 );
+	}
+
+	/**
+	 * Run placement once per plugin version.
+	 *
+	 * Keyed on a stored version rather than a flag, so it re-runs whenever
+	 * placement rules change, not only the first time.
+	 */
+	public static function maybe_upgrade(): void {
+		if ( get_option( 'sl_private_version' ) === SL_VERSION ) {
+			return;
+		}
+
+		self::ensure_denied();
+		self::migrate();
+
+		update_option( 'sl_private_version', SL_VERSION );
+	}
+
+	/**
+	 * What is outside this class's reach, stated rather than implied.
+	 *
+	 * Placement acts on files a material references. An attachment with no
+	 * material — uploaded straight to the media library — has no
+	 * `_scholaris_access` to consult, so there is nothing to honour and
+	 * nothing to move. That is a real boundary, not an oversight: defaulting
+	 * unattached uploads to private would sweep up the theme's images and
+	 * every inline attachment on the site, which is the over-blocking failure
+	 * the public-material control exists to catch.
+	 *
+	 * So the boundary is reported instead. Documents and video are listed
+	 * because they are plausibly course content someone meant to attach;
+	 * images are not, because they are usually exactly what they look like
+	 * and listing them would bury the signal. That is a heuristic and is
+	 * labelled as one.
+	 *
+	 * @return array{unplaced: array, unattached: array}
+	 */
+	public static function audit(): array {
+		$out = array( 'unplaced' => array(), 'unattached' => array() );
+
+		$materials = get_posts( array(
+			'post_type'     => 'study_material',
+			'post_status'   => 'any',
+			'numberposts'   => -1,
+			'fields'        => 'ids',
+			'no_found_rows' => true,
+		) );
+
+		foreach ( $materials as $material_id ) {
+			if ( ! self::is_secured( $material_id ) ) {
+				$out['unplaced'][ $material_id ] = get_the_title( $material_id );
+			}
+		}
+
+		$loose = get_posts( array(
+			'post_type'      => 'attachment',
+			'post_status'    => 'inherit',
+			'post_parent'    => 0,
+			'numberposts'    => -1,
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'post_mime_type' => array( 'application/pdf', 'video', 'application/msword',
+				'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+				'application/vnd.openxmlformats-officedocument.presentationml.presentation' ),
+		) );
+
+		foreach ( $loose as $attachment_id ) {
+			$path = get_attached_file( $attachment_id );
+
+			if ( $path && ! self::is_private( $path ) ) {
+				$out['unattached'][ $attachment_id ] = wp_get_attachment_url( $attachment_id );
+			}
+		}
+
+		return $out;
 	}
 
 	/**
