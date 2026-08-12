@@ -175,9 +175,27 @@ class EduAI_Lessons {
 			return $result;
 		}
 
-		// The title slide is the deck's own name, not a lesson.
-		if ( isset( $slides[0] ) && self::title_slide( $post_id, $slides[0] ) ) {
-			array_shift( $slides );
+		// Whether a block index can be called a page number.
+		//
+		// looks_paginated() is deliberately generous — a page that is only an
+		// image contributes no text and drops out, and a 40% shortfall still
+		// segments correctly because the MARKERS decide the boundaries, not the
+		// count. Page NUMBERS are a stricter claim: block 18 is page 19 only if
+		// every page produced exactly one block. One missing block shifts every
+		// number after it, and a lesson pointing at the wrong pages looks
+		// exactly like one pointing at the right ones.
+		//
+		// So this is exact equality against the count recorded from the PDF at
+		// upload, and where it does not hold no range is offered at all.
+		$result['pages_exact'] = count( $slides ) > 0
+			&& count( $slides ) === (int) get_post_meta( $post_id, '_scholaris_pages', true );
+
+		// The title slide is the deck's own name, not a lesson. Skipped by
+		// index rather than shifted off, because every position after it is a
+		// page number now and array_shift would silently renumber them all.
+		$skip_first = isset( $slides[0] ) && self::title_slide( $post_id, $slides[0] );
+
+		if ( $skip_first ) {
 			$result['dropped']++;
 		}
 
@@ -185,9 +203,15 @@ class EduAI_Lessons {
 		$current  = array(
 			'title'  => '',
 			'slides' => array(),
+			'first'  => null,
+			'last'   => null,
 		);
 
-		foreach ( $slides as $slide ) {
+		foreach ( $slides as $i => $slide ) {
+			if ( 0 === $i && $skip_first ) {
+				continue;
+			}
+
 			if ( preg_match( self::MARKER, $slide, $m ) ) {
 				$result['markers']++;
 
@@ -199,6 +223,8 @@ class EduAI_Lessons {
 				$current = array(
 					'title'  => self::tidy_title( $m[1] ),
 					'slides' => array(),
+					'first'  => null,
+					'last'   => null,
 				);
 				continue;
 			}
@@ -209,6 +235,13 @@ class EduAI_Lessons {
 			}
 
 			$current['slides'][] = $slide;
+
+			// Original block position, not position within the section: the
+			// whole point is that dropped slides do not renumber what follows.
+			if ( null === $current['first'] ) {
+				$current['first'] = $i;
+			}
+			$current['last'] = $i;
 		}
 
 		if ( $current['slides'] ) {
@@ -224,6 +257,18 @@ class EduAI_Lessons {
 			$section['order'] = $i + 1;
 			$section['text']  = implode( "\n\n", $section['slides'] );
 			$section['chars'] = strlen( $section['text'] );
+
+			// Pages are 1-based and blocks are 0-based, and the range is only
+			// offered where a block index IS a page number. Null rather than a
+			// guess: a lesson that opens the viewer on the wrong slide is
+			// indistinguishable from one that opens it on the right one, so a
+			// range nobody can vouch for is worse than none.
+			$section['page_from'] = ( $result['pages_exact'] && null !== $section['first'] )
+				? $section['first'] + 1
+				: null;
+			$section['page_to']   = ( $result['pages_exact'] && null !== $section['last'] )
+				? $section['last'] + 1
+				: null;
 		}
 		unset( $section );
 
@@ -403,6 +448,13 @@ class EduAI_Lessons {
 			// to a source rather than to a lesson.
 			update_post_meta( $lesson_id, '_eduai_source_material', $post_id );
 
+			// And WHICH PAGES of it. A lesson is the material page scoped to
+			// its own slides, so without this the viewer has a document and no
+			// idea where the lesson starts. Written only when the block-to-page
+			// mapping is exact; absent meta means "unknown", which a renderer
+			// can fall back on, where a wrong number it cannot detect.
+			self::store_range( $lesson_id, $section );
+
 			$lessons[] = array(
 				'id'    => (int) $lesson_id,
 				'title' => $section['title'],
@@ -475,6 +527,112 @@ class EduAI_Lessons {
 			++$attempts;
 			sleep( self::RATE_WAIT );
 		}
+	}
+
+	/**
+	 * Record which pages of the source a lesson covers.
+	 *
+	 * Absent meta means "not known", and that is a state a renderer can handle
+	 * — show the whole document, or no viewer. A wrong page number is not: it
+	 * opens the viewer confidently on the wrong slide, and looks exactly like
+	 * opening it on the right one.
+	 *
+	 * @param int   $lesson_id Lesson post.
+	 * @param array $section   One section from segment().
+	 */
+	private static function store_range( int $lesson_id, array $section ): void {
+		if ( null === ( $section['page_from'] ?? null ) || null === ( $section['page_to'] ?? null ) ) {
+			delete_post_meta( $lesson_id, '_eduai_page_from' );
+			delete_post_meta( $lesson_id, '_eduai_page_to' );
+			return;
+		}
+
+		update_post_meta( $lesson_id, '_eduai_page_from', (int) $section['page_from'] );
+		update_post_meta( $lesson_id, '_eduai_page_to', (int) $section['page_to'] );
+	}
+
+	/**
+	 * Give existing lessons their page ranges without rewriting them.
+	 *
+	 * Segmentation is deterministic — same file, same markers, same boundaries
+	 * — so re-running it recovers exactly the ranges the original run computed
+	 * and threw away. What must NOT be re-run is the prose: that costs a model
+	 * call per lesson against a per-minute token ceiling this deck has already
+	 * hit, and would replace text somebody may have edited.
+	 *
+	 * Matched by title, because that is what the original run wrote and the
+	 * only thing tying a lesson to its section. A lesson whose title has been
+	 * edited since is reported as unmatched rather than guessed at.
+	 *
+	 * @param int $course_id Course holding the lessons.
+	 * @param int $post_id   Source material they were written from.
+	 * @return array{updated:array,unmatched:array,exact:bool}
+	 */
+	public static function backfill_ranges( int $course_id, int $post_id ): array {
+		$segmented = self::segment( $post_id );
+		$out       = array(
+			'updated'   => array(),
+			'cleared'   => array(),
+			'unmatched' => array(),
+			'exact'     => (bool) $segmented['pages_exact'],
+		);
+
+		// Deliberately NOT an early return when the mapping is untrustworthy.
+		//
+		// Returning here leaves whatever ranges are already stored in place —
+		// and those were vouched for by a segmentation that no longer holds. A
+		// re-uploaded PDF with different pagination is exactly how that
+		// happens, and the result is a lesson opening the viewer confidently on
+		// the wrong slide, which is indistinguishable from the right one.
+		//
+		// So a run that cannot vouch for ranges REMOVES them. The invariant
+		// worth having is that a stored range is always one the current
+		// segmentation stands behind, and absent meta is a state the renderer
+		// can handle.
+
+		$lessons = get_posts( array(
+			'post_type'      => function_exists( 'tutor' ) ? tutor()->lesson_post_type : 'lesson',
+			'posts_per_page' => -1,
+			'post_status'    => 'any',
+			'meta_key'       => '_eduai_source_material', // phpcs:ignore WordPress.DB.SlowDBQuery
+			'meta_value'     => $post_id,                 // phpcs:ignore WordPress.DB.SlowDBQuery
+		) );
+
+		$by_title = array();
+		foreach ( $segmented['sections'] as $section ) {
+			$by_title[ $section['title'] ] = $section;
+		}
+
+		foreach ( $lessons as $lesson ) {
+			$title = trim( wp_strip_all_tags( $lesson->post_title ) );
+
+			if ( ! isset( $by_title[ $title ] ) ) {
+				$out['unmatched'][] = array( 'id' => $lesson->ID, 'title' => $title );
+				continue;
+			}
+
+			$section = $by_title[ $title ];
+			$had     = (int) get_post_meta( $lesson->ID, '_eduai_page_from', true );
+
+			self::store_range( $lesson->ID, $section );
+
+			if ( null === $section['page_from'] ) {
+				// Only worth reporting if something was actually withdrawn.
+				if ( $had ) {
+					$out['cleared'][] = array( 'id' => $lesson->ID, 'title' => $title );
+				}
+				continue;
+			}
+
+			$out['updated'][] = array(
+				'id'   => $lesson->ID,
+				'title'=> $title,
+				'from' => $section['page_from'],
+				'to'   => $section['page_to'],
+			);
+		}
+
+		return $out;
 	}
 
 	/**
