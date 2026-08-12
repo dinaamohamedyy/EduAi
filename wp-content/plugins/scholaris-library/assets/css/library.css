@@ -143,6 +143,45 @@
 
 .sl-count { font-family: var(--sl-mono); color: hsl(var(--sl-muted)); font-size: 0.7rem; letter-spacing: 0.04em; margin: 0 0 var(--sl-space-xs); }
 
+/* --------------------------------------------------------------- courses -- */
+/* Courses are the library's first unit and read heavier than a material card:
+   fewer of them, each standing for a set of lessons rather than one file.
+   Same auto-fill floor as the material grid so the two sections align on a
+   shared column rhythm instead of drifting apart at every width. */
+.sl-courses { margin-bottom: var(--sl-space-l); }
+.sl-courses__title {
+  margin: 0 0 var(--sl-space-s);
+  font-size: var(--sl-step-1);
+}
+.sl-courses__title--loose {
+  margin-top: var(--sl-space-l);
+  color: hsl(var(--sl-muted));
+  font-size: var(--sl-step-0);
+}
+.sl-courses__grid {
+  display: grid; gap: var(--sl-space-m);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+}
+.sl-course {
+  display: grid; gap: var(--sl-space-3xs); align-content: start;
+  padding: var(--sl-space-m);
+  background: hsl(var(--sl-surface));
+  border: 1px solid hsl(var(--sl-border));
+  border-left: 3px solid hsl(var(--sl-brand));
+  border-radius: var(--sl-radius);
+}
+.sl-course__title { margin: 0; font-size: var(--sl-step-1); }
+.sl-course__title a { color: inherit; text-decoration: none; }
+.sl-course__title a:hover { color: hsl(var(--sl-brand)); }
+.sl-course__meta { margin: 0; color: hsl(var(--sl-muted)); font-size: var(--sl-step--1); }
+/* The source deck, muted: it orients rather than competes with the title.
+   min-width:0 so a long lecture name ellipsises instead of widening the card. */
+.sl-course__from { margin: var(--sl-space-2xs) 0 0; font-size: var(--sl-step--1); min-width: 0; }
+.sl-course__fromlabel {
+  font-family: var(--sl-mono); font-size: 0.66rem; letter-spacing: 0.07em;
+  text-transform: uppercase; color: hsl(var(--sl-muted)); margin-right: 0.35rem;
+}
+
 /* ------------------------------------------------------------------ grid -- */
 .sl-grid {
   display: grid; gap: var(--sl-space-m);

@@ -12,8 +12,95 @@
  */
 
 defined( 'ABSPATH' ) || exit;
+
+/*
+ * The library is courses first, then whatever has not been made into one.
+ * The owner's words: "the library consists of courses and each course consists
+ * of lessons." Materials were never meant to be the browsable unit — but they
+ * are not hidden either, because a deck that has not been segmented yet is
+ * still his, and making it vanish until someone builds a course around it is
+ * how you lose work you just uploaded. He confirmed that reading directly.
+ *
+ * Lessons deliberately do NOT appear on a card. A card whose height varies
+ * with content stops being scannable at four courses, and the course page has
+ * to exist anyway — so the card links and the page lists.
+ */
+$sl_tree    = class_exists( 'SL_Catalog' ) ? SL_Catalog::tree() : array( 'courses' => array(), 'loose' => array() );
+$sl_courses = $sl_tree['courses'] ?? array();
+
+/*
+ * Materials already taught by a course are dropped from the grid below rather
+ * than the grid being replaced: $query still carries the search, the taxonomy
+ * filters and the pagination the shortcode built, and throwing it away to read
+ * $sl_tree['loose'] would silently break all three. Filtering the loop keeps
+ * one query and one meaning.
+ */
+$sl_in_course = array();
+
+foreach ( $sl_courses as $sl_course ) {
+	foreach ( (array) ( $sl_course['materials'] ?? array() ) as $sl_mid ) {
+		$sl_in_course[ (int) $sl_mid ] = true;
+	}
+}
 ?>
 <div class="sl-library" data-sl-library>
+
+	<?php if ( $sl_courses ) : ?>
+		<section class="sl-courses">
+			<h2 class="sl-courses__title"><?php esc_html_e( 'Courses', 'scholaris-library' ); ?></h2>
+
+			<div class="sl-courses__grid">
+				<?php foreach ( $sl_courses as $sl_course ) : ?>
+					<article class="sl-course">
+						<h3 class="sl-course__title">
+							<a href="<?php echo esc_url( (string) $sl_course['url'] ); ?>">
+								<?php echo esc_html( (string) $sl_course['title'] ); ?>
+							</a>
+						</h3>
+
+						<p class="sl-course__meta">
+							<?php
+							$sl_n = (int) ( $sl_course['lessons'] ?? 0 );
+							printf(
+								esc_html(
+									/* translators: %d: number of lessons */
+									_n( '%d lesson', '%d lessons', $sl_n, 'scholaris-library' )
+								),
+								(int) $sl_n
+							);
+							?>
+						</p>
+
+						<?php
+						/*
+						 * The deck it was built from, because that is the thing
+						 * the owner recognises — he uploaded it. Deliberately
+						 * NOT a progress bar: a percentage on a browse screen
+						 * invites comparison between students rather than
+						 * orientation within a course.
+						 */
+						foreach ( (array) ( $sl_course['materials'] ?? array() ) as $sl_mid ) :
+							$sl_mtitle = get_the_title( (int) $sl_mid );
+							if ( '' === $sl_mtitle ) {
+								continue;
+							}
+							?>
+							<p class="sl-course__from">
+								<span class="sl-course__fromlabel"><?php esc_html_e( 'From', 'scholaris-library' ); ?></span>
+								<a href="<?php echo esc_url( (string) get_permalink( (int) $sl_mid ) ); ?>">
+									<?php echo esc_html( $sl_mtitle ); ?>
+								</a>
+							</p>
+						<?php endforeach; ?>
+					</article>
+				<?php endforeach; ?>
+			</div>
+		</section>
+
+		<h2 class="sl-courses__title sl-courses__title--loose">
+			<?php esc_html_e( 'Material not yet in a course', 'scholaris-library' ); ?>
+		</h2>
+	<?php endif; ?>
 
 	<?php if ( 'yes' === $atts['filters'] ) : ?>
 		<form class="sl-filters" method="get" action="<?php echo esc_url( get_post_type_archive_link( 'study_material' ) ?: home_url( '/library/' ) ); ?>">
@@ -81,6 +168,13 @@ defined( 'ABSPATH' ) || exit;
 			<?php
 			while ( $query->have_posts() ) :
 				$query->the_post();
+
+				// A deck already taught by a course is shown as that course,
+				// not twice. Skipped in the loop rather than excluded from the
+				// query so search, filters and pagination keep working.
+				if ( isset( $sl_in_course[ get_the_ID() ] ) ) {
+					continue;
+				}
 
 				$sl_id       = get_the_ID();
 				$sl_file_id  = (int) get_post_meta( $sl_id, '_scholaris_file_id', true );
