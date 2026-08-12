@@ -68,10 +68,41 @@ done
 pass=0; fail=0; skipped=0
 declare -a SKIPPED=()
 
+# --- the manifest: every harness this wrapper is answerable for --------------
+#
+# A wired guard is not a running guard. A registration that silently fails to
+# apply prints the same "all N passed" as one that ran, and this project has
+# produced that shape repeatedly — a contract-check registration that no-oped
+# five times over, a nightly that would happily run six of seven. Counting the
+# greens cannot catch it, because the missing one contributes no line to count.
+#
+# So the wrapper declares what it owes and reconciles at the end. Every harness
+# below MUST report exactly one of ok / NOT OK / skip. One that reports nothing
+# is a fatal error in its own right, named, regardless of how the others went.
+#
+# Adding a harness means adding it here as well as calling it. That is the
+# point: forgetting the call is then a loud failure rather than a silent
+# absence, which is the only direction of forgetting this wrapper can catch.
+declare -a MANIFEST=(
+  grade-adversarial
+  projection-leak
+  submit-contract
+  rate-limit
+  page-drift
+  download-gate
+  roundtrip
+  ui-geometry
+  visual-checks
+)
+declare -a ACCOUNTED=()
+
+# The harness id is the first token of the label every reporter is called with.
+account() { ACCOUNTED+=("${1%% *}"); }
+
 say()  { printf '%s\n' "$*"; }
-ok()   { pass=$((pass+1));    printf 'ok      %s\n' "$1"; }
-bad()  { fail=$((fail+1));    printf 'NOT OK  %s\n' "$1"; [ -n "${2:-}" ] && printf '          %s\n' "$2"; }
-skip() { skipped=$((skipped+1)); SKIPPED+=("$1"); printf 'skip    %s\n          %s\n' "$1" "$2"; }
+ok()   { account "$1"; pass=$((pass+1));    printf 'ok      %s\n' "$1"; }
+bad()  { account "$1"; fail=$((fail+1));    printf 'NOT OK  %s\n' "$1"; [ -n "${2:-}" ] && printf '          %s\n' "$2"; }
+skip() { account "$1"; skipped=$((skipped+1)); SKIPPED+=("$1"); printf 'skip    %s\n          %s\n' "$1" "$2"; }
 
 # --- guard: mutation ---------------------------------------------------------
 # Fail closed. A warning here would be read past by exactly the person about to
@@ -159,6 +190,15 @@ say ""
 
 run_wp() {                      # name, file, description
   local name="$1" file="$2"
+
+  # A harness file that is not there must be a named red, not a container error
+  # the caller has to decode. /scripts is the mount of this directory, so the
+  # local path is the one to test.
+  if [ ! -f "scripts/$file" ]; then
+    bad "$name" "scripts/$file does not exist — the wrapper lists a harness that is not in the repository"
+    return
+  fi
+
   if MSYS_NO_PATHCONV=1 docker compose --profile tools run --rm cli \
        wp eval-file "/scripts/$file" --allow-root >/tmp/lc.$$ 2>&1; then
     ok "$name"
@@ -172,6 +212,13 @@ run_wp "grade-adversarial  docs/06 §5.2, a model's lie cannot mint marks" grade
 run_wp "projection-leak    docs/07 §1, the answer key never reaches the browser" projection-leak.php
 run_wp "submit-contract    docs/07 §3, a full-credit short is not shown as wrong" submit-contract.php
 run_wp "rate-limit         the assistant's quota is per user, not shared" rate-limit.php
+
+# setup.sh describes a fresh install, not this one: make_page() is create-only,
+# so a page added to the script after a site was bootstrapped never appears on
+# it. /ask/ and /prepare/ both 404'd for days while present in the script.
+# Missing slug fails; content mismatch only warns, because make_page skips
+# existing pages and editing copy in wp-admin is expected rather than wrong.
+run_wp "page-drift         the running site has the pages setup.sh declares" page-drift.php
 
 if bash scripts/download-gate.sh >/tmp/lc.dg.$$ 2>&1; then
   ok "download-gate      a link copied from one student fails for another"
@@ -264,6 +311,34 @@ skip "visual-checks" "human-run by design — paste scripts/visual-checks.js int
 # never be able to read as green.
 
 say ""
+
+# --- reconcile against the manifest -----------------------------------------
+#
+# Before any verdict. A harness that reported nothing at all is invisible in
+# every count above — it adds no ok, no NOT OK, no skip — so "5 passed, 0
+# failed" reads exactly the same whether six ran or five did. This is the only
+# check that can see that, and it has to be able to turn a clean run red.
+missing=()
+for want in "${MANIFEST[@]}"; do
+  found=0
+  for got in ${ACCOUNTED[@]+"${ACCOUNTED[@]}"}; do
+    [ "$got" = "$want" ] && { found=1; break; }
+  done
+  [ "$found" -eq 0 ] && missing+=("$want")
+done
+
+if [ "${#missing[@]}" -gt 0 ]; then
+  say "MANIFEST MISMATCH — ${#missing[@]} harness(es) reported nothing at all:"
+  for m in "${missing[@]}"; do say "  - $m"; done
+  say ""
+  say "Each of these is listed in MANIFEST but produced no ok, NOT OK or skip"
+  say "line, so it did not run and nothing above is a complete verdict. Either"
+  say "its call is missing from this script, or it exited without reporting."
+  say ""
+  say "$fail failed, $pass passed, $skipped not run — and the run is INCOMPLETE"
+  exit 1
+fi
+
 if [ "$skipped" -gt 0 ]; then
   say "did not run (${skipped}):"
   for s in "${SKIPPED[@]}"; do say "  - $s"; done
@@ -276,5 +351,6 @@ if [ "$fail" -gt 0 ]; then
 fi
 
 say "$pass passed, 0 failed, $skipped not run"
+say "all ${#MANIFEST[@]} manifest harnesses accounted for"
 [ "$skipped" -gt 0 ] && say "(a clean run is not a complete one — see the list above)"
 exit 0
