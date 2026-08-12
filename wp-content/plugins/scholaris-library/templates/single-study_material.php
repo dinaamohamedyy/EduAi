@@ -279,6 +279,30 @@ wp_enqueue_script( 'scholaris-library' );
 			<?php endif; ?>
 
 			<?php
+			/*
+			 * Practice paper. Gated on the bank existing AND the visitor being
+			 * allowed to open the material, deliberately in that order: a panel
+			 * offering a paper that turns out to be locked is worse than no
+			 * panel, because it costs a click to find out.
+			 *
+			 * class_exists() rather than assuming SL_Bank, following the
+			 * function_exists( 'eduai_ask_url' ) precedent above — without the
+			 * bank there is no feature behind this and a missing control is
+			 * honest where a dead one is not.
+			 */
+			if ( class_exists( 'SL_Bank' ) && $sl_allowed && SL_Bank::has_bank( $sl_id ) ) :
+				?>
+				<div class="sl-panel">
+					<h3><?php esc_html_e( 'Practice paper', 'scholaris-library' ); ?></h3>
+					<p><?php esc_html_e( 'Questions written by your lecturer on this material — marked the moment you finish.', 'scholaris-library' ); ?></p>
+					<a class="sl-btn sl-btn--primary sl-btn--block"
+						href="<?php echo esc_url( SL_Bank::sit_url( $sl_id ) ); ?>">
+						<?php esc_html_e( 'Sit the practice paper', 'scholaris-library' ); ?>
+					</a>
+				</div>
+			<?php endif; ?>
+
+			<?php
 			$sl_related = new WP_Query( array(
 				'post_type'      => 'study_material',
 				'posts_per_page' => 5,

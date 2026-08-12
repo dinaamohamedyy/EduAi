@@ -109,6 +109,54 @@
    template, so this only styles the last card, which is prose by design. */
 .sl-console__card p:last-child { margin-bottom: 0; }
 
+/* ------------------------------------------------------------ question bank */
+/* The option row is four text inputs and a radio on one line, which is the
+   thing most likely to wrap badly in a meta box — the box is narrower than the
+   screen and narrower again with the sidebar open. Grid rather than flex so
+   the four options share the width exactly and the radio keeps its own column;
+   auto-fit with a floor lets them drop to two-up and then one-up rather than
+   compressing into unusable slivers. Measured, not assumed — numbers in the
+   commit. */
+.sl-bank__row {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem 1rem;
+  border: 1px solid #c3c4c7;
+  border-radius: 4px;
+  background: #fff;
+}
+.sl-bank__legend {
+  padding: 0 0.35rem;
+  font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+  color: #50575e;
+}
+.sl-bank__row textarea { margin-bottom: 0.6rem; }
+
+.sl-bank__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  list-style: none;
+}
+.sl-bank__options li {
+  display: flex; align-items: center; gap: 0.45rem;
+  margin: 0;
+  /* min-width:0 so a long option shrinks instead of widening its track and
+     pushing the row past the meta box. */
+  min-width: 0;
+}
+.sl-bank__options input[type="text"] { min-width: 0; }
+.sl-bank__options input[type="radio"] { flex: none; margin: 0; }
+
+.sl-bank__remove {
+  margin-top: 0.6rem;
+  color: #b32d2e;
+  text-decoration: none;
+}
+.sl-bank__remove:hover { color: #8a2424; text-decoration: underline; }
+.sl-bank__add { margin-top: 0.25rem; }
+.sl-bank__lead, .sl-bank__rev, .sl-bank__meta { color: #50575e; font-size: 13px; }
+
 /* --------------------------------------------------- dashboard-widget list */
 .sl-console__widget {
   margin: 0;
