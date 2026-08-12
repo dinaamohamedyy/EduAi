@@ -298,6 +298,55 @@ So the practical rules:
    anywhere" is the answer a broken search gives, and it is indistinguishable
    from the true one until you point the search at something you know exists.
 
+### 6.7 A check that cannot reach the mechanism still returns a result
+
+UI/UX's sentence, and it is the one that lands:
+
+> **A check that cannot reach the mechanism still returns a result, and the
+> result looks like evidence.**
+
+§6.6 is about *which object* you measured. This is about whether your instrument
+could have detected the thing **at the scale or in the place you ran it**. A
+probe below the threshold where the mechanism engages is not a weak test — it is
+a test of a different code path, and it returns a confident green.
+
+Four instances, and the first is the one that generalises furthest:
+
+- **Thorough, and blind.** `download-gate.sh` held eight passing assertions
+  while members-only files were being served to anonymous visitors. Seven of
+  them probe the download handler — copied link, signed out, wrong document,
+  forged token, no token — and none fetch the file. The harness *could not*:
+  its fixtures never emitted a file URL. Seven probes of one door, none at the
+  wall beside it. It now fails 3 of 11 on the real defect with nothing planted.
+- **Below the threshold.** A `Range:` request against a download handler
+  containing no range code returned a correct `206`, because the web server
+  satisfies ranges itself on responses it has fully buffered. The boundary sits
+  between 1 KB and 64 KB. At 50 MB with a marker planted at the seek offset, the
+  handler returns `200` and the whole 52,428,800 bytes; the marker never comes
+  back. Three sessions reached the wrong conclusion from one 86-byte fixture.
+- **The wrong container.** An upload limit measured in the `cli` container,
+  where `uploads.ini` is not mounted — a real reading of a limit no visitor is
+  ever subject to. It misled two separate measurements.
+- **Expectations derived from the implementation.** A parity harness generated
+  from the reference it validated. Its expectations could not disagree with it.
+
+The distinction worth holding: three of those four could not reach the mechanism
+by accident — of scale, of configuration, of construction. The first could not
+reach it by **imagination**. Nobody had thought of the file as something you
+could simply fetch, so no amount of rigour along the axis they *had* thought of
+would ever have found it. Rigour is not coverage; it is depth along whichever
+axis already occurred to someone.
+
+The practical form, and the one worth adopting:
+
+> Before wiring a check into anything, ask **whether it can fail on the thing it
+> claims to protect** — not whether it passes.
+
+Asked before wiring, that question costs a single run. Asked after, you have
+already shipped a green nightly over a live defect. And when a check has never
+once been observed red, you have no evidence about it at all — only about the
+code paths it happens to touch.
+
 ### Bonus: fixtures should be generators, not binaries
 
 The test deck for PPTX extraction was a `.pptx` — a zip. Opaque in review,
