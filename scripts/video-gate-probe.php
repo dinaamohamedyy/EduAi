@@ -43,6 +43,10 @@ $post_id = $existing ? (int) $existing[0] : (int) wp_insert_post( array(
 	'post_name'   => $slug,
 ) );
 
+// Keeps this fixture out of the front-end library — see SL_Post_Types.
+// Written every run, so an existing fixture picks the flag up too.
+update_post_meta( $post_id, '_scholaris_fixture', 1 );
+
 $video_id = (int) get_post_meta( $post_id, '_scholaris_video_id', true );
 
 if ( ! $video_id || ! file_exists( (string) get_attached_file( $video_id ) ) ) {

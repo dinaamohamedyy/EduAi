@@ -12,10 +12,63 @@ defined( 'ABSPATH' ) || exit;
  */
 class SL_Post_Types {
 
+	/**
+	 * Meta marking a post as a test fixture rather than teaching material.
+	 */
+	const FIXTURE_META = '_scholaris_fixture';
+
 	public static function init(): void {
 		add_action( 'init', array( __CLASS__, 'register' ) );
 		add_filter( 'manage_study_material_posts_columns', array( __CLASS__, 'columns' ) );
 		add_action( 'manage_study_material_posts_custom_column', array( __CLASS__, 'column_content' ), 10, 2 );
+		add_action( 'pre_get_posts', array( __CLASS__, 'hide_fixtures' ) );
+	}
+
+	/**
+	 * Keep test fixtures out of the library a student and the owner see.
+	 *
+	 * `Gate test — members`, `Gate test — public` and `Gate test — members
+	 * video` are created by `download-gate.php` and `video-gate-probe.php`
+	 * and are load-bearing for those harnesses, so they cannot be deleted —
+	 * but they were sitting in the owner's library beside his real lectures.
+	 * A fixture visible on the product IS in production, whatever it was
+	 * created for.
+	 *
+	 * HIDDEN, NOT DELETED, and only on the front end: wp-admin still lists
+	 * them, because a fixture nobody can find is one somebody recreates. The
+	 * harnesses keep working untouched.
+	 *
+	 * Flag-driven rather than title-matched. Matching "Gate test" would break
+	 * the day a harness renames its fixture, and would silently swallow a
+	 * real material a lecturer called "Gate test" — a rule keyed on wording
+	 * fails in both directions at once.
+	 *
+	 * @param WP_Query $query Query about to run.
+	 */
+	public static function hide_fixtures( $query ): void {
+		if ( is_admin() || ! $query instanceof WP_Query ) {
+			return;
+		}
+
+		$types = (array) $query->get( 'post_type' );
+
+		if ( ! in_array( 'study_material', $types, true ) && ! $query->is_post_type_archive( 'study_material' ) ) {
+			return;
+		}
+
+		// A single material requested by name is left alone: a direct link to
+		// a fixture should still resolve, for whoever is debugging one.
+		if ( $query->is_singular() ) {
+			return;
+		}
+
+		$meta   = (array) $query->get( 'meta_query' );
+		$meta[] = array(
+			'key'     => self::FIXTURE_META,
+			'compare' => 'NOT EXISTS',
+		);
+
+		$query->set( 'meta_query', $meta );
 	}
 
 	public static function register(): void {

@@ -74,6 +74,12 @@ function gate_material( string $slug, string $access ): int {
 		'post_name'   => $slug,
 	) );
 
+	// Marks this as a fixture so SL_Post_Types keeps it out of the front-end
+	// library. Written on every run rather than only on creation, because the
+	// fixtures predate the flag and would otherwise stay visible until
+	// somebody deleted and recreated them.
+	update_post_meta( $post_id, '_scholaris_fixture', 1 );
+
 	update_post_meta( $post_id, '_scholaris_access', $access );
 
 	$file_id = (int) get_post_meta( $post_id, '_scholaris_file_id', true );

@@ -312,12 +312,39 @@ register_deactivation_hook( __FILE__, array( 'EduAI_Assistant', 'uninstall_hooks
  * control when this plugin is absent: a missing button is honest, a button
  * that navigates somewhere unrelated is not.
  */
-function eduai_ask_url(): string {
+/**
+ * Attach a scope to a tool URL — the ONE place that knows the parameter is
+ * called `source`.
+ *
+ * It was spelled out by hand at the only call site that had it, and absent
+ * everywhere else. A parameter name written at each caller is a contract
+ * enforced by whoever remembers it: the resolver, the gate, the banner and
+ * the reader were all built and verified in isolation, and the string joining
+ * them existed in exactly one template. Nothing failed, because a link
+ * without it is a perfectly good unscoped link.
+ *
+ * Not gated here, deliberately. This says which material a link is ABOUT;
+ * EduAI_Scope::resolve() decides whether the visitor may have it, on arrival
+ * and again at the endpoint. Gating the link too would be a third opinion
+ * that has to agree with the other two — and a link that silently drops its
+ * scope teaches the reader nothing, where a page that ignores an unauthorised
+ * one behaves identically to no parameter by design.
+ *
+ * @param string $url    Destination.
+ * @param int    $source Post the tool should open against, 0 for none.
+ */
+function eduai_with_source( string $url, int $source ): string {
+	return $source > 0 ? add_query_arg( 'source', $source, $url ) : $url;
+}
+
+function eduai_ask_url( int $source = 0 ): string {
 	$page = get_page_by_path( 'ask' );
 
 	$url = ( $page && 'publish' === $page->post_status )
 		? (string) get_permalink( $page )
 		: home_url( '/' );
+
+	$url = eduai_with_source( $url, $source );
 
 	/**
 	 * Filter the Q&A page destination.
@@ -330,12 +357,14 @@ function eduai_ask_url(): string {
 /**
  * Where the Summarise page lives. Same contract as eduai_ask_url().
  */
-function eduai_summarise_url(): string {
+function eduai_summarise_url( int $source = 0 ): string {
 	$page = get_page_by_path( 'summarise' );
 
 	$url = ( $page && 'publish' === $page->post_status )
 		? (string) get_permalink( $page )
 		: home_url( '/' );
+
+	$url = eduai_with_source( $url, $source );
 
 	/**
 	 * Filter the Summarise page destination.
