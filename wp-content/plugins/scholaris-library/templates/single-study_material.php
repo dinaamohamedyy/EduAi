@@ -44,9 +44,8 @@ $sl_types    = get_the_terms( $sl_id, 'material_type' );
 $sl_video_src = (string) get_post_meta( $sl_id, '_scholaris_video_source', true );
 $sl_video_url = (string) get_post_meta( $sl_id, '_scholaris_video_url', true );
 $sl_video_id  = (int) get_post_meta( $sl_id, '_scholaris_video_id', true );
-$sl_has_video = ( 'link' === $sl_video_src && '' !== $sl_video_url )
-	|| ( 'file' === $sl_video_src && $sl_video_id );
-$sl_has_media = $sl_file_id || $sl_has_video;
+$sl_has_video = SL_Meta::has_video( $sl_id );
+$sl_has_media = SL_Meta::has_media( $sl_id );
 
 wp_enqueue_style( 'scholaris-library' );
 wp_enqueue_script( 'scholaris-library' );

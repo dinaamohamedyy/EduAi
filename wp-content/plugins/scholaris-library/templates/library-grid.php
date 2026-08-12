@@ -89,23 +89,10 @@ defined( 'ABSPATH' ) || exit;
 				$sl_types    = get_the_terms( $sl_id, 'material_type' );
 				$sl_ext      = $sl_file_id ? strtoupper( (string) pathinfo( (string) get_attached_file( $sl_file_id ), PATHINFO_EXTENSION ) ) : '';
 
-				/*
-				 * A video-only material has no attached file, so $sl_ext is ''
-				 * and the chip below fell back to 'DOC' — the listing labelled
-				 * every lecture a document.
-				 *
-				 * DUPLICATION, DELIBERATE AND TEMPORARY: this predicate now
-				 * exists in three places — here, single-study_material.php, and
-				 * SL_Console (:149). Three independent definitions of "does this
-				 * material have video" that must agree, and when they disagree
-				 * the symptom is the blank page the §2.4 restructure just fixed.
-				 * A single SL_Meta::has_video() belongs in includes/, which is
-				 * back-end's file; asked for, and all three call sites switch to
-				 * it when it lands.
-				 */
-				$sl_video_src = (string) get_post_meta( $sl_id, '_scholaris_video_source', true );
-				$sl_has_video = ( 'link' === $sl_video_src && '' !== (string) get_post_meta( $sl_id, '_scholaris_video_url', true ) )
-					|| ( 'file' === $sl_video_src && (int) get_post_meta( $sl_id, '_scholaris_video_id', true ) );
+				// A video-only material has no attached file, so $sl_ext is ''
+				// and the chip below fell back to 'DOC' — the listing labelled
+				// every lecture a document.
+				$sl_has_video = SL_Meta::has_video( $sl_id );
 				?>
 				<article class="sl-card">
 					<a class="sl-card__thumb" href="<?php the_permalink(); ?>" aria-hidden="true" tabindex="-1">
