@@ -101,6 +101,29 @@ Three things helped, in increasing order of usefulness:
   sent an engineer to wire five already-wired guards. It is a lookup, not an
   authority. Verify against the tree before acting on it.
 
+**Why the tooling cannot help you here, which is the root of all of it.** Every
+session commits under the same git identity. `git log --format=%an` returns one
+name for the entire repository, so git *cannot* answer "who wrote this" — and
+`git blame` is actively misleading, because it looks authoritative and is not.
+
+Three attributions had to be settled by asking, in one day. One of them was a
+credit handed to the wrong session, offered in good faith and nearly accepted by
+silence. That leaves exactly one durable record of who wrote what:
+
+> **The commit message is the only authorship metadata that exists.** Write it
+> as though it is the sole surviving evidence, because it is.
+
+The same gap explains the ownership collision above. The tooling that would
+normally answer *"who owns this file"* and *"who wrote this line"* answers
+neither, so both questions fall back on memory and on messages — and messages
+crossed seven times in one day between two sessions alone.
+
+**And one failure mode no check can catch: committing is not landing.** Twice in
+a day, a commit sat on the local tree and was never pushed — one of them a fix
+for a real defect, one a CI hardening. Every guard in this project runs on push,
+so an unpushed commit is invisible to all of them. Nothing detects it. Only the
+habit does.
+
 ---
 
 ## 3. Why multiple agents — and which ones actually earned their keep
