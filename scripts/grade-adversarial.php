@@ -179,6 +179,39 @@ add_filter(
 	3
 );
 
+/* ---- control: prove the planted lies are actually lies -------------------
+ *
+ * Every assertion below is of the form "the rule neutralised this". That shape
+ * passes perfectly on a crafted response that never violated the rule in the
+ * first place — edit `awarded: 99` down to a legal 2 and the clamp assertion
+ * still goes green while testing nothing at all. The searches in
+ * projection-leak.php have the same exposure and solve it the same way: prove
+ * the detector's *input* contains the thing you are claiming was caught,
+ * before believing any report that it was.
+ *
+ * Built in rather than mutation-tested once, because a one-time mutation
+ * proves the guard could fail on the day somebody checked; this re-proves it
+ * on every run, including after the refactor that quietly makes the crafted
+ * values legal.
+ */
+$planted = array(
+	'clamp_high is above the maximum'  => 99 > (int) $clamp_high['marks'],
+	'clamp_low is negative'            => -5 < 0,
+	"of_wrong's `of` contradicts the exam" => 7 !== (int) $of_wrong['marks'],
+	'the skipped short is absent from the grade' =>
+		! in_array( (int) $skipped['id'], array_map( static fn( $r ) => (int) $r['id'], $crafted['results'] ), true ),
+	'the hallucinated id is not a question in this exam' =>
+		! in_array( 999, array_map( static fn( $q ) => (int) $q['id'], $exam['questions'] ), true ),
+);
+
+foreach ( $planted as $what => $really ) {
+	check(
+		"control: $what",
+		$really,
+		'the crafted response does not actually violate this rule, so the assertion below would pass without the rule existing'
+	);
+}
+
 $graded = EduAI_Exams::grade( $exam, $answers );
 
 if ( is_wp_error( $graded ) ) {
