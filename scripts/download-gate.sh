@@ -226,5 +226,136 @@ result="$(fetch "$LINK_ANON_PUBLIC")"
   || bad "a public document is served signed out" \
          "got $result — the handler may be refusing everything, which would fake every pass above"
 
+# --- seeking inside a gated video, signed in, over HTTP ---------------------
+#
+# The other way out of the same gate. Everything above is a document fetched
+# whole through ?sl_download=; this is ?sl_stream= with a Range header, which is
+# what a player does when a student drags to minute forty.
+#
+# WHY THE FIXTURE IS 2 MB. Apache's byterange filter satisfies a Range request
+# itself on responses it has fully buffered, so a small file returns 206 with a
+# correct Content-Range whether or not the PHP handler implements ranges at all.
+# Measured on this stack: 1 KB -> 206, 64 KB -> 200, 1 MB -> 200, 50 MB -> 200.
+# Three sessions reached the opposite conclusion from one small file. Anything
+# asserted here below ~64 KB tests Apache and reports it as the product.
+#
+# ASSERT THE BYTES, NOT THE COUNT. This is the trap that caught the author, and
+# it is worth stating because the count is the obvious sufficient check and it
+# is not one: 206, a correct Content-Range, and exactly 19 bytes ALL pass while
+# the handler returns the WRONG 19 bytes — the head of the file every time, the
+# precise bug this section exists to catch. Only comparing the returned bytes to
+# the marker planted at that offset proves the seek landed, which is why the two
+# wrong-offset probes below are here: they establish that different offsets
+# return different content, so a matching marker cannot be a coincidence.
+#
+# KNOWN WEAKER THAN THE DOWNLOAD HALF, DELIBERATELY AND TEMPORARILY. Every link
+# above is scraped off the rendered page as a student really obtains it. The
+# stream nonce is MINTED, because the material template does not render a video
+# block yet (measured: 0 occurrences of sl_stream=, <video, or sl_download= on
+# the video material's page). So this proves the streamer, NOT that a student
+# can ever reach it. Swap to scraping the moment the template lands — a minted
+# nonce cannot fail the way a missing player element can.
+
+say ""
+say "--- gated video, signed in, seeking over HTTP ---"
+
+vid="$(MSYS_NO_PATHCONV=1 docker compose --profile tools run --rm cli \
+  wp eval-file /scripts/video-gate-probe.php --allow-root 2>/dev/null | grep -E '^[A-Z_]+=')"
+
+if [ -z "$vid" ]; then
+  bad "the video fixture could be created" "video-gate-probe.php produced nothing — stack down, or /scripts unmounted"
+else
+  eval "$vid"
+
+  # [A-Z_0-9], not [A-Z_]: the nonce key carries the material id
+  # (NONCE_SL_STREAM_111), so the pattern used for the document fixtures above
+  # drops the one line this whole section depends on — and drops it silently,
+  # leaving a symptom ("no nonce") two steps from its cause.
+  creds="$(MSYS_NO_PATHCONV=1 docker compose --profile tools run --rm cli \
+    wp eval-file /scripts/mint-cookies.php "$USER_A" "sl_stream_$POST_VIDEO" --allow-root 2>/dev/null | grep -E '^[A-Z_0-9]+=')"
+
+  # eval into a namespace of its own: mint-cookies.php also emits SITE, and
+  # clobbering the one the document half is using would be a silent cross-wire.
+  V_LOGGED_IN=""; V_AUTH=""; V_NONCE=""
+  V_LOGGED_IN="$(printf '%s' "$creds" | grep -m1 '^LOGGED_IN_COOKIE=' | cut -d= -f2-)"
+  V_LI_NAME="$(printf '%s' "$creds" | grep -m1 '^LOGGED_IN_COOKIE_NAME=' | cut -d= -f2-)"
+  V_AUTH="$(printf '%s' "$creds" | grep -m1 '^AUTH_COOKIE=' | cut -d= -f2-)"
+  V_AU_NAME="$(printf '%s' "$creds" | grep -m1 '^AUTH_COOKIE_NAME=' | cut -d= -f2-)"
+  V_NONCE="$(printf '%s' "$creds" \
+    | grep -m1 "^NONCE_$(printf 'SL_STREAM_%s' "$POST_VIDEO")=" | cut -d= -f2-)"
+
+  if [ -z "$V_NONCE" ] || [ -z "$V_LOGGED_IN" ]; then
+    bad "a session could be minted for $USER_A" "mint-cookies.php returned no nonce or no cookie; every range result below would be a 403 about the wrong thing"
+  else
+    V_JAR="$V_LI_NAME=$V_LOGGED_IN; $V_AU_NAME=$V_AUTH"
+    V_URL="$SITE/?sl_stream=$POST_VIDEO&_wpnonce=$V_NONCE"
+
+    # Control, same discipline as the document half: if the whole file will not
+    # stream to its owner, every refusal and every byte count below is noise.
+    whole="$(curl -s -o "$tmp/whole.bin" -w '%{http_code}' -b "$V_JAR" "$V_URL")"
+    got="$(wc -c < "$tmp/whole.bin" | tr -d ' ')"
+
+    if [ "$whole" = "200" ] && [ "$got" = "$SIZE" ]; then
+      ok "control: the signed-in student streams the whole video ($whole, $got bytes)"
+
+      code="$(curl -s -D "$tmp/rh.txt" -o "$tmp/seek.bin" -w '%{http_code}' \
+        -b "$V_JAR" -H "Range: bytes=$MARKER_OFFSET-$((MARKER_OFFSET+18))" "$V_URL")"
+      cr="$(grep -i '^content-range' "$tmp/rh.txt" | tr -d '\r' | sed 's/^[Cc]ontent-[Rr]ange: *//')"
+      n="$(wc -c < "$tmp/seek.bin" | tr -d ' ')"
+      body="$(cat "$tmp/seek.bin")"
+      want="$(printf '%s' "$MARKER" | cut -c1-19)"
+
+      [ "$code" = "206" ] \
+        && ok "a mid-file range answers 206, not 200 with the whole file" \
+        || bad "a mid-file range answers 206, not 200 with the whole file" \
+               "got $code — at $SIZE bytes Apache does not slice this, so 200 means the handler ignored the seek"
+
+      [ "$cr" = "bytes $MARKER_OFFSET-$((MARKER_OFFSET+18))/$SIZE" ] \
+        && ok "Content-Range names the requested window ($cr)" \
+        || bad "Content-Range names the requested window" "got '$cr'"
+
+      [ "$n" = "19" ] \
+        && ok "exactly 19 bytes come back, not the rest of the file" \
+        || bad "exactly 19 bytes come back, not the rest of the file" "got $n"
+
+      # The assertion the three above cannot make between them.
+      [ "$body" = "$want" ] \
+        && ok "the bytes ARE the ones at offset $MARKER_OFFSET (seek landed)" \
+        || bad "the bytes ARE the ones at offset $MARKER_OFFSET (seek landed)" \
+               "got '$body', wanted '$want' — a correct status, a correct Content-Range and a correct byte count can all be true of the wrong bytes"
+
+      head19="$(curl -s -b "$V_JAR" -H 'Range: bytes=0-18' "$V_URL")"
+      tail19="$(curl -s -b "$V_JAR" -H "Range: bytes=$((SIZE-19))-" "$V_URL")"
+
+      [ "$head19" != "$tail19" ] && [ "$head19" != "$body" ] \
+        && ok "control: different offsets return different bytes" \
+        || bad "control: different offsets return different bytes" \
+               "head, tail and mid are not all distinct — the marker match above could be an artefact of a handler returning the same bytes for every range"
+
+      unsat="$(curl -s -o /dev/null -w '%{http_code}' -b "$V_JAR" -H 'Range: bytes=99999999-' "$V_URL")"
+      [ "$unsat" = "416" ] \
+        && ok "a range past the end is refused with 416" \
+        || bad "a range past the end is refused with 416" "got $unsat"
+
+      anon="$(curl -s -o /dev/null -w '%{http_code}' -H "Range: bytes=$MARKER_OFFSET-$((MARKER_OFFSET+18))" "$V_URL")"
+      [ "$anon" = "403" ] \
+        && ok "the same URL, same nonce, signed out is refused ($anon)" \
+        || bad "the same URL, same nonce, signed out is refused" \
+               "got $anon — the streaming route is a second way to the gated bytes and must gate like the first"
+
+      # Objection 1 to docs/11-admin-console.md §9.3 item 3, encoded so it
+      # cannot silently regress: the spec still says to record this as 200.
+      raw="$(curl -s -o /dev/null -w '%{http_code}' "$RAW_URL")"
+      [ "$raw" = "403" ] \
+        && ok "the video's raw uploads URL is refused anonymously ($raw)" \
+        || bad "the video's raw uploads URL is refused anonymously" \
+               "got $raw at $RAW_URL — placement did not move an uploaded video on members-only material, and the streaming gate above is decoration"
+    else
+      bad "control: the signed-in student streams the whole video" \
+          "got $whole, $got bytes (wanted 200, $SIZE) — every range assertion below would be meaningless, skipping them"
+    fi
+  fi
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

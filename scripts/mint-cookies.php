@@ -49,6 +49,14 @@ if ( ! $user ) {
 }
 
 $uid = (int) $user->ID;
+
+/*
+ * One hour, and mint per run rather than reusing a saved file. When the token
+ * expires the nonce stops verifying and the handler answers wp_die( 403,
+ * 'That link has expired' ) — which is indistinguishable from the gate refusing
+ * you, and sends the reader off to debug access control. Cost me a confusing
+ * ten minutes with an env file an hour old.
+ */
 $exp = time() + 3600;
 
 /* Bind a real session token first — everything below derives from it. */
