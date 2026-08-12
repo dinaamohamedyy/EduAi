@@ -184,7 +184,15 @@ const NAV_PROBE = `(() => {
     tallest: Math.max(...hs),
     clearBrand: Math.round(nav.left - brand.right),
     clearActions: Math.round(actions.left - nav.right),
-    hOverflow: document.documentElement.scrollWidth - window.innerWidth,
+    // clientWidth, NOT innerWidth. Under mobile emulation the layout viewport
+    // WIDENS to fit overflowing content, so innerWidth grows with scrollWidth
+    // and the difference is 0 for any overflow at all: a planted 900px box at
+    // 420px measured scrollWidth 900, innerWidth 900, difference 0, with
+    // nothing clipping (11 Aug 2026). clientWidth stayed 420 and reported 480.
+    // It also fixes a quieter error at desktop, where innerWidth includes the
+    // scrollbar and clientWidth does not — this read -15 on a clean page, so
+    // up to 15px of real overflow scored as negative.
+    hOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     headerH: Math.round(hdr.height) };
 })()`;
 const navFits = (p) => p.spread <= 4 && p.tallest < 60 && p.clearBrand >= 4 &&

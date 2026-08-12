@@ -241,6 +241,44 @@
 .sl-viewer__frame { display: block; width: 100%; height: min(75vh, 820px); border: 0; background: hsl(var(--sl-sunken)); }
 .sl-viewer__fallback { padding: var(--sl-space-l) var(--sl-space-m); text-align: center; color: hsl(var(--sl-muted)); }
 
+/* Video, both shapes, in one frame.
+   --------------------------------------------------------------------------
+   A provider embed arrives as an iframe carrying width="560" height="315" as
+   HTML ATTRIBUTES, which are presentational and survive everything except a
+   CSS rule that overrides them. Dropped into the content column unstyled it
+   does not shrink: it stays 560px wide inside the column and pushes the
+   document sideways. Measured on /material/gate-public/, raw vs wrapped:
+     375px — column 327, raw overflows 209px, wrapped 0 (box 327x184)
+     420px — column 372, raw overflows 164px, wrapped 0 (box 372x209)
+     768px — column 720, raw 0 (560 happens to fit), wrapped 0
+   Ratio measured 1.778 at every width, and the iframe fills the box exactly.
+
+   An iframe has NO intrinsic aspect ratio, so something must tell it one;
+   width alone gives a full-width box still 315px tall. Hence the wrapper.
+
+   An uploaded file is a <video>, which DOES know its own dimensions — but not
+   until metadata loads, so sizing from the file alone means the page jumps
+   when it arrives. Both therefore get the same 16:9 box, and the video gets
+   object-fit:contain so a 4:3 recording or a phone-shot portrait letterboxes
+   inside it rather than stretching. One frame, no layout shift, no distortion,
+   whichever path the material took. */
+.sl-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: hsl(var(--sl-sunken));
+}
+/* Both selectors carry the sizing: the wrapper cannot impose height on a
+   replaced element that has opinions of its own. */
+.sl-video > iframe,
+.sl-video > video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.sl-video > video { object-fit: contain; background: hsl(var(--sl-sunken)); }
+
 .sl-panel {
   padding: var(--sl-space-m);
   background: hsl(var(--sl-surface));
