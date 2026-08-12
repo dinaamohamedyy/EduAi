@@ -699,7 +699,21 @@ class EduAI_Lessons {
 			. "Write the lesson.\n\n"
 			. "Rules:\n"
 			. "- Use ONLY what is in these slides. Do not add examples, definitions, history or applications from your own knowledge, however helpful they would be — a student will revise from this and be examined against the lecture, not against you.\n"
-			. "- Where the extraction has lost something — a formula that was an image, a symbol that came through as stray letters — say plainly that the slide has a formula to check in the original, rather than reconstructing it. A guessed formula is the worst thing this can produce.\n"
+			// This text is displayed BESIDE a viewer showing the slides. "The
+			// slide shows…" then reads as pointing at whatever happens to be on
+			// screen, which is usually not the one the sentence is about. The
+			// first version of this prompt used that register itself and the
+			// model followed it about forty times per lesson.
+			// Two uses of "the slide" and only one is a problem. As a NARRATOR
+			// it is deictic — the reader may be looking at a different slide
+			// than the sentence describes. As a POINTER to something the
+			// extraction lost it is the most useful sentence on the page,
+			// because the viewer beside it is open on exactly that slide. A
+			// blanket ban suppressed the good use along with the bad; measured
+			// on the first attempt, 9 of the 12 survivors were pointers.
+			. "- Do not narrate the slides. Never write \"the slide explains\", \"the slide indicates\", \"the slide provides\", \"the slides note\" or \"the lecture above\": this text sits beside the slides, so a sentence ABOUT a slide reads as being about whichever one the student is looking at. State the material directly — \"least squares minimises the sum of squared residuals\", never \"the slide explains least squares\".\n"
+			. "- Do keep referring to the slides when sending the reader TO them for something you cannot reproduce — \"the exact expression is on the slide\" is exactly right, because the viewer beside this text is open on it.\n"
+			. "- Where the extraction has lost something — a formula that was an image, a symbol that came through as stray letters — say that the original carries a formula at this point and should be consulted, rather than reconstructing it. A guessed formula is the worst thing this can produce.\n"
 			. "- Ignore anything administrative: assignment deadlines, office hours, forum threads, reading links.\n"
 			. "- Open with one short paragraph on what this section is about. Then the substance, under `##` headings that follow the lecture's own order.\n"
 			. "- Define each term the first time the lecture uses it.\n"
