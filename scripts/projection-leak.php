@@ -46,6 +46,32 @@ function check( string $rule, bool $ok, string $detail ): void {
 }
 
 /**
+ * Give one fixture user a clean hourly allowance.
+ *
+ * EVERY user this harness acts as needs this, not just the first. `/chat`,
+ * `/summarize`, `/calc` and `/exam/<id>/submit` all share one bucket, and
+ * `check_rate_limit()` runs BEFORE the permission callback — so a spent quota
+ * answers 429 where the test is waiting for 403, and the assertion fails
+ * describing an access-control problem that did not happen. That is not
+ * hypothetical: the deployment engineer put the stack into the exhausted-quota
+ * state deliberately and this harness accused the exam route of a live hole.
+ *
+ * The second student is the one that matters most and the one most easily
+ * forgotten — the intruder is who makes the request being judged.
+ *
+ * Third harness to need this line, so it is a function rather than a fourth
+ * copy of it. A shared include across scripts/ is the right home if a fifth
+ * appears.
+ *
+ * @param int $user_id Fixture user.
+ */
+function leak_clear_quota( int $user_id ): void {
+	foreach ( array( 'eduai_rl_u', 'eduai_rl_exam_u' ) as $bucket ) {
+		delete_transient( $bucket . $user_id );
+	}
+}
+
+/**
  * Render a payload to a string the content searches can actually match against.
  *
  * `wp_json_encode()` escapes non-ASCII to \uXXXX and `/` to `\/` by default,
@@ -131,9 +157,7 @@ printf( "signed in as %s (%s)\n\n", $user->user_login, implode( ',', $user->role
  * So it resets its own budget before starting. It is testing the projection,
  * not the rate limiter — check_exam_rate_limit() has its own coverage — and a
  * test that cannot be run twice in a row is not a test anyone will keep. */
-foreach ( array( 'eduai_rl_exam_u' . $user->ID, 'eduai_rl_u' . $user->ID ) as $eduai_bucket ) {
-	delete_transient( $eduai_bucket );
-}
+leak_clear_quota( $user->ID );
 
 /* The fixture is the exam whose answers we know, which is what makes a leak
  * detectable by content and not only by key name: if "DC term" appears in a
@@ -667,6 +691,11 @@ if ( ! $eduai_other ) {
 	$eduai_other = get_user_by( 'id', $eduai_other_id );
 }
 
+// The intruder makes real requests below, and submit is rate limited before it
+// is permission-checked. Without this, a spent quota answers 429 where the
+// assertion waits for 403.
+leak_clear_quota( $eduai_other->ID );
+
 if ( isset( $eduai_exam_id ) ) {
 
 	/* Control 1 — the payload really does contain the key right now.
@@ -718,10 +747,44 @@ if ( isset( $eduai_exam_id ) ) {
 		$eduai_res_b  = rest_do_request( $eduai_req_b );
 		$eduai_body_b = leak_searchable( $eduai_res_b->get_data() );
 
+		$eduai_status_b = $eduai_res_b->get_status();
+
+		/* Report the difference between what was expected and what came back —
+		 * not the worst reading of a mismatch.
+		 *
+		 * This said "a signed-in student reached another student's exam" for
+		 * ANY status that was not a refusal, which is an access-control
+		 * accusation inferred from "not 403". It is wrong for every other way a
+		 * request can fail: 429 when the hourly quota is spent, 500, a network
+		 * error, a WAF block. In all of those the student reached nothing.
+		 *
+		 * The deployment engineer hit exactly that — exhausted quotas produced
+		 * 429 and this line announced a live hole in the exam route. On a
+		 * project where everyone has been taught to treat a red guard as real,
+		 * a false alarm costs twice: once for the hunt, and once for the
+		 * credibility of the next true one.
+		 *
+		 * So the claim is now scaled to the evidence. Only a 200 supports
+		 * "reached"; every other non-refusal says the check could not be made
+		 * and why. */
+		if ( 200 === $eduai_status_b ) {
+			$eduai_detail = 'status 200 — a signed-in student REACHED another student\'s exam';
+		} elseif ( 429 === $eduai_status_b ) {
+			$eduai_detail = 'expected 401/403/404, got 429: the hourly quota was spent before the '
+				. 'permission callback ran, so this proves nothing either way. Clear the eduai_rl_* '
+				. 'transients for both fixture users and re-run.';
+		} else {
+			$eduai_detail = sprintf(
+				'expected a refusal (401/403/404), got %d — the route did not answer the way ownership requires, '
+					. 'but nothing here shows the exam was disclosed',
+				$eduai_status_b
+			);
+		}
+
 		check(
 			sprintf( 'another student is refused: %s', $eduai_what ),
-			in_array( $eduai_res_b->get_status(), array( 401, 403, 404 ), true ),
-			'status was ' . $eduai_res_b->get_status() . ' — a signed-in student reached another student\'s exam'
+			in_array( $eduai_status_b, array( 401, 403, 404 ), true ),
+			$eduai_detail
 		);
 
 		check(
