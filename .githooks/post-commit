@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#
+# Say, at the moment of committing, whether anything is unpushed.
+#
+# WHY THIS EXISTS. Five commits went unpushed in a single day. Every one was
+# caught by a person happening to look; none by any check. The difficulty is
+# that git hooks fire on actions and this failure is an OMISSION — there is no
+# "didn't push" event to hook. A pre-push hook cannot help, because the problem
+# is the push that never happens.
+#
+# A post-commit hook cannot catch someone who commits and walks away either.
+# What it can do is remove the "I forgot" case at the one moment the person is
+# definitely reading output, which is the moment they just committed. That is a
+# narrower claim than "this fixes it" and it is the honest one.
+#
+# WHY IT ASKS THE REMOTE INSTEAD OF READING origin/main. The obvious version is
+# `git rev-list --count origin/main..HEAD`, and here it would be wrong often
+# enough to be ignored. Six sessions commit into this one working copy at a
+# commit every minute or two, so the local origin/main ref is stale almost
+# immediately: another session pushing makes THEIR commits look like YOUR
+# unpushed ones. A counter that cries wolf gets tuned out, and this repository
+# has spent two days learning that a check nobody believes is worth less than
+# no check.
+#
+# So it asks the remote — one `git ls-remote`, about a second. That is
+# affordable per commit and it is the difference between a number and a guess.
+#
+# Never blocks: post-commit's exit status is ignored by git, and this only ever
+# prints. Offline, it says it could not check rather than inventing a count.
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+[ "$branch" = "main" ] || exit 0
+
+remote="$(git ls-remote --heads origin main 2>/dev/null | cut -f1)"
+
+if [ -z "$remote" ]; then
+	printf '\n  [post-commit] could not reach origin — unpushed state unknown.\n\n' >&2
+	exit 0
+fi
+
+head="$(git rev-parse HEAD 2>/dev/null)"
+
+# Already up there. Silence is the correct output for the healthy case: a hook
+# that speaks on every commit is one nobody reads by the end of the day.
+[ "$remote" = "$head" ] && exit 0
+
+if git cat-file -e "$remote^{commit}" 2>/dev/null; then
+	n="$(git rev-list --count "$remote..HEAD" 2>/dev/null || echo '?')"
+	behind="$(git rev-list --count "HEAD..$remote" 2>/dev/null || echo 0)"
+else
+	# The remote has commits this clone has never fetched, so the distance
+	# cannot be computed. Say that, rather than printing a number derived from
+	# a ref that is known to be behind.
+	printf '\n  [post-commit] NOT PUSHED — origin/main has commits this clone has not fetched,\n'
+	printf '                so the count is unknown. git fetch, then git push origin main\n\n'
+	exit 0
+fi
+
+printf '\n  [post-commit] NOT PUSHED — %s commit(s) on main are only here.\n' "$n"
+[ "${behind:-0}" -gt 0 ] && printf '                (origin is also %s ahead — pull before pushing.)\n' "$behind"
+printf '                git push origin main\n\n'
+
+exit 0
