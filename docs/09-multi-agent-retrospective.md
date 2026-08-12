@@ -637,6 +637,51 @@ against that declaration before emitting a verdict. A verdict computed only from
 the paths someone remembered to wire is a summary of the wiring, not of the
 system.
 
+### 6.10 The frame is wrong, so the orphans are invisible by construction
+
+The last one, and the only case where the check is **never wrong about anything
+it examines** — and still misses the thing that matters.
+
+A file-protection indicator was built keyed on "is this material's file
+secured?". Correct per render, derived from the real state, cannot drift. Then
+the live site was measured, and the owner's own 4.6 MB PDF was **publicly
+downloadable and publicly indexed** — because it had been uploaded straight into
+the media library and attached to no material at all.
+
+The indicator cannot help. There is no material to ask about, no editor screen
+for it to appear on, nowhere for a label to live. The author's framing is the
+transferable part:
+
+> It is the **frame** being wrong rather than a state being missed — the control
+> reasons per material, so anything without a material is invisible to it *by
+> construction*. The next feature that reasons per-material will have the same
+> blind spot for the same reason.
+
+**The tell is cheap and worth making a habit.** Ask what the check's *subject*
+is, then ask whether the thing you are worried about always has one:
+
+> Files always exist. Materials do not. Anything keyed on the material misses
+> the orphans — silently, permanently — and because the check is never wrong,
+> nothing ever fires.
+
+**It recurred within the hour, from the opposite direction**, which is what
+makes it structural rather than an oversight. A fix for the upload window could
+not route through the material-shaped reconciliation at all: at upload time the
+material does not reference the file yet, so the material-shaped rule concluded
+there was nothing to move. It had to be re-keyed on the **attachment**. Same
+frame problem, found independently, fixed by changing what the rule is *about*
+rather than by extending what it checks.
+
+**And its epistemic sibling, which belongs here rather than in §6.9.** The new
+indicator's column was empty on first inspection — because everything happened
+to have been edited that day, not because any sweep had run. *Empty because
+clear* and *empty because unable to tell* are the same pixels with opposite
+meanings, and only knowing which distinguishes them. A reader who cannot tell
+will reasonably conclude the column is redundant and remove it.
+
+That is §6.9's disease in a display rather than an exit code: **the absence of a
+signal is not a signal, unless something says which kind of absence it is.**
+
 ### Bonus: fixtures should be generators, not binaries
 
 The test deck for PPTX extraction was a `.pptx` — a zip. Opaque in review,
