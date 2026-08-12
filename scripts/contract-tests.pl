@@ -1890,13 +1890,11 @@ sub check_injected_escapes {
 sub check_scoped_links {
     my @problems;
 
-    # file => label, for links that name a specific object but carry no id.
-    my %pinned = (
-        'templates/single-study_material.php' => {
-            'Ask about this document' => 1,
-            'Summarise it for me'     => 1,
-        },
-    );
+    # Empty on purpose. Both entries were paid off when the material page's
+    # buttons started carrying ?source=<id>; the debt this recorded is gone,
+    # and a pin left behind would hide the next one. The staleness guard below
+    # exists so an unpaid pin cannot masquerade as a paid one.
+    my %pinned = ();
 
     my $base = 'wp-content/plugins/scholaris-library';
     my @scan = ( 'templates/single-study_material.php', 'templates/dashboard.php', 'templates/library-grid.php' );
@@ -1908,10 +1906,25 @@ sub check_scoped_links {
         next unless -f $path;
         my $src = slurp("$base/$rel");
 
-        # An anchor carrying a bare tool URL, then its translated label.
-        while ( $src =~ /eduai_(?:ask|summarise)_url\(\s*\)(.{0,220}?)_e\(\s*'([^']+)'/gs ) {
-            my $label = $2;
+        # An anchor carrying a tool URL, then its translated label. The href
+        # expression is captured too, because "bare" now has to mean "carries
+        # no id" rather than "calls the resolver" — the resolver is still
+        # called when the link IS scoped, wrapped in add_query_arg( 'source' ),
+        # and a check that could not tell those apart would have gone on
+        # passing over the fix it was written to demand.
+        # A fixed window BEFORE the call rather than a bracket-matching group:
+        # add_query_arg( 'source', $id, eduai_ask_url() ) nests the resolver
+        # INSIDE the wrapper, so any [^)]* group runs to the resolver's own
+        # closing bracket and swallows the thing being matched. The window
+        # cannot do that. (Found by running it: the first version reported both
+        # links as bare seconds after they were fixed.)
+        while ( $src =~ /(.{0,90})eduai_(?:ask|summarise)_url\(\s*\)(.{0,220}?)_e\(\s*'([^']+)'/gs ) {
+            my $before = $1 // '';
+            my $label  = $3;
             $seen++;
+
+            # Scoped: the id travels with the link, so the label may name it.
+            next if $before =~ /'source'/;
 
             # Definite reference: the reader is looking at the thing.
             next unless $label =~ /\b(?:this|it)\b/i;

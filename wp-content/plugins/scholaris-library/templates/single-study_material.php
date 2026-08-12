@@ -268,11 +268,11 @@ wp_enqueue_script( 'scholaris-library' );
 				<h3><?php esc_html_e( 'Study this document', 'scholaris-library' ); ?></h3>
 				<p><?php esc_html_e( 'The assistant has already read this material — ask it anything about the content.', 'scholaris-library' ); ?></p>
 				<a class="sl-btn sl-btn--primary sl-btn--block" data-eduai-open
-					href="<?php echo esc_url( eduai_ask_url() ); ?>">
+					href="<?php echo esc_url( add_query_arg( 'source', $sl_id, eduai_ask_url() ) ); ?>">
 					<?php esc_html_e( 'Ask about this document', 'scholaris-library' ); ?>
 				</a>
 				<a class="sl-btn sl-btn--ghost sl-btn--block" data-eduai-open="summary"
-					href="<?php echo esc_url( eduai_summarise_url() ); ?>">
+					href="<?php echo esc_url( add_query_arg( 'source', $sl_id, eduai_summarise_url() ) ); ?>">
 					<?php esc_html_e( 'Summarise it for me', 'scholaris-library' ); ?>
 				</a>
 			</div>
