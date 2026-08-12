@@ -128,8 +128,17 @@ crossed seven times in one day between two sessions alone.
 **And one failure mode no check can catch: committing is not landing.** Twice in
 a day, a commit sat on the local tree and was never pushed — one of them a fix
 for a real defect, one a CI hardening. Every guard in this project runs on push,
-so an unpushed commit is invisible to all of them. Nothing detects it. Only the
-habit does.
+so an unpushed commit is invisible to all of them.
+
+That sentence originally ended *"nothing detects it; only the habit does"* — and
+it stopped being true within the day. Someone wrote a `post-commit` hook that
+prints `NOT PUSHED — N commit(s) on main are only here`, and it fired on the
+commit that added this paragraph.
+
+Which is §2's own argument landing on §2: the lessons that stuck are the ones
+that became checks, and *"only the habit does"* was a confession that this one
+had not yet. **If a section of a retrospective can be deleted by twenty lines of
+shell, it was a bug report wearing a lesson's clothes.**
 
 **When a documented lesson recurs, that is evidence about the medium, not the
 reader.** These harnesses inject JavaScript as a string, so escapes are
