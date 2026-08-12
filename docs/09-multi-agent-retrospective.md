@@ -240,6 +240,64 @@ The rule Tech Manager wrote, which is the best line to come out of this project:
 > unreliable. Prove the assertion can see the thing at all, then decide which
 > side broke.
 
+### 6.6 The dominant failure: a correct reading of the wrong object
+
+If you take one thing from this document, take this one. It is not a mistake
+anyone made through carelessness, it survived review every time, and by the end
+of the week four sessions had produced it independently in four unrelated
+domains.
+
+The shape is always the same. **The measurement is correct. The instrument
+works. The object measured is not the object in question** — and because the
+object was a plausible stand-in, nothing about the result looks wrong.
+
+The four:
+
+- **A test that reimplemented the thing it tested.** Verifying another session's
+  regex fix, the probe pasted the pattern inline and tested *that*: 28/28, and
+  identical had the fix never landed. The file was never opened. Two sessions
+  did this within an hour, on the same change.
+- **A fixture too small to exercise the behaviour.** Byte-range requests through
+  the download handler appeared to work, measured on an 86-byte file. Re-run at
+  2 MB, the handler ignores the range entirely and returns the whole file from
+  byte 0 — the web server had only been slicing what it happened to have
+  buffered. The boundary sits between 1 KB and 64 KB, so every fixture below it
+  reports success.
+- **A stale description used in place of the tree.** A handoff listed six guards
+  as running in no CI job. Five had been wired since it was written; acting on
+  the list would have produced five fixes to things already working, each of
+  them green and meaningless.
+- **An audit that could not see the answer.** Mine, checking that same claim. It
+  grepped the workflow YAML for each script name — but CI invokes a wrapper, and
+  the wrapper invokes the guards, so anything one level down was invisible by
+  construction. Five guards printed `NOT IN ANY CI JOB` while CI ran them
+  nightly. The follow-up grep, of the wrapper itself, required a `scripts/`
+  prefix the file does not always use, and returned three of eight. Two greps,
+  one audit, both confidently wrong, and the output *looked like an audit*.
+
+Why it beats review: everything you can point at checks out. The regex was
+right. The range request really was satisfied. The handoff was accurate when
+written. The grep did exactly what it said. Reviewing the reasoning finds
+nothing, because the reasoning is sound — the referent is what moved.
+
+**What actually caught all four, every time: repeating the measurement at a
+different scale, or against the artifact instead of the description.** Not more
+care, not a second reader. A different-shaped measurement.
+
+So the practical rules:
+
+1. **Name the thing under test inside the test.** If the probe never mentions
+   the function, the file, or the URL it is about, it is testing your copy of
+   the idea. The cheapest tell there is.
+2. **Vary the scale before believing a boundary behaviour.** 86 bytes and 2 MB
+   answered differently. One size is one data point about that size.
+3. **Read the tree, never the description of the tree** — handoffs, comments and
+   your own earlier notes are all stale by default in a repository several
+   sessions are editing.
+4. **When a check reports on absence, prove it can see presence.** "Not found
+   anywhere" is the answer a broken search gives, and it is indistinguishable
+   from the true one until you point the search at something you know exists.
+
 ### Bonus: fixtures should be generators, not binaries
 
 The test deck for PPTX extraction was a `.pptx` — a zip. Opaque in review,
