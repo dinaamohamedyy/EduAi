@@ -9,13 +9,25 @@
    gets no --eduai-* properties at all, and every rule built on one is
    silently invalid: primary buttons compute to transparent while the text,
    which inherits from the theme's body, still looks right. That bug shipped
-   once. Any token added here must go on the WHOLE list. */
+   once. Any token added here must go on the WHOLE list.
+
+   Keep this comment ABOVE the list and never between two selectors:
+   template-root-tokens parses the run of consecutive selector lines before
+   the block, so a comment inserted mid-list truncates what it can see and it
+   reports roots as missing that are sitting right there. Done once, on the
+   line below.
+
+   .eduai-lesson is on the list for a reason worth stating: it renders inside
+   TUTOR's document rather than ours, so it inherits nothing from any other
+   root here and must carry the tokens itself. Custom properties inherit down,
+   never up. */
 .eduai-app,
 .eduai-launcher,
 .eduai-card,
 .eduai-calc,
 .eduai-sum,
 .eduai-prep,
+.eduai-lesson,
 .eduai-prog {
   --eduai-brand: var(--brand, 161 45% 25%);
   --eduai-brand-strong: var(--brand-strong, 162 50% 18%);

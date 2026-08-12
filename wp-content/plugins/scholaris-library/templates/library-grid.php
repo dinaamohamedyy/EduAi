@@ -107,16 +107,66 @@ foreach ( $sl_courses as $sl_course ) {
 
 						if ( $sl_lessons ) :
 							$sl_shown = array_slice( $sl_lessons, 0, 5 );
+
+							/*
+							 * Enrolment is per-visitor, so it is computed HERE
+							 * rather than inside SL_Catalog::tree(). The tree is
+							 * cached and shared across everyone; folding a
+							 * per-user answer into it would have made a shared
+							 * cache per-visitor to serve one line of markup.
+							 * Back-end offered the field and flagged that cost
+							 * themselves — the fact belongs outside the cache,
+							 * not inside a differently-keyed one.
+							 */
+							$sl_enrolled = function_exists( 'tutor_utils' )
+								&& is_user_logged_in()
+								&& tutor_utils()->is_enrolled( (int) $sl_course['id'], get_current_user_id() );
 							?>
-							<ul class="sl-course__lessons">
+							<?php
+							/*
+							 * DIM THE AFFORDANCE, NOT THE INFORMATION.
+							 *
+							 * Enrolled: real anchors. Not enrolled: the same
+							 * titles at full contrast, a muted lock, no link.
+							 * Greying the titles would turn a table of contents
+							 * into a wall — and the titles are the reason to
+							 * enrol in the first place.
+							 *
+							 * This is what my own c4ba888 revert was reaching
+							 * for and got wrong by deleting the list: these
+							 * links go to Tutor's learning area, which emits
+							 * THREE concatenated documents to anyone without
+							 * access. A plain anchor promised a page the
+							 * visitor would be bounced from. Withholding the
+							 * anchor rather than the information fixes that
+							 * without costing the owner the thing he approved.
+							 *
+							 * Same shape as the server deciding a button's
+							 * label rather than only its href: the promise and
+							 * the delivery are decided in one place.
+							 */
+							?>
+							<ol class="sl-course__lessons<?php echo $sl_enrolled ? '' : ' sl-course__lessons--locked'; ?>">
 								<?php foreach ( $sl_shown as $sl_lesson ) : ?>
 									<li>
-										<a href="<?php echo esc_url( (string) ( $sl_lesson['url'] ?? '' ) ); ?>">
-											<?php echo esc_html( (string) ( $sl_lesson['title'] ?? '' ) ); ?>
-										</a>
+										<?php if ( $sl_enrolled ) : ?>
+											<a href="<?php echo esc_url( (string) ( $sl_lesson['url'] ?? '' ) ); ?>">
+												<?php echo esc_html( (string) ( $sl_lesson['title'] ?? '' ) ); ?>
+											</a>
+										<?php else : ?>
+											<span class="sl-course__lesson">
+												<?php echo esc_html( (string) ( $sl_lesson['title'] ?? '' ) ); ?>
+											</span>
+											<svg class="sl-course__lock" width="11" height="11" viewBox="0 0 24 24"
+												fill="none" stroke="currentColor" stroke-width="2.4"
+												stroke-linecap="round" aria-hidden="true">
+												<rect x="4" y="11" width="16" height="10" rx="2"/>
+												<path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+											</svg>
+										<?php endif; ?>
 									</li>
 								<?php endforeach; ?>
-							</ul>
+							</ol>
 							<?php if ( count( $sl_lessons ) > count( $sl_shown ) ) : ?>
 								<p class="sl-course__more">
 									<a href="<?php echo esc_url( (string) $sl_course['url'] ); ?>">

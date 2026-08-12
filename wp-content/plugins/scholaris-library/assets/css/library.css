@@ -178,14 +178,37 @@
    min-width:0 so a long lecture name ellipsises instead of widening the card. */
 /* Capped at five in the template, so this list has a bounded height whatever
    the course contains — the card stays scannable without hiding the lessons. */
+/* A NUMBERED SPINE, not a repeated icon. These are ordered sections of one
+   lecture, and a flat list says they are interchangeable — an icon that never
+   varies is decoration, a number that always varies is structure. The counter
+   sits in a fixed gutter so titles align regardless of 1 vs 10. */
 .sl-course__lessons {
   margin: var(--sl-space-2xs) 0 0;
-  padding: 0 0 0 var(--sl-space-s);
+  padding: 0;
   list-style: none;
+  counter-reset: sl-lesson;
   display: grid; gap: var(--sl-space-3xs);
-  border-left: 1px solid hsl(var(--sl-border));
 }
-.sl-course__lessons li { margin: 0; min-width: 0; }
+.sl-course__lessons li {
+  margin: 0; min-width: 0;
+  display: grid;
+  /* Fixed gutter, then the title, then the lock if there is one. min-width:0
+     on the middle track is what lets a long title ellipsise instead of
+     widening the card — the gutter is exactly what makes that necessary. */
+  grid-template-columns: 1.35em minmax(0, 1fr) auto;
+  align-items: baseline; gap: var(--sl-space-3xs);
+}
+.sl-course__lessons li::before {
+  counter-increment: sl-lesson;
+  content: counter(sl-lesson);
+  font-family: var(--sl-mono); font-size: 0.68rem;
+  color: hsl(var(--sl-muted)); text-align: right;
+}
+/* Titles stay at full contrast when locked: the affordance is dimmed, the
+   information is not. Greying these would turn a table of contents into a
+   wall, and the titles are the reason to enrol. */
+.sl-course__lesson { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--sl-step--1); }
+.sl-course__lock { color: hsl(var(--sl-muted)); flex: none; align-self: center; }
 .sl-course__lessons a {
   color: hsl(var(--sl-text)); text-decoration: none;
   font-size: var(--sl-step--1);
