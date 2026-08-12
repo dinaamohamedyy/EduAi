@@ -217,9 +217,29 @@ function check(name, pass, detail) {
   console.log((pass ? 'ok      ' : 'NOT OK  ') + name + (pass ? '' : '\n          ' + JSON.stringify(detail)));
 }
 
+/* Where we got to, and how long it took.
+ *
+ * This step failed once in CI on a commit that passed the same step minutes
+ * later with those commits already merged (run 28 vs 29, 12 Aug 2026) — a flake,
+ * diagnosed as one by back-end from the merge-base rather than by re-running.
+ * Six consecutive runs in a container shaped like a GitHub free runner (2 CPUs,
+ * 7 GB) all passed in 3.7-5.3s against a 10s port budget, so it does not
+ * reproduce under load and the cause is still unnamed.
+ *
+ * Since it cannot be reproduced on demand, the next occurrence has to diagnose
+ * itself. Before this, a failure after startup printed one CDP error with no
+ * indication of which phase raised it, whether the browser was still alive, or
+ * how close to a timeout it had run. A flake in the job that gates deploy is
+ * worth exactly as much as the evidence it leaves behind.
+ */
+const t0 = Date.now();
+let stage = 'waiting for the browser to open its debugging port';
+let portMs = null;
+
 try {
   let ver = null;
   for (let i = 0; i < 40 && !ver; i++) { try { ver = await json('/json/version'); } catch { await sleep(250); } }
+  portMs = Date.now() - t0;
   if (!ver) {
     // Say which browser, and what it printed on the way down. "Did not open its
     // debugging port" alone sent one CI failure to a dead end: it is equally
@@ -233,13 +253,26 @@ try {
       `  stderr:  ${why.split('\n').slice(0, 6).join('\n           ')}`
     );
   }
+  stage = 'opening a new tab over CDP';
   const target = await json('/json/new?about:blank', 'PUT');
+
+  stage = 'connecting to the tab websocket';
   await connect(target.webSocketDebuggerUrl);
+
+  stage = 'enabling the Runtime and Page domains';
   await send('Runtime.enable');
   await send('Page.enable');
+
+  stage = `navigating to ${PAGE}`;
   await navigate(PAGE);
+
+  stage = 'setting the desktop viewport';
   await setViewport(1400, 900, false);
+
+  stage = 'installing the page probe';
   await evalIn(INSTALL);
+
+  stage = 'running the desktop checks';
 
   check('zero JS exceptions on load',
     events.filter((e) => e.method === 'Runtime.exceptionThrown').length === 0, null);
@@ -297,7 +330,21 @@ try {
   console.log(failed ? `\n${failed} of ${results.length} failed` : `\nall ${results.length} state-pass checks pass`);
   process.exitCode = failed ? 1 : 0;
 } catch (e) {
-  console.error('FAILED: ' + e.message);
+  // Everything a reader needs to tell a flake from a regression, without
+  // re-running: which phase, how long, whether the browser was alive, how much
+  // of the port budget was used, and what the browser said. A bare CDP error
+  // names none of that, and this step gates deploy.
+  const alive = edge.exitCode === null;
+  const err = browserErr.trim();
+  console.error(
+    `FAILED during: ${stage}\n` +
+    `  after:   ${Date.now() - t0}ms` +
+    (portMs === null ? ' (never reached the debugging port)' : `, of which ${portMs}ms waiting for the debugging port (budget 10000ms)`) + '\n' +
+    `  browser: ${alive ? 'still running' : `exited with code ${edge.exitCode}`}\n` +
+    `  checks:  ${results.filter((r) => r.pass).length} passed, ${results.filter((r) => !r.pass).length} failed before this\n` +
+    (err ? `  stderr:  ${err.split('\n').slice(0, 6).join('\n           ')}\n` : '') +
+    `  error:   ${e.message}`
+  );
   process.exitCode = 1;
 } finally {
   try { ws && ws.close(); } catch {}
