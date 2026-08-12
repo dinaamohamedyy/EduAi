@@ -22,6 +22,26 @@ $sl_allowed  = SL_Meta::can_download( $sl_id );
 $sl_subjects = get_the_terms( $sl_id, 'material_subject' );
 $sl_types    = get_the_terms( $sl_id, 'material_type' );
 
+/*
+ * Video, and the reason the conditions below are structured rather than
+ * spot-edited. A LINK material — the recommended default, because it puts no
+ * bytes in uploads — has _scholaris_file_id = 0. The old `if ( $sl_file_id &&
+ * $sl_allowed )` / `elseif ( $sl_file_id && ! $sl_allowed )` pair therefore
+ * matched neither branch for it: title, description, and nothing else. Putting
+ * the video inside the old `if` keeps that blank page; putting it outside loses
+ * the access gate. So the question the template asks is "is there media" and
+ * the question each block asks is "media of which kind".
+ *
+ * The same shape already bit us without any video involved: a material whose
+ * file is missing renders the same silence today.
+ */
+$sl_video_src = (string) get_post_meta( $sl_id, '_scholaris_video_source', true );
+$sl_video_url = (string) get_post_meta( $sl_id, '_scholaris_video_url', true );
+$sl_video_id  = (int) get_post_meta( $sl_id, '_scholaris_video_id', true );
+$sl_has_video = ( 'link' === $sl_video_src && '' !== $sl_video_url )
+	|| ( 'file' === $sl_video_src && $sl_video_id );
+$sl_has_media = $sl_file_id || $sl_has_video;
+
 wp_enqueue_style( 'scholaris-library' );
 wp_enqueue_script( 'scholaris-library' );
 ?>
@@ -73,7 +93,90 @@ wp_enqueue_script( 'scholaris-library' );
 				<div class="entry-content"><?php the_content(); ?></div>
 			<?php endif; ?>
 
-			<?php if ( $sl_file_id && $sl_allowed ) : ?>
+			<?php if ( $sl_has_media && $sl_allowed ) : ?>
+
+				<?php if ( $sl_has_video ) : ?>
+					<div class="sl-video">
+						<?php
+						if ( 'link' === $sl_video_src ) {
+							/*
+							 * WP_Embed::shortcode(), NOT wp_oembed_get(). The
+							 * latter goes straight to WP_oEmbed::get_html()
+							 * with no cache, so every page view would make a
+							 * blocking request to the provider. This one caches
+							 * the returned HTML in _oembed_* post meta, and
+							 * takes its post id from get_post() — which
+							 * resolves because we are inside the loop.
+							 *
+							 * It returns provider HTML, and falls back to a
+							 * plain anchor when it cannot embed. Escaping it
+							 * would print the markup instead of playing it,
+							 * which is why this is deliberately not escaped.
+							 */
+							echo $GLOBALS['wp_embed']->shortcode( array(), $sl_video_url ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+						} else {
+							/*
+							 * SL_Private::stream_url(), not the raw uploads URL
+							 * and not download_url(). download_url() resolves
+							 * _scholaris_file_id, so on a video-only material
+							 * it 404s and on a material carrying both it would
+							 * feed the DOCUMENT to a <video> element.
+							 * handle_stream() resolves _scholaris_video_id
+							 * first, enforces the same access gate, and is the
+							 * path with real Range support — which a player
+							 * needs to seek at all.
+							 */
+							/*
+							 * A plain <video>, NOT wp_video_shortcode(), and
+							 * this is measured rather than preferred.
+							 *
+							 * wp_video_shortcode() decides what to emit by
+							 * sniffing a file extension off the URL. The gated
+							 * stream URL is `?sl_stream=<id>&_wpnonce=<n>` and
+							 * has no extension anywhere in it, so:
+							 *   passed as 'src'  → returns <a class="wp-embedded-video">,
+							 *                      the lecture rendered as a link
+							 *                      to a query string
+							 *   passed as 'mp4'  → the same sniff runs on that
+							 *                      key, $primary stays false, it
+							 *                      falls through to attached
+							 *                      media, finds none, returns ''
+							 *                      — an empty block
+							 * Both were observed on this page, in that order.
+							 * The shortcode cannot render a player for any URL
+							 * that does not look like a file, and the URL must
+							 * stay nonced and extensionless for the gate to work.
+							 *
+							 * The alternative is a rewrite giving the stream a
+							 * file-shaped path; that is back-end's call and is
+							 * raised with them. Until then this element does the
+							 * same job with less: no MediaElement, no inline
+							 * width to override, and it sizes from the wrapper.
+							 */
+							$sl_stream = SL_Private::stream_url( $sl_id );
+							$sl_mime   = (string) get_post_mime_type( $sl_video_id );
+							?>
+							<video controls preload="metadata"
+								<?php echo $sl_file_id ? '' : 'playsinline'; ?>>
+								<source src="<?php echo esc_url( $sl_stream ); ?>"
+									<?php echo $sl_mime ? 'type="' . esc_attr( $sl_mime ) . '"' : ''; ?>>
+								<?php
+								// Reached when the browser can play none of the
+								// sources. A link is still something.
+								printf(
+									/* translators: %s: link to the video file */
+									esc_html__( 'Your browser cannot play this video. %s', 'scholaris-library' ),
+									'<a href="' . esc_url( $sl_stream ) . '">' . esc_html__( 'Open it directly', 'scholaris-library' ) . '</a>'
+								);
+								?>
+							</video>
+							<?php
+						}
+						?>
+					</div>
+				<?php endif; ?>
+
+				<?php if ( $sl_file_id ) : ?>
 				<div class="sl-viewer">
 					<div class="sl-viewer__bar">
 						<strong><?php echo esc_html( basename( $sl_path ) ); ?></strong>
@@ -103,9 +206,28 @@ wp_enqueue_script( 'scholaris-library' );
 						</div>
 					<?php endif; ?>
 				</div>
-			<?php elseif ( $sl_file_id && ! $sl_allowed ) : ?>
+			<?php endif; ?>
+
+			<?php
+			/*
+			 * Widened from $sl_file_id. A video-only material is exactly as
+			 * restricted as a document-only one, and under the old condition it
+			 * fell through to silence — no player, no notice, no explanation.
+			 */
+			?>
+			<?php elseif ( $sl_has_media && ! $sl_allowed ) : ?>
 				<div class="sl-notice">
-					<h3><?php esc_html_e( 'Sign in to open this document', 'scholaris-library' ); ?></h3>
+					<h3>
+						<?php
+						// Follows the media, so the notice never offers to open
+						// a document the material does not have.
+						if ( $sl_has_video && ! $sl_file_id ) {
+							esc_html_e( 'Sign in to watch this lecture', 'scholaris-library' );
+						} else {
+							esc_html_e( 'Sign in to open this document', 'scholaris-library' );
+						}
+						?>
+						</h3>
 					<p><?php esc_html_e( 'This material is available to registered students.', 'scholaris-library' ); ?></p>
 					<a class="sl-btn sl-btn--primary" href="<?php echo esc_url( wp_login_url( (string) get_permalink() ) ); ?>">
 						<?php esc_html_e( 'Sign in', 'scholaris-library' ); ?>
