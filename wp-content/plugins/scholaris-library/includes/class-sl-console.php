@@ -26,6 +26,7 @@ class SL_Console {
 	public static function init(): void {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'wp_dashboard_setup', array( __CLASS__, 'dashboard_widget' ) );
+		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'assets' ) );
 
 		// Supplies the destination for the theme's login_redirect filter.
 		// Same resolver-with-honest-fallback shape as scholaris_progress_url():
@@ -36,6 +37,25 @@ class SL_Console {
 
 	public static function home_url(): string {
 		return admin_url( 'admin.php?page=' . self::SLUG );
+	}
+
+	/**
+	 * The console's stylesheet, on the console and the dashboard only.
+	 *
+	 * Front-end wrote assets/css/admin.css and it was inert: nothing in the
+	 * plugin enqueued it, and the hook belongs in this file. Scoped by screen
+	 * rather than loaded across wp-admin — the rules are scoped under
+	 * .sl-console, but shipping a stylesheet to every admin page for two
+	 * screens' worth of layout is how wp-admin ends up slow.
+	 *
+	 * @param string $hook Current admin screen.
+	 */
+	public static function assets( string $hook ): void {
+		if ( 'toplevel_page_' . self::SLUG !== $hook && 'index.php' !== $hook ) {
+			return;
+		}
+
+		wp_enqueue_style( 'sl-admin', SL_URL . 'assets/css/admin.css', array(), SL_VERSION );
 	}
 
 	public static function menu(): void {

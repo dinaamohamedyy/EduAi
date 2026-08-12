@@ -546,6 +546,50 @@ class EduAI_Exams {
 			$exam['title'] = trim( $title );
 		}
 
+		$exam_id = self::store_prepared( $user_id, $label, $hash, $exam );
+
+		EduAI_Conversation::add( $user_id, 'exam', 'user', sprintf( '[Generate exam: %s]', $label ?: __( 'pasted text', 'eduai' ) ) );
+		EduAI_Conversation::add( $user_id, 'exam', 'assistant', $exam['title'], array(), $out['usage'] );
+
+		// user_id rides along so generate() and grade() compose: grade()
+		// logs against $exam['user_id'], and without this key a script
+		// chaining the two silently wrote attempts against user 0.
+		return array(
+			'id'           => $exam_id,
+			'user_id'      => $user_id,
+			'title'        => $exam['title'],
+			'source_label' => $label,
+			'questions'    => $exam['questions'],
+		);
+	}
+
+	/**
+	 * Write a validated exam and return its id.
+	 *
+	 * Extracted from generate() so a second caller can materialise an exam
+	 * that was authored rather than generated — a question bank on a study
+	 * material, which has questions already and no model call to make. The
+	 * point of sharing this rather than writing a second INSERT is that
+	 * everything downstream keys off this row's shape: redaction, per-user
+	 * ownership, marking, the roster. A parallel writer would inherit none
+	 * of it and would drift the first time this one changed.
+	 *
+	 * DELIBERATELY NOT MOVED: the two EduAI_Conversation::add() calls that
+	 * follow this in generate(). The second logs $out['usage'] — the token
+	 * cost of the model call — which does not exist for an authored bank and
+	 * cannot exist in here. Pulling them in would have been one line too far
+	 * and a fatal for the caller that has no $out.
+	 *
+	 * No behaviour change: same table, same columns, same formats, same
+	 * order.
+	 *
+	 * @param int    $user_id Owner.
+	 * @param string $label   Human name of the source.
+	 * @param string $hash    Dedupe key.
+	 * @param array  $exam    Validated { title, questions }.
+	 * @return int New exam id.
+	 */
+	public static function store_prepared( int $user_id, string $label, string $hash, array $exam ): int {
 		global $wpdb;
 
 		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
@@ -564,21 +608,7 @@ class EduAI_Exams {
 			array( '%d', '%s', '%s', '%s', '%s', '%s' )
 		);
 
-		$exam_id = (int) $wpdb->insert_id;
-
-		EduAI_Conversation::add( $user_id, 'exam', 'user', sprintf( '[Generate exam: %s]', $label ?: __( 'pasted text', 'eduai' ) ) );
-		EduAI_Conversation::add( $user_id, 'exam', 'assistant', $exam['title'], array(), $out['usage'] );
-
-		// user_id rides along so generate() and grade() compose: grade()
-		// logs against $exam['user_id'], and without this key a script
-		// chaining the two silently wrote attempts against user 0.
-		return array(
-			'id'           => $exam_id,
-			'user_id'      => $user_id,
-			'title'        => $exam['title'],
-			'source_label' => $label,
-			'questions'    => $exam['questions'],
-		);
+		return (int) $wpdb->insert_id;
 	}
 
 	/* ---------------------------------------------------------------------

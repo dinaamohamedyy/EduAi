@@ -279,6 +279,8 @@ class SL_Meta {
 		}
 
 		wp_enqueue_media();
+		// The meta-box rules live in the same stylesheet as the console's.
+		wp_enqueue_style( 'sl-admin', SL_URL . 'assets/css/admin.css', array(), SL_VERSION );
 		wp_enqueue_script( 'sl-admin', SL_URL . 'assets/js/admin.js', array( 'jquery' ), SL_VERSION, true );
 		wp_localize_script( 'sl-admin', 'SLAdmin', array(
 			'title'  => __( 'Choose the document', 'scholaris-library' ),
