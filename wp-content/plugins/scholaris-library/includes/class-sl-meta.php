@@ -438,11 +438,18 @@ class SL_Meta {
 	 * lecturer with a broken script still saves what they typed. The script's
 	 * job is only to clone the `<template>` below for a new row.
 	 *
-	 * `sl_bank_count` is the truncation guard's other half. It must equal the
-	 * number of rows the browser posts, so ANY SCRIPT THAT ADDS OR REMOVES A
-	 * ROW MUST UPDATE IT — otherwise save_bank() will correctly refuse a save
-	 * that was perfectly fine. That coupling is the price of catching a
-	 * silent `max_input_vars` truncation, which has no other tell.
+	 * `sl_bank_count` is the truncation guard's other half: it must equal the
+	 * number of rows the browser posts, because a mismatch is the only
+	 * evidence that PHP dropped some: `max_input_vars` truncation has no
+	 * other tell.
+	 *
+	 * The editor script sets it by COUNTING the rows in the DOM at submit,
+	 * not by incrementing as rows are added — front-end's design, and better
+	 * than the rule this comment used to state. Incrementing is two
+	 * operations that have to agree; counting is one that cannot disagree
+	 * with itself, and it stays correct for a row arriving by any path
+	 * nobody thought to hook. If you are adding a way to create rows, you
+	 * need to do nothing.
 	 *
 	 * @param WP_Post $post Post being edited.
 	 */

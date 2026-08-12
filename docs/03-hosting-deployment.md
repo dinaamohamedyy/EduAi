@@ -430,14 +430,38 @@ one to plan against.
 
 ## Going live
 
+### Before the site is publicly reachable
+
+These two are ordered deliberately. Everything below this heading can be done
+while people are already using the site; these cannot, because the window they
+protect is the window between the site answering and you getting to them.
+
+- [ ] **The login URL is actually moved — verify it, do not assume it.**
+      `scripts/setup.sh` now activates WPS Hide Login and sets a generated slug,
+      printing it in its summary as `Login URL:`. But an install can fail
+      silently, and a plugin sitting in the plugin list is not protection:
+
+      ```bash
+      curl -o /dev/null -w '%{http_code}\n' https://yourdomain/wp-login.php   # expect 404
+      ```
+
+      **200 means it is wide open**, whatever the plugins page says. That was
+      the real state of a fresh install for weeks — the plugin listed, the
+      login answering. `/sign-in/` keeps working whatever the slug is, so you
+      cannot lock yourself out by fixing this.
+- [ ] **Admin username is not `admin`, and its password is not the one in
+      `.env.example`.** `change-me-now` is published in a public repository and
+      was found live on this project's own stack while it was internet-facing.
+- [ ] **`WP_DEBUG` off**, and `wp-content/debug.log` not web-readable — it
+      carries file paths and queries to anyone who requests it.
+
+### Everything else
+
 - [ ] **Provider rate limit sized for the class**, not just for one tester —
       see the section above. At 8,000 TPM you can serve roughly one exam per
       minute site-wide.
 - [ ] SSL certificate active, HTTP redirects to HTTPS
-- [ ] `WP_DEBUG` off
-- [ ] Admin username is **not** `admin`, password is strong
 - [ ] Two-factor auth on the admin account (Wordfence provides it free)
-- [ ] Login URL moved (WPS Hide Login)
 - [ ] UpdraftPlus scheduled: daily database, weekly files, stored off-server
 - [ ] **A restore tested from a backup** — an untested backup is not a backup
 - [ ] `EDUAI_ANTHROPIC_API_KEY` set in `wp-config.php`, key removed from
