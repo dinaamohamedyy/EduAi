@@ -31,21 +31,92 @@ defined( 'ABSPATH' ) || exit;
  */
 class SL_Catalog {
 
+	const VERSION_OPTION = 'sl_catalog_version';
+
+	public static function init(): void {
+		// Anything that could change the shape bumps the version, which
+		// changes the cache key — so a stale entry becomes unreachable rather
+		// than needing to be found and deleted. Cheaper to be wrong about
+		// than a delete that misses one key.
+		add_action( 'save_post', array( __CLASS__, 'invalidate' ) );
+		add_action( 'deleted_post', array( __CLASS__, 'invalidate' ) );
+		add_action( 'added_post_meta', array( __CLASS__, 'invalidate_meta' ), 10, 3 );
+		add_action( 'updated_post_meta', array( __CLASS__, 'invalidate_meta' ), 10, 3 );
+		add_action( 'deleted_post_meta', array( __CLASS__, 'invalidate_meta' ), 10, 3 );
+	}
+
+	/**
+	 * @param int $post_id Post that changed.
+	 */
+	public static function invalidate( $post_id = 0 ): void {
+		$type = $post_id ? get_post_type( (int) $post_id ) : '';
+
+		// Ignore the noise. A comment, a page edit or an attachment does not
+		// change what the library contains, and bumping on every save would
+		// make the cache a rounding error rather than a cache.
+		if ( $type && ! in_array( $type, array( 'courses', 'topics', 'lesson', 'study_material' ), true ) ) {
+			return;
+		}
+
+		update_option( self::VERSION_OPTION, (int) get_option( self::VERSION_OPTION, 0 ) + 1, false );
+	}
+
+	/**
+	 * The meta that carries the course↔material link is written by the
+	 * segmenter without a post save, so meta changes have to bump it too —
+	 * otherwise a freshly segmented deck stays "not yet in a course" until
+	 * something unrelated is edited.
+	 *
+	 * @param int    $meta_id  Ignored.
+	 * @param int    $post_id  Post the meta belongs to.
+	 * @param string $meta_key Key that changed.
+	 */
+	public static function invalidate_meta( $meta_id, $post_id, $meta_key ): void {
+		if ( in_array( (string) $meta_key, array( '_eduai_source_material', '_scholaris_fixture' ), true ) ) {
+			self::invalidate( (int) $post_id );
+		}
+	}
+
 	/**
 	 * The whole catalogue.
+	 *
+	 * CACHED, because the cost scales with COURSES rather than lessons and
+	 * this runs on a browse page. Measured on one course of three lessons:
+	 * 16 queries, cut to 12 by priming the post caches Tutor's own SQL
+	 * bypasses — after which the per-lesson reads are all cache hits and the
+	 * remaining cost is a fixed handful per course. At fifty courses that is
+	 * still a few hundred queries to render a list, which is what the cache
+	 * is for.
+	 *
+	 * Note what this does NOT do: store the course↔material link as meta on
+	 * the material. That was the other way to make browsing cheap and it
+	 * would have bought speed with a second copy of a fact, which drifts. A
+	 * cache can be wrong for a moment; a duplicated fact is wrong until
+	 * somebody notices.
 	 *
 	 * @return array{courses:array,loose:array}
 	 */
 	public static function tree(): array {
+		$key    = 'sl_catalog_' . (int) get_option( self::VERSION_OPTION, 0 );
+		$cached = get_transient( $key );
+
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
 		$courses = self::courses();
 
-		return array(
+		$tree = array(
 			'courses' => $courses,
 			// Everything not reachable through a course. Named `loose` rather
 			// than `orphans` because it is the normal state of a deck nobody
 			// has segmented yet, not a fault.
 			'loose'   => self::loose( $courses ),
 		);
+
+		set_transient( $key, $tree, HOUR_IN_SECONDS );
+
+		return $tree;
 	}
 
 	/**
@@ -74,6 +145,33 @@ class SL_Catalog {
 			// runs on the library page, which is the most-visited screen in
 			// the product.
 			$contents = (array) tutor_utils()->get_course_contents_by_id( $course->ID );
+
+			/*
+			 * Prime the caches for every lesson at once, and this is the
+			 * difference between deriving being cheap and deriving being the
+			 * wrong choice.
+			 *
+			 * Tutor fetches course contents with its own SQL, so the rows
+			 * never enter WordPress's post cache — and then get_the_title(),
+			 * get_permalink() and get_post_meta() each go back to the
+			 * database per lesson. Measured before this: 16 queries for one
+			 * course of three lessons, about five per lesson, which is a
+			 * browse page issuing thousands on a real catalogue.
+			 *
+			 * That per-lesson cost was the whole argument for storing an
+			 * inverse on the material. It is a caching problem rather than a
+			 * modelling one, so it gets a caching answer, and the fact keeps
+			 * one home.
+			 */
+			$ids = array();
+
+			foreach ( $contents as $item ) {
+				$ids[] = (int) $item->ID;
+			}
+
+			if ( $ids ) {
+				_prime_post_caches( $ids, false, true );
+			}
 
 			foreach ( (array) tutor_utils()->get_topics( $course->ID )->posts as $topic ) {
 				$rows = array();

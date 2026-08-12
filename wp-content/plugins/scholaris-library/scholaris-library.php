@@ -43,6 +43,7 @@ final class Scholaris_Library {
 		SL_Templates::init();
 		SL_Library::init();
 		SL_Private::init();
+		SL_Catalog::init();
 		SL_Bank::init();
 		SL_Console::init();
 		SL_Quiz_History::init();
