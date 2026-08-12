@@ -76,6 +76,7 @@ my @checks = (
     [ 'lede-copy-parity'       => \&check_lede_copy ],
     [ 'doc-citations-resolve'  => \&check_doc_citations ],
     [ 'injected-js-escapes'    => \&check_injected_escapes ],
+    [ 'scoped-link-honesty'    => \&check_scoped_links ],
 );
 
 if ( grep { '--list' eq $_ } @ARGV ) {
@@ -1863,6 +1864,79 @@ sub check_injected_escapes {
                 "scripts/$file:~$line a template literal contains "
                 . join( ', ', @found )
                 . " — $why. Tag the literal String.raw`...`.";
+        }
+    }
+
+    return @problems;
+}
+
+# A control that names a specific thing must carry that thing's id.
+#
+# "Ask about THIS document" and "Summarise IT for me" both point at the bare
+# tool URL today, so pressing them opens a picker — the student is asked to
+# find the document they were already reading. The copy is the promise and the
+# href is the delivery, and they disagree.
+#
+# The discriminator is DEFINITE reference, not the presence of a noun. On the
+# dashboard "Ask the assistant" names the tool and "Summarise a lecture" names
+# a generic one; both are honest with a bare URL and must not be flagged.
+# "this" and "it" point at something the reader can see, and only an id can
+# keep that promise.
+#
+# Pinned rather than failing outright, in the idiom the token migration used:
+# the two liars below are known debt from before ?source= existed. A NEW one
+# fails immediately; removing one of these means deleting its line here, which
+# is a deliberate act rather than a silent drift.
+sub check_scoped_links {
+    my @problems;
+
+    # file => label, for links that name a specific object but carry no id.
+    my %pinned = (
+        'templates/single-study_material.php' => {
+            'Ask about this document' => 1,
+            'Summarise it for me'     => 1,
+        },
+    );
+
+    my $base = 'wp-content/plugins/scholaris-library';
+    my @scan = ( 'templates/single-study_material.php', 'templates/dashboard.php', 'templates/library-grid.php' );
+
+    my $seen = 0;
+
+    for my $rel (@scan) {
+        my $path = File::Spec->catfile( $root, $base, $rel );
+        next unless -f $path;
+        my $src = slurp("$base/$rel");
+
+        # An anchor carrying a bare tool URL, then its translated label.
+        while ( $src =~ /eduai_(?:ask|summarise)_url\(\s*\)(.{0,220}?)_e\(\s*'([^']+)'/gs ) {
+            my $label = $2;
+            $seen++;
+
+            # Definite reference: the reader is looking at the thing.
+            next unless $label =~ /\b(?:this|it)\b/i;
+
+            next if $pinned{$rel} && $pinned{$rel}{$label};
+
+            push @problems,
+                "$base/$rel: \"$label\" names a specific thing but links to the bare tool URL — "
+                . 'pressing it opens a picker and asks the student to find what they were already reading. '
+                . 'Pass the id (?source=<id>), or reword the label so it does not promise one.';
+        }
+    }
+
+    return ("$base: found no eduai_*_url() links at all — this check would pass vacuously")
+        unless $seen;
+
+    # The pins must still describe reality, or they are hiding a fixed problem
+    # rather than a known one.
+    for my $rel ( sort keys %pinned ) {
+        my $src = -f File::Spec->catfile( $root, $base, $rel ) ? slurp("$base/$rel") : '';
+        for my $label ( sort keys %{ $pinned{$rel} } ) {
+            next if index( $src, $label ) >= 0;
+            push @problems,
+                "$base/$rel no longer contains the pinned label \"$label\" — "
+                . 'delete it from %pinned in this check, so the pin lists debt that exists.';
         }
     }
 
