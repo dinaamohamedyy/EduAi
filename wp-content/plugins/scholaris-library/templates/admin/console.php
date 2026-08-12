@@ -12,7 +12,13 @@
  *               capability-filtered by SL_Console::link(), so a card may
  *               legitimately contain none
  *   $sl_status  materials, without_media, courses (null when Tutor is off),
- *               accounts, max_upload
+ *               accounts
+ *
+ * The contract is the point of this docblock, so it lists exactly what this
+ * template reads and nothing else. max_upload left with the count it fed: the
+ * largest upload the server accepts is infrastructure trivia on a screen about
+ * running a course, and belongs beside the upload control where it changes a
+ * decision. SL_Console may still supply it; this template no longer reads it.
  *
  * @package ScholarisLibrary
  */
@@ -46,10 +52,6 @@ defined( 'ABSPATH' ) || exit;
 		<li>
 			<strong><?php echo esc_html( (string) $sl_status['accounts'] ); ?></strong>
 			<span><?php echo esc_html( _n( 'registered account', 'registered accounts', (int) $sl_status['accounts'], 'scholaris-library' ) ); ?></span>
-		</li>
-		<li>
-			<strong><?php echo esc_html( $sl_status['max_upload'] ); ?></strong>
-			<span><?php esc_html_e( 'largest upload this server accepts', 'scholaris-library' ); ?></span>
 		</li>
 	</ul>
 
