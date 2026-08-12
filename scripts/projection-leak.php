@@ -45,6 +45,27 @@ function check( string $rule, bool $ok, string $detail ): void {
 	printf( "FAIL  %s\n        %s\n", $rule, $detail );
 }
 
+/**
+ * Render a payload to a string the content searches can actually match against.
+ *
+ * `wp_json_encode()` escapes non-ASCII to \uXXXX and `/` to `\/` by default,
+ * while the probes below are raw UTF-8 taken straight from the fixture. That
+ * mismatch is not cosmetic: it silently blinded the verbatim detector to every
+ * answer containing a slash or a non-ASCII character — 3 of the 10 in this
+ * fixture ("f(x)·sin(nx)", "situation — audio", "1/pi"). Those three could have
+ * leaked in full and the harness would have reported "none of the 10 answer
+ * texts appear verbatim", because the needle and the haystack were in different
+ * encodings.
+ *
+ * Found by the control added above it, on its first run, which is the argument
+ * for controls in one line.
+ *
+ * @param mixed $data Response data or fixture.
+ */
+function leak_searchable( $data ): string {
+	return (string) wp_json_encode( $data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+}
+
 /* A real student, not an administrator: the projection must hold for the role
  * that actually sits the exam, and capability differences are exactly the sort
  * of thing that turns a safe response unsafe. */
@@ -68,6 +89,20 @@ if ( ! $user ) {
 
 wp_set_current_user( $user->ID );
 printf( "signed in as %s (%s)\n\n", $user->user_login, implode( ',', $user->roles ) );
+
+/* This harness generates several exams per run, and generation is budgeted at
+ * four units an hour. Run it twice in an hour and the second run reports the
+ * generation route returning 429 — which reads as "the leak guard is failing"
+ * when it means "the guard ran out of its own allowance".
+ *
+ * That is worse than a flaky test: a security guard that goes red for reasons
+ * unrelated to security is one that gets re-run until it is green, or ignored.
+ * So it resets its own budget before starting. It is testing the projection,
+ * not the rate limiter — check_exam_rate_limit() has its own coverage — and a
+ * test that cannot be run twice in a row is not a test anyone will keep. */
+foreach ( array( 'eduai_rl_exam_u' . $user->ID, 'eduai_rl_u' . $user->ID ) as $eduai_bucket ) {
+	delete_transient( $eduai_bucket );
+}
 
 /* The fixture is the exam whose answers we know, which is what makes a leak
  * detectable by content and not only by key name: if "DC term" appears in a
@@ -97,7 +132,7 @@ foreach ( $fixture['questions'] as $q ) {
  * unprojected exam first, where the answers are definitely present. If the
  * detector cannot find a leak it is looking straight at, nothing after this
  * point means anything. */
-$raw_wire = wp_json_encode( $fixture );
+$raw_wire = leak_searchable( $fixture );
 $control  = true;
 
 foreach ( array( 'answer_index', 'expected', 'explanation' ) as $field ) {
@@ -110,10 +145,50 @@ check(
 	'the searches did not fire on raw fixture data — every "absent" result below is meaningless'
 );
 
+/* The control above proves the KEY-NAME searches fire. It says nothing about
+ * the verbatim-content search below, which is a separate detector with its own
+ * way of silently seeing nothing: if $secrets came back empty — a fixture with
+ * no explanations, a renamed field, a changed loop — then "none of the 0 answer
+ * texts appear verbatim" passes on every payload ever, including one carrying
+ * the entire answer key. The count is printed in that assertion's own label,
+ * which makes an empty set look like a result rather than an absence.
+ *
+ * So: assert the set is non-empty, and prove those probes fire where the
+ * answers definitely are. */
+/* Needle and haystack have to be in the SAME encoding, and there is exactly one
+ * mechanism for that: leak_searchable() renders every payload with literal
+ * characters, so the probes stay raw UTF-8 straight from the fixture.
+ *
+ * The alternative — escaping each needle to match a default-encoded haystack —
+ * works equally well and was written at the same time by another session. Two
+ * correct fixes from opposite ends cancelled out and turned the control red
+ * again, which is how the collision announced itself. One mechanism only, and
+ * this is the one: un-escaping the haystack also catches a leak that arrived
+ * through some other encoding, where a needle escaped to one exact form would
+ * slip past. */
+$probe_control = array();
+foreach ( $secrets as $s ) {
+	$probe = trim( mb_substr( $s[1], 0, 40 ) );
+	if ( '' === $probe || false === strpos( $raw_wire, $probe ) ) {
+		$probe_control[] = $s[0];
+	}
+}
+
+check(
+	sprintf( 'control: %d answer texts were extracted from the fixture', count( $secrets ) ),
+	count( $secrets ) >= 5,
+	'fewer than 5 answer texts found — the verbatim check below would pass vacuously'
+);
+check(
+	'control: every answer-text probe fires on the unprojected exam',
+	! $probe_control,
+	'these probes found nothing even in raw data, so their absence proves nothing: ' . implode( ', ', $probe_control )
+);
+
 /* ---- the projection, as the browser would receive it -------------------- */
 
 $client = EduAI_Exams::for_client( $fixture );
-$wire   = wp_json_encode( $client );
+$wire   = leak_searchable( $client );
 
 printf( "projection is %d bytes for %d questions\n\n", strlen( $wire ), count( $fixture['questions'] ) );
 
@@ -131,6 +206,8 @@ foreach ( array( 'answer_index', 'expected', 'explanation' ) as $field ) {
 $leaked = array();
 foreach ( $secrets as $s ) {
 	list( $label, $text ) = $s;
+	/* Same encoding as the control above — this is the search that would catch
+	 * a real leak, and it was the one silently unable to match three answers. */
 	$probe = trim( mb_substr( $text, 0, 40 ) );
 	if ( '' !== $probe && false !== strpos( $wire, $probe ) ) {
 		$leaked[] = $label;
@@ -230,7 +307,7 @@ if ( is_wp_error( $stored ) ) {
 } else {
 	$request  = new WP_REST_Request( 'GET', '/eduai/v1/exam/' . (int) $stored['id'] );
 	$response = rest_do_request( $request );
-	$body     = wp_json_encode( $response->get_data() );
+	$body     = leak_searchable( $response->get_data() );
 
 	check(
 		'GET /eduai/v1/exam/<id> returns 200 for a signed-in student',
@@ -243,6 +320,277 @@ if ( is_wp_error( $stored ) ) {
 			sprintf( '§1 on the wire: "%s" absent from GET /exam/<id>', $field ),
 			false === strpos( $body, '"' . $field . '"' ),
 			'found "' . $field . '" in the HTTP response body'
+		);
+	}
+}
+
+/* ---- the OTHER route that hands a paper to a browser --------------------
+ *
+ * Everything above exercises GET /exam/<id>. The deployment engineer proved
+ * what that leaves uncovered: strip the projection from the GENERATION route
+ * and this harness reports 12 passed, 0 failed while the response ships
+ * answer_index, expected and explanation to every student on every exam.
+ *
+ * That route matters more than the one already watched, because it is where
+ * the browser FIRST receives the paper — a regression there leaks on every
+ * generation, before anyone has opened a stored exam.
+ *
+ * Both of its returns are exercised. class-eduai-rest.php:332 is the reuse
+ * path, taken when an exam with the same source hash already exists, and :346
+ * is the fresh one. They are separate returns with separate projections, so a
+ * fix applied to one and not the other is exactly the shape that survives a
+ * single-path test. The pre_http_request stub above is still installed, so
+ * neither costs a model call.
+ *
+ * Deliberately NOT asserted here: POST /exam/<id>/submit. After marking, the
+ * explanation and the mark scheme are the product — a student who has just sat
+ * the paper is entitled to them. Asserting their absence there would encode a
+ * rule the product does not have, and would go red on correct behaviour.
+ */
+/* The route requires 200 characters of source (class-eduai-rest.php:282), so
+ * the harness has to send real material. Identical text both times on purpose:
+ * the first call generates and takes the fresh return, the second matches on
+ * source_hash and takes the reuse return. One string, both paths. */
+$eduai_source = str_repeat(
+	'The Calvin cycle fixes carbon dioxide in the stroma using RuBisCO, consuming the ATP and NADPH produced by the light-dependent reactions in the thylakoid membrane. ',
+	4
+);
+
+/* Unique per run, or the "fresh" iteration stops being fresh after the first
+ * ever run: source_hash would match a stored exam and the route would take the
+ * reuse return while the label still said fresh. The second iteration reuses
+ * THIS run's text, so both paths are exercised on every run rather than
+ * depending on what a previous run happened to leave behind. */
+$eduai_source .= ' Run marker ' . wp_generate_password( 12, false ) . '.';
+
+foreach ( array( 'fresh', 'reused' ) as $eduai_path ) {
+
+	$eduai_req = new WP_REST_Request( 'POST', '/eduai/v1/exam' );
+	$eduai_req->set_param( 'count', 10 );
+	$eduai_req->set_param( 'title', 'projection-leak harness' );
+	$eduai_req->set_body_params( array( 'text' => $eduai_source ) );
+
+	$eduai_res  = rest_do_request( $eduai_req );
+	$eduai_body = leak_searchable( $eduai_res->get_data() );
+
+	check(
+		sprintf( 'POST /eduai/v1/exam (%s) answers for a signed-in student', $eduai_path ),
+		in_array( $eduai_res->get_status(), array( 200, 201 ), true ),
+		'status was ' . $eduai_res->get_status() . ' — body: ' . substr( (string) $eduai_body, 0, 200 )
+	);
+
+	/* Control: prove this iteration took the path its name claims.
+	 *
+	 * The label is documentation and documentation drifts silently. With a
+	 * constant source string, every run after the first matches on source_hash
+	 * and takes the REUSE return — so an iteration labelled "fresh" exercises
+	 * :332 and never :346, and a regression in the fresh projection would sit
+	 * behind a green check called "fresh" forever. Exactly the defect the
+	 * Tester found in grade-adversarial, where a label said "model said 99"
+	 * about an input that had been made legal.
+	 *
+	 * for_client() reports which return produced it, so the claim is checkable
+	 * rather than assumed. Asserted, not merely printed. */
+	$eduai_reused = (bool) ( $eduai_res->get_data()['reused'] ?? false );
+
+	check(
+		sprintf( 'control: the "%s" call really took the %s path', $eduai_path, $eduai_path ),
+		( 'fresh' === $eduai_path ) ? ! $eduai_reused : $eduai_reused,
+		sprintf(
+			'reused=%s on the "%s" iteration — it exercised the other return, so the checks below say nothing about %s generation',
+			$eduai_reused ? 'true' : 'false',
+			$eduai_path,
+			$eduai_path
+		)
+	);
+
+	// Only meaningful if the route actually produced a paper. A 4xx body
+	// contains no answer key either, and would pass all three below while
+	// proving nothing — the shape this file's own control section exists to
+	// refuse.
+	if ( ! in_array( $eduai_res->get_status(), array( 200, 201 ), true )
+		|| false === strpos( (string) $eduai_body, '"questions"' ) ) {
+		check(
+			sprintf( 'POST /eduai/v1/exam (%s) returned a paper to inspect', $eduai_path ),
+			false,
+			'no "questions" in the response, so the absence checks below would be vacuous'
+		);
+		continue;
+	}
+
+	foreach ( array( 'answer_index', 'expected', 'explanation' ) as $eduai_field ) {
+		check(
+			sprintf( '§1 on the wire: "%s" absent from POST /exam (%s)', $eduai_field, $eduai_path ),
+			false === strpos( (string) $eduai_body, '"' . $eduai_field . '"' ),
+			'found "' . $eduai_field . '" in the generation response — the answer key reaches the browser'
+		);
+	}
+}
+
+/* ---- retake: the paper must go blank again after it has been marked -----
+ *
+ * The remaining hole. GET /exam/<id> after an attempt legitimately returns the
+ * marked script — the student sat it and is entitled to the answers. But the
+ * same route with ?retake=true re-serves the paper to sit again, and if that
+ * ever returned the attempt instead of the blank projection, a student would
+ * read the answer key and then take the exam with it. Sitting a paper once must
+ * not become a way to obtain its answers for the retake.
+ *
+ * The control here is built in rather than mutated, and it is the submit
+ * response itself. Submitting reveals the answer key by design, so the same
+ * searches are run against it FIRST: if they can find the key where it is
+ * supposed to be, then finding nothing in the retake response means something.
+ * That re-proves the detector on this route on every run — a one-time mutation
+ * would only have proved it on the day someone ran it.
+ *
+ * A separate exam from the one above, on its own source hash, so this flow
+ * cannot disturb the no-attempts assertions already made against that one.
+ */
+$eduai_sit = EduAI_Exams::generate(
+	$user->ID,
+	array( array( 'type' => 'text', 'text' => 'projection-leak retake harness' ) ),
+	'projection-leak retake harness',
+	'leaktest-retake-' . $user->ID . '-' . time(),
+	10
+);
+
+if ( is_wp_error( $eduai_sit ) ) {
+	check( 'an exam could be stored for the retake check', false, 'generate() failed: ' . $eduai_sit->get_error_message() );
+} else {
+	$eduai_exam_id = (int) $eduai_sit['id'];
+
+	/* Punctuation for every short answer on purpose: those are scored 0 locally
+	 * without reaching the marker, so sitting the paper here costs no model call
+	 * and no credit, while the response still carries the full mark scheme and
+	 * every explanation — which is exactly what this needs to search. */
+	$eduai_answers = array();
+	foreach ( $eduai_sit['questions'] as $eduai_q ) {
+		$eduai_answers[] = 'mcq' === $eduai_q['type']
+			? array( 'id' => $eduai_q['id'], 'choice' => 0 )
+			: array( 'id' => $eduai_q['id'], 'text' => ',,' );
+	}
+
+	$eduai_sub = new WP_REST_Request( 'POST', '/eduai/v1/exam/' . $eduai_exam_id . '/submit' );
+	$eduai_sub->set_body_params( array( 'answers' => $eduai_answers ) );
+
+	$eduai_sub_res  = rest_do_request( $eduai_sub );
+	$eduai_sub_body = leak_searchable( $eduai_sub_res->get_data() );
+
+	check(
+		'POST /exam/<id>/submit marks the paper for a signed-in student',
+		in_array( $eduai_sub_res->get_status(), array( 200, 201 ), true ),
+		'status was ' . $eduai_sub_res->get_status() . ' — body: ' . substr( (string) $eduai_sub_body, 0, 200 )
+	);
+
+	/* The built-in control. Submit SHOULD contain these; if it does not, the
+	 * searches below are looking for something that is not there to find and
+	 * their silence would be meaningless. */
+	$eduai_revealed = true;
+	foreach ( array( 'answer_index', 'expected', 'explanation' ) as $eduai_field ) {
+		$eduai_revealed = $eduai_revealed && false !== strpos( (string) $eduai_sub_body, '"' . $eduai_field . '"' );
+	}
+
+	/* If you have come here to "finish the coverage" by asserting that
+	 * answer_index/expected/explanation are ABSENT from submit: don't. They are
+	 * supposed to be there. A student who has just sat the paper is entitled to
+	 * the mark scheme and the explanations — that is the feature, not a leak,
+	 * and the assertion would go red on correct behaviour. The check below is
+	 * the opposite one on purpose: submit MUST carry them, which is what makes
+	 * the retake assertions that follow mean anything. */
+	check(
+		'control: the marked script DOES carry the answer key',
+		$eduai_revealed,
+		'submit returned no answer_index/expected/explanation — either marking failed or the searches are broken, '
+			. 'so the retake assertions below would pass without testing anything'
+	);
+
+	/* The discriminating control, and the reason this is not just another
+	 * "absent" assertion: the SAME route on the SAME exam for the SAME user,
+	 * with only the retake flag off, must still hand back the marked script.
+	 *
+	 * That is what makes the three assertions below a test of the flag rather
+	 * than a test of the route. Without it they would pass identically if
+	 * `retake` were ignored, misspelled, dropped from the args array, or if the
+	 * exam simply had no attempt — every one of which is a way for the retake
+	 * feature to be broken while the guard stays green. Built in rather than
+	 * mutated once, so it re-proves itself on every run. */
+	$eduai_marked = new WP_REST_Request( 'GET', '/eduai/v1/exam/' . $eduai_exam_id );
+	$eduai_mk_body = leak_searchable( rest_do_request( $eduai_marked )->get_data() );
+
+	$eduai_marked_has = true;
+	foreach ( array( 'answer_index', 'expected', 'explanation' ) as $eduai_field ) {
+		$eduai_marked_has = $eduai_marked_has && false !== strpos( $eduai_mk_body, '"' . $eduai_field . '"' );
+	}
+
+	check(
+		'control: the same route WITHOUT retake does return the marked script',
+		$eduai_marked_has,
+		'GET /exam/<id> after an attempt carried no answer key, so the retake checks below '
+			. 'would pass whether or not the retake flag does anything at all'
+	);
+
+	$eduai_retake = new WP_REST_Request( 'GET', '/eduai/v1/exam/' . $eduai_exam_id );
+	$eduai_retake->set_param( 'retake', true );
+
+	$eduai_rt_res  = rest_do_request( $eduai_retake );
+	$eduai_rt_body = leak_searchable( $eduai_rt_res->get_data() );
+
+	check(
+		'GET /exam/<id>?retake=1 returns a paper after the exam has been sat',
+		in_array( $eduai_rt_res->get_status(), array( 200, 201 ), true )
+			&& false !== strpos( (string) $eduai_rt_body, '"questions"' ),
+		'status ' . $eduai_rt_res->get_status() . ' with no "questions" — the absence checks below would be vacuous'
+	);
+
+	foreach ( array( 'answer_index', 'expected', 'explanation' ) as $eduai_field ) {
+		check(
+			sprintf( '§1 on the wire: "%s" absent from the RETAKE paper', $eduai_field ),
+			false === strpos( (string) $eduai_rt_body, '"' . $eduai_field . '"' ),
+			'found "' . $eduai_field . '" — retake re-serves the marked script, so a student can read the key and re-sit'
+		);
+	}
+
+	/* Renaming the field or inlining the text would pass every check above. */
+	$eduai_rt_leaked = array();
+	foreach ( $secrets as $eduai_s ) {
+		$eduai_probe = trim( mb_substr( $eduai_s[1], 0, 40 ) );
+		if ( '' !== $eduai_probe && false !== strpos( (string) $eduai_rt_body, $eduai_probe ) ) {
+			$eduai_rt_leaked[] = $eduai_s[0];
+		}
+	}
+
+	check(
+		'§1 on the wire: no answer text appears verbatim in the RETAKE paper',
+		! $eduai_rt_leaked,
+		'leaked: ' . implode( ', ', $eduai_rt_leaked )
+	);
+
+	/* ---- /history: the exam thread must log outcomes, never answers -------
+	 *
+	 * generate() and grade() both write to the conversation log, and /history
+	 * serves that log straight to the browser. Today they write a title and a
+	 * score, so there is nothing to leak — this exists so that the day someone
+	 * logs the exam JSON to debug a generation, the guard says so. The control
+	 * is the same one used throughout: the thread has to contain something
+	 * first, or "no answers here" is a statement about an empty list. */
+	$eduai_hist = new WP_REST_Request( 'GET', '/eduai/v1/history' );
+	$eduai_hist->set_param( 'thread_id', 'exam' );
+
+	$eduai_hist_res  = rest_do_request( $eduai_hist );
+	$eduai_hist_body = leak_searchable( $eduai_hist_res->get_data() );
+
+	check(
+		'control: the exam thread in /history has messages to inspect',
+		200 === $eduai_hist_res->get_status()
+			&& false !== strpos( (string) $eduai_hist_body, '"content"' ),
+		'status ' . $eduai_hist_res->get_status() . ' with no messages — the check below would be vacuous'
+	);
+
+	foreach ( array( 'answer_index', 'expected', 'explanation' ) as $eduai_field ) {
+		check(
+			sprintf( '§1 on the wire: "%s" absent from GET /history', $eduai_field ),
+			false === strpos( (string) $eduai_hist_body, '"' . $eduai_field . '"' ),
+			'found "' . $eduai_field . '" — the conversation log is serving exam answers to the browser'
 		);
 	}
 }
