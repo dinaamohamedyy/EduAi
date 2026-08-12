@@ -17,7 +17,7 @@
 defined( 'ABSPATH' ) || exit;
 
 // Bump on every admin.js/admin.css change: both are cache-keyed on ?ver=.
-define( 'SL_VERSION', '1.1.0' );
+define( 'SL_VERSION', '1.2.0' );
 define( 'SL_FILE', __FILE__ );
 define( 'SL_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SL_URL', plugin_dir_url( __FILE__ ) );
@@ -27,6 +27,7 @@ require_once SL_DIR . 'includes/class-sl-meta.php';
 require_once SL_DIR . 'includes/class-sl-templates.php';
 require_once SL_DIR . 'includes/class-sl-library.php';
 require_once SL_DIR . 'includes/class-sl-private.php';
+require_once SL_DIR . 'includes/class-sl-bank.php';
 require_once SL_DIR . 'includes/class-sl-console.php';
 require_once SL_DIR . 'includes/class-sl-quiz-history.php';
 
@@ -41,6 +42,7 @@ final class Scholaris_Library {
 		SL_Templates::init();
 		SL_Library::init();
 		SL_Private::init();
+		SL_Bank::init();
 		SL_Console::init();
 		SL_Quiz_History::init();
 

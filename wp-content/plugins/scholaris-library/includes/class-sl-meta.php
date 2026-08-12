@@ -180,6 +180,17 @@ class SL_Meta {
 			'side',
 			'default'
 		);
+
+		// Normal context, not side: a four-option question does not fit a
+		// 280px column, and the editor is the widest thing on this screen.
+		add_meta_box(
+			'sl_material_bank',
+			__( 'Practice paper', 'scholaris-library' ),
+			array( __CLASS__, 'render_bank' ),
+			'study_material',
+			'normal',
+			'default'
+		);
 	}
 
 	/**
@@ -420,6 +431,175 @@ class SL_Meta {
 	}
 
 	/**
+	 * The practice-paper editor.
+	 *
+	 * WORKS WITH JAVASCRIPT OFF, and that is a requirement rather than a
+	 * courtesy: the rows already on the screen are ordinary form fields, so a
+	 * lecturer with a broken script still saves what they typed. The script's
+	 * job is only to clone the `<template>` below for a new row.
+	 *
+	 * `sl_bank_count` is the truncation guard's other half. It must equal the
+	 * number of rows the browser posts, so ANY SCRIPT THAT ADDS OR REMOVES A
+	 * ROW MUST UPDATE IT — otherwise save_bank() will correctly refuse a save
+	 * that was perfectly fine. That coupling is the price of catching a
+	 * silent `max_input_vars` truncation, which has no other tell.
+	 *
+	 * @param WP_Post $post Post being edited.
+	 */
+	public static function render_bank( $post ): void {
+		if ( ! class_exists( 'SL_Bank' ) ) {
+			echo '<p>' . esc_html__( 'The question bank component is not available.', 'scholaris-library' ) . '</p>';
+			return;
+		}
+
+		$questions = SL_Bank::questions( (int) $post->ID );
+
+		// Three spare rows so the box is usable before any script loads, and
+		// a hard ceiling well under the ~100 rows at which max_input_vars
+		// starts eating the tail.
+		$blanks = 3;
+		$max    = 50;
+		$rows   = min( $max, count( $questions ) + $blanks );
+
+		echo '<p class="sl-bank__lead">';
+		esc_html_e( 'Multiple choice only for now. Leave a question blank to skip it; the paper is offered to anyone who can open this material.', 'scholaris-library' );
+		echo '</p>';
+
+		echo '<div class="sl-bank" data-sl-bank data-sl-bank-max="' . esc_attr( (string) $max ) . '">';
+
+		for ( $i = 0; $i < $rows; $i++ ) {
+			self::render_bank_row( $i, $questions[ $i ] ?? array() );
+		}
+
+		echo '</div>';
+
+		printf(
+			'<input type="hidden" name="sl_bank_count" value="%d" data-sl-bank-count>',
+			(int) $rows
+		);
+
+		echo '<template data-sl-bank-template>';
+		self::render_bank_row( 0, array(), true );
+		echo '</template>';
+
+		if ( $questions ) {
+			printf(
+				'<p class="sl-bank__rev description">%s</p>',
+				esc_html(
+					sprintf(
+						/* translators: 1: number of questions 2: revision number */
+						__( '%1$d questions, revision %2$d. Editing them hands out a new paper; papers already sat keep the questions they were answered with.', 'scholaris-library' ),
+						count( $questions ),
+						SL_Bank::rev( (int) $post->ID )
+					)
+				)
+			);
+		}
+	}
+
+	/**
+	 * One question row.
+	 *
+	 * @param int   $index    Row index; becomes the POST array key.
+	 * @param array $question Existing question, if any.
+	 * @param bool  $template True when rendering the clone source, whose
+	 *                        index is a placeholder for the script to swap.
+	 */
+	private static function render_bank_row( int $index, array $question = array(), bool $template = false ): void {
+		$key     = $template ? '__i__' : (string) $index;
+		$options = array_pad( (array) ( $question['options'] ?? array() ), 4, '' );
+		$answer  = isset( $question['answer_index'] ) ? (int) $question['answer_index'] : -1;
+		$band    = (string) ( $question['band'] ?? SL_Bank::BAND_IN );
+		$marks   = (int) ( $question['marks'] ?? 1 );
+
+		echo '<fieldset class="sl-bank__row" data-sl-bank-row>';
+
+		printf(
+			'<legend class="sl-bank__legend">%s</legend>',
+			esc_html(
+				sprintf(
+					/* translators: %d: question number */
+					__( 'Question %d', 'scholaris-library' ),
+					$index + 1
+				)
+			)
+		);
+
+		printf(
+			'<textarea name="sl_bank[%s][question]" rows="2" class="widefat" placeholder="%s">%s</textarea>',
+			esc_attr( $key ),
+			esc_attr__( 'What is the question?', 'scholaris-library' ),
+			esc_textarea( (string) ( $question['question'] ?? '' ) )
+		);
+
+		echo '<ul class="sl-bank__options">';
+
+		foreach ( array_slice( $options, 0, 4 ) as $slot => $option ) {
+			printf(
+				'<li><label><input type="radio" name="sl_bank[%1$s][answer_index]" value="%2$d"%3$s>'
+					. '<span class="screen-reader-text">%4$s</span></label>'
+					. '<input type="text" name="sl_bank[%1$s][options][]" value="%5$s" class="widefat" placeholder="%6$s"></li>',
+				esc_attr( $key ),
+				(int) $slot,
+				checked( $answer, $slot, false ),
+				esc_html(
+					sprintf(
+						/* translators: %s: option letter */
+						__( 'Option %s is the correct answer', 'scholaris-library' ),
+						chr( 65 + (int) $slot )
+					)
+				),
+				esc_attr( (string) $option ),
+				esc_attr(
+					sprintf(
+						/* translators: %s: option letter */
+						__( 'Option %s', 'scholaris-library' ),
+						chr( 65 + (int) $slot )
+					)
+				)
+			);
+		}
+
+		echo '</ul>';
+
+		printf(
+			'<textarea name="sl_bank[%s][explanation]" rows="2" class="widefat" placeholder="%s">%s</textarea>',
+			esc_attr( $key ),
+			esc_attr__( 'Why that answer is right — the student reads this after marking.', 'scholaris-library' ),
+			esc_textarea( (string) ( $question['explanation'] ?? '' ) )
+		);
+
+		echo '<p class="sl-bank__meta">';
+
+		printf( '<label>%s ', esc_html__( 'Difficulty', 'scholaris-library' ) );
+		printf( '<select name="sl_bank[%s][band]">', esc_attr( $key ) );
+
+		foreach ( array(
+			'easy'   => __( 'Easy', 'scholaris-library' ),
+			'medium' => __( 'Medium', 'scholaris-library' ),
+			'hard'   => __( 'Hard', 'scholaris-library' ),
+		) as $value => $label ) {
+			printf(
+				'<option value="%s"%s>%s</option>',
+				esc_attr( $value ),
+				selected( $band, $value, false ),
+				esc_html( $label )
+			);
+		}
+
+		echo '</select></label> ';
+
+		printf(
+			'<label>%s <input type="number" name="sl_bank[%s][marks]" value="%d" min="1" max="5" step="1" class="small-text"></label>',
+			esc_html__( 'Marks', 'scholaris-library' ),
+			esc_attr( $key ),
+			$marks
+		);
+
+		echo '</p></fieldset>';
+	}
+
+	/**
 	 * Persist the meta box.
 	 *
 	 * @param int     $post_id Post ID.
@@ -470,6 +650,107 @@ class SL_Meta {
 
 		$access = isset( $_POST['sl_access'] ) ? sanitize_key( wp_unslash( $_POST['sl_access'] ) ) : 'members';
 		update_post_meta( $post_id, '_scholaris_access', in_array( $access, array( 'public', 'members' ), true ) ? $access : 'members' );
+
+		self::save_bank( $post_id );
+	}
+
+	/**
+	 * Persist the question bank, refusing a truncated POST rather than
+	 * storing half of one.
+	 *
+	 * THE TRUNCATION GUARD IS THE POINT OF THIS FUNCTION. `max_input_vars` is
+	 * 1000 in the web container and `php/uploads.ini` does not raise it, so
+	 * past roughly a hundred rows PHP drops the tail of `$_POST` **with no
+	 * error at all** — the save succeeds, the page reloads, and the last
+	 * questions are simply gone. There is nothing for the lecturer to notice
+	 * until a student sits a paper that stops early.
+	 *
+	 * So the box posts its own row count and we compare. A mismatch means the
+	 * browser sent more than PHP parsed, which cannot be repaired here: the
+	 * missing rows are not in the request. Refusing keeps the previous bank,
+	 * which is the version the lecturer can still see in their editor.
+	 *
+	 * Deliberately fails LOUD and closed. Every other field in save() takes
+	 * the last-writer-wins path because a wrong lecturer name is visible; a
+	 * silently shortened exam is not.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	private static function save_bank( int $post_id ): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified by the caller.
+
+		// No bank box on the screen at all — a quick-edit or a bulk edit must
+		// not read "no rows posted" as "delete the bank".
+		if ( ! isset( $_POST['sl_bank_count'] ) ) {
+			return;
+		}
+
+		$declared = absint( wp_unslash( $_POST['sl_bank_count'] ) );
+		$rows     = isset( $_POST['sl_bank'] ) ? (array) wp_unslash( $_POST['sl_bank'] ) : array();
+		// phpcs:enable
+
+		if ( count( $rows ) !== $declared ) {
+			self::flag(
+				$post_id,
+				sprintf(
+					/* translators: 1: rows the browser sent 2: rows PHP received */
+					__( 'The question bank was NOT saved. The browser sent %1$d questions and PHP received %2$d — the request hit the max_input_vars limit (1000 fields) and the rest was discarded silently. Your previous bank is untouched. Split the paper into fewer questions, or ask for max_input_vars to be raised in php/uploads.ini.', 'scholaris-library' ),
+					$declared,
+					count( $rows )
+				)
+			);
+			return;
+		}
+
+		if ( ! class_exists( 'SL_Bank' ) ) {
+			return;
+		}
+
+		$saved = SL_Bank::save( $post_id, self::sanitize_bank_rows( $rows ) );
+
+		if ( is_wp_error( $saved ) ) {
+			// Same contract as the video field: report what is wrong and keep
+			// what was there, because a field that empties itself on a bad
+			// value looks exactly like a save that worked.
+			self::flag(
+				$post_id,
+				sprintf(
+					/* translators: %s: what is wrong with the bank */
+					__( 'The question bank was not saved. %s', 'scholaris-library' ),
+					$saved->get_error_message()
+				)
+			);
+		}
+	}
+
+	/**
+	 * Shape the raw POST into the rows SL_Bank::validate() expects.
+	 *
+	 * Only unwrapping and type coercion happens here — every rule about what
+	 * a valid question IS lives in the validator, so there is one place to
+	 * read and one place to change.
+	 *
+	 * @param array $rows Raw `sl_bank` input.
+	 */
+	private static function sanitize_bank_rows( array $rows ): array {
+		$out = array();
+
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$out[] = array(
+				'question'     => isset( $row['question'] ) ? (string) $row['question'] : '',
+				'options'      => isset( $row['options'] ) ? array_map( 'strval', (array) $row['options'] ) : array(),
+				'answer_index' => $row['answer_index'] ?? null,
+				'explanation'  => isset( $row['explanation'] ) ? (string) $row['explanation'] : '',
+				'band'         => isset( $row['band'] ) ? (string) $row['band'] : '',
+				'marks'        => isset( $row['marks'] ) ? (int) $row['marks'] : 1,
+			);
+		}
+
+		return $out;
 	}
 
 	/**
