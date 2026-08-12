@@ -335,6 +335,48 @@ shapes: `eduai_exam_rate` (429), `eduai_exam_json` / `eduai_exam_invalid` /
 
 ---
 
+## Scoping a tool to one lecture — `?source=`
+
+One parameter, `?source=<post_id>`, points the assistant at a single piece of
+material. It works on both `study_material` and Tutor `lesson`; the server
+reads the post type and applies that type's own access rule, so scoping a
+tool can never become a way to read something the visitor could not open
+directly.
+
+Both bundles gain a `scope` key:
+
+```js
+EduAIConfig.scope     // null  |  { id: 139, title: "Loop of Henle" }
+EduAIPrepConfig.scope
+```
+
+**Take the title from there and nowhere else.** It is read from the post
+server-side and tag-stripped. A title carried in the query string would be
+attacker-supplied text rendering into the page.
+
+Send it back on `POST /eduai/v1/chat` as `source` (integer, default `0`). The
+server re-resolves and re-gates the id on arrival — the localized copy is a UI
+hint, never authority — so a stale value costs you an unscoped answer, not an
+error.
+
+**`null` means two different things and you cannot distinguish them:** no
+`?source=` present, and a `?source=` naming something this visitor may not
+read. That is deliberate. Telling them apart would answer "does post 47 exist
+and is it closed" for anyone who asks. So there is no "you don't have access
+to that" state to render, and reconstructing one from a probe would rebuild
+exactly the oracle this avoids.
+
+While scoped, retrieval is constrained to that one source and the assistant
+will **not** fall back to general knowledge — it answers from that lecture or
+says what the lecture does not cover. If the UI shows a "scoped to X" chip,
+that is the behaviour it is promising.
+
+Scopable types are `study_material` and `lesson`. A page or post resolves to
+`null` even though anyone may read it: readable and scopable are separate
+questions, and the allowlist deliberately does not answer the first one.
+
+---
+
 ## Verifying on a machine with no PHP
 
 **CI enforces all of this on every pull request**, not just on push to `main`,
