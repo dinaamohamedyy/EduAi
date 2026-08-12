@@ -25,9 +25,15 @@ $sl_types    = get_the_terms( $sl_id, 'material_type' );
 /*
  * Video, and the reason the conditions below are structured rather than
  * spot-edited. A LINK material — the recommended default, because it puts no
- * bytes in uploads — has _scholaris_file_id = 0. The old `if ( $sl_file_id &&
- * $sl_allowed )` / `elseif ( $sl_file_id && ! $sl_allowed )` pair therefore
- * matched neither branch for it: title, description, and nothing else. Putting
+ * bytes in uploads — has _scholaris_file_id = 0. Both branches of the old pair
+ * were keyed on that id alone (allowed, and not-allowed), so they matched
+ * neither branch for it: title, description, and nothing else. Putting
+ *
+ * (The literal old conditions are deliberately NOT reproduced here. When they
+ * were, two sessions grepped for them, found this comment, and reported the
+ * replaced code as still live and unreachable — a comment that quotes the code
+ * it replaced reads exactly like the code it replaced.)
+ *
  * the video inside the old `if` keeps that blank page; putting it outside loses
  * the access gate. So the question the template asks is "is there media" and
  * the question each block asks is "media of which kind".
@@ -156,8 +162,16 @@ wp_enqueue_script( 'scholaris-library' );
 							$sl_stream = SL_Private::stream_url( $sl_id );
 							$sl_mime   = (string) get_post_mime_type( $sl_video_id );
 							?>
-							<video controls preload="metadata"
-								<?php echo $sl_file_id ? '' : 'playsinline'; ?>>
+							<?php
+							// playsinline unconditionally: it stops iOS taking
+							// the video fullscreen on play, which is wanted for
+							// every lecture. It was briefly emitted only when
+							// the material had NO document, which was a
+							// condition with no meaning — found by auditing the
+							// restructure for exactly that shape rather than by
+							// anything failing.
+							?>
+							<video controls preload="metadata" playsinline>
 								<source src="<?php echo esc_url( $sl_stream ); ?>"
 									<?php echo $sl_mime ? 'type="' . esc_attr( $sl_mime ) . '"' : ''; ?>>
 								<?php
