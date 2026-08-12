@@ -371,6 +371,29 @@ if ( ! $user ) {
 	$user = is_wp_error( $new ) ? null : get_user_by( 'id', $new );
 }
 
+/*
+ * Start this user from zero quota, or a previous run decides the result.
+ *
+ * exam_submit() passes through check_rate_limit() before it reaches the route's
+ * own answer-count bound, so on a stack these harnesses have been run against
+ * all day the fixture user is long past 20-per-hour and every submission comes
+ * back 429. The 100-answer case then "refuses" — with the wrong code, for the
+ * wrong reason — and reads as the bound being enforced when it was never
+ * reached. The control below is what caught it, by saying the refusal proved
+ * nothing rather than merely failing.
+ *
+ * Note the direction: this harness fails on a LONG-LIVED stack and passes on a
+ * fresh one, which is the exact opposite of download-gate. "Which stack did
+ * this run on" is therefore a property of the suite, not a caveat belonging to
+ * one file — and the nightly, which boots fresh, would never have shown it.
+ *
+ * Found by the deployment engineer, whose own mutation left one of the
+ * transients behind: restoring a file does not restore the database.
+ */
+if ( $user ) {
+	delete_transient( 'eduai_rl_u' . $user->ID );
+}
+
 $fixture_exam = wp_json_encode( array(
 	'schema_version' => 1,
 	'title'          => $exam['title'],
