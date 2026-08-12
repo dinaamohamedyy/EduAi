@@ -42,15 +42,15 @@
 		this.idleLabel = this.button.textContent;
 		this.busy = false;
 
-		/* The scope id is read off the banner the server rendered, NOT off
-		   location.search. The server resolved ?source= and applied that post
-		   type's gate before printing it, so the banner existing IS the
-		   authorisation. Re-deriving the id from the URL here would make a
-		   second source of truth for one question, and would let anyone type
-		   ?source=<id> and have us send an id the server refused. No banner,
-		   no id — see the contract note in templates/summarizer.php. */
-		var scopeEl = root.querySelector('[data-eduai-scope]');
-		this.scopeId = scopeEl ? parseInt(scopeEl.getAttribute('data-eduai-scope'), 10) || 0 : 0;
+		/* CFG.scope — the same key chat and prepare read, set from one
+		   EduAI_Scope::for_script() call. Never parsed from location.search:
+		   ?source= IS the authorisation decision, so re-deriving it client-side
+		   would be a second source of truth for one question and would let
+		   anyone type an id the server refused.
+		   null covers "no parameter" and "refused" identically, and that is
+		   deliberate — telling those apart would say whether a given post
+		   exists and is closed. Unscoped is the whole story. */
+		this.scopeId = (CFG.scope && CFG.scope.id) ? parseInt(CFG.scope.id, 10) || 0 : 0;
 
 		this.bind();
 	}

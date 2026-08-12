@@ -28,22 +28,20 @@ $eduai_sum_id = 'eduai-sum-' . wp_unique_id();
 	 * gate for that post type. Absent, empty, or ungated means this block does
 	 * not render, and the page below is exactly today's page.
 	 *
-	 * That is why the id lives in the markup rather than in a JS parse of
-	 * location.search. The scope has to survive one gate, not two agreeing
-	 * ones: if the script read the URL itself it would be a second source of
-	 * truth for the same question, and a student could type ?source=<anything>
-	 * and have the client send an id the server never authorised. No banner,
-	 * no id, no scoped request — the fall-through is structural rather than a
-	 * condition somebody has to remember to write.
+	 * This block is PRESENTATION ONLY and carries no id. The script reads the
+	 * id from CFG.scope, the same key chat and prepare read, so one
+	 * EduAI_Scope::for_script() call feeds both the banner and the request.
+	 * An id in the markup as well would be a second copy of one answer that
+	 * has to agree with the first — which is the failure this whole seam is
+	 * shaped to avoid.
 	 *
-	 * (This reverses my own earlier recommendation to parse it off location as
-	 * prepare.js does for ?exam=. That parameter selects a retake on a page
-	 * that serves both entry points and is authorised separately downstream;
-	 * this one IS the authorisation decision, so it must not be re-derived.)
+	 * Never parsed from location.search either: ?source= IS the authorisation
+	 * decision, so re-deriving it client-side would let anyone type an id the
+	 * server refused. The URL is input to the server; this is its output.
 	 */
-	if ( ! empty( $eduai_scope['title'] ) && ! empty( $eduai_scope['id'] ) ) :
+	if ( ! empty( $eduai_scope['title'] ) ) :
 		?>
-		<p class="eduai-scope" data-eduai-scope="<?php echo esc_attr( (string) $eduai_scope['id'] ); ?>">
+		<p class="eduai-scope">
 			<span class="eduai-scope__label"><?php esc_html_e( 'Summarising', 'eduai' ); ?></span>
 			<strong class="eduai-scope__name"><?php echo esc_html( $eduai_scope['title'] ); ?></strong>
 		</p>
