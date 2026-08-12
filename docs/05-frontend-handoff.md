@@ -366,10 +366,25 @@ and is it closed" for anyone who asks. So there is no "you don't have access
 to that" state to render, and reconstructing one from a probe would rebuild
 exactly the oracle this avoids.
 
-While scoped, retrieval is constrained to that one source and the assistant
-will **not** fall back to general knowledge — it answers from that lecture or
-says what the lecture does not cover. If the UI shows a "scoped to X" chip,
-that is the behaviour it is promising.
+**One id, two meanings, and the difference is visible to the student.**
+
+*Summarise* treats the scope as the **subject**. It does not retrieve — the
+object is given — so a scoped page can submit with nothing attached, and the
+summary is about that lecture exclusively. An explicit upload or paste still
+wins, and the response's `label` says which was actually used, so a banner
+naming the wrong thing can correct itself.
+
+*Ask* treats it as the **root of a context** and boosts, never filters. "What
+is a residual", asked inside lesson four, is defined in lesson one; filtering
+to the lesson would hide the definition and return a confidently incomplete
+answer. So a scoped Ask legitimately returns passages from elsewhere in the
+course — **do not write "sources are all from X" copy on the Ask side.**
+Ordering can be wrong without being harmful; a filter cannot.
+
+New error on `/summarize`: `eduai_scope_empty` (422) — the scoped source has
+no readable text yet, e.g. a lesson saved seconds ago or a document with no
+text layer. Distinct from `eduai_short` because the student did nothing wrong
+and attaching a file is the way out.
 
 Scopable types are `study_material` and `lesson`. A page or post resolves to
 `null` even though anyone may read it: readable and scopable are separate
