@@ -118,9 +118,30 @@ Front-end already has the enrolment state, so the row has two forms:
 | Not enrolled | Same list, same legibility, **no anchor**, with a lock. |
 
 Nobody is promised a page they will be bounced from, and nobody loses the table
-of contents. It is the same shape as the access decision settled this morning:
-the server decides what the control *is*, not merely where it points. An href
-that 403s is the download button all over again.
+of contents.
+
+### One mistake, three surfaces
+
+This is not a lesson-list detail. The same principle resolved three separate
+defects on 12 Aug 2026:
+
+| Surface | The broken promise |
+|---|---|
+| The material download button | Offered a file the request would refuse |
+| The scoped Summarise button | Offered an action the viewer could not take |
+| The lesson link (here) | Offers a page the viewer will be bounced from |
+
+**The server decides what the control _is_, not merely where it points.** An
+href that bounces you is a promise made by the affordance and broken by the
+destination — and the affordance is the part the person believes, because it is
+the part they can see before they act.
+
+Naming it as one mistake rather than three is the point. Three separate fixes
+teach nothing about the fourth surface; one rule applies to it before it is
+built. **Wherever access is decided in one place and rendered in another, the
+renderer must ask, not assume** — which is the same sentence as
+`SL_Private::is_secured()` in `docs/12` §"The label", arrived at from a
+different direction.
 
 **The titles stay at full contrast. The lock is what dims.**
 
