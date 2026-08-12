@@ -572,6 +572,18 @@
   text-transform: uppercase; color: hsl(var(--eduai-muted)); flex: none;
 }
 .eduai-scope__name { min-width: 0; overflow-wrap: anywhere; }
+/* An attached file or pasted text beats the scope server-side, so the banner
+   is naming something that will not be read. Struck through and drained of
+   colour rather than hidden: removing it would leave no trace that the page
+   was scoped at all, and the student would not know what they had displaced. */
+.eduai-scope--overridden {
+  background: transparent;
+  border-left-color: hsl(var(--eduai-muted) / 0.4);
+}
+.eduai-scope--overridden .eduai-scope__name {
+  text-decoration: line-through;
+  color: hsl(var(--eduai-muted));
+}
 
 .eduai-sum { display: grid; gap: var(--eduai-space-s); max-width: var(--eduai-measure); }
 .eduai-sum__form { display: grid; gap: var(--eduai-space-xs); }

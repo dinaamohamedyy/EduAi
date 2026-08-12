@@ -52,6 +52,16 @@
 		   exists and is closed. Unscoped is the whole story. */
 		this.scopeId = (CFG.scope && CFG.scope.id) ? parseInt(CFG.scope.id, 10) || 0 : 0;
 
+		/* An explicit upload or paste beats the scope server-side, so from the
+		   moment the student attaches something the banner above is naming a
+		   lecture that will NOT be summarised. Said before the request rather
+		   than corrected after it: the result card already reports what was
+		   used (data.label), but by then they have waited for the slowest call
+		   in the product to find out it read something else. */
+		this.scopeEl = root.querySelector('.eduai-scope');
+		this.scopeLabelEl = this.scopeEl ? this.scopeEl.querySelector('.eduai-scope__label') : null;
+		this.scopeLabelIdle = this.scopeLabelEl ? this.scopeLabelEl.textContent : '';
+
 		this.bind();
 	}
 
@@ -87,10 +97,28 @@
 			self.setFile(self.file.files[0]);
 		});
 
+		/* Both inputs, because either one overrides the scope. 'input' rather
+		   than 'change' on the textarea so the banner corrects itself while
+		   they type, not after they leave the field. */
+		this.text.addEventListener('input', function () { self.syncScope(); });
+
 		this.form.addEventListener('submit', function (e) {
 			e.preventDefault();
 			self.submit();
 		});
+	};
+
+	/* Reflects, in the banner, whether the scope is still what will be read.
+	   Called on every input that can override it. Silent when unscoped. */
+	Summariser.prototype.syncScope = function () {
+		if (!this.scopeEl) { return; }
+		var overridden = !!this.file.files[0] || (this.text.value || '').trim().length >= 80;
+		this.scopeEl.classList.toggle('eduai-scope--overridden', overridden);
+		if (this.scopeLabelEl) {
+			this.scopeLabelEl.textContent = overridden
+				? (T.scopeOverridden || 'Not summarising')
+				: this.scopeLabelIdle;
+		}
 	};
 
 	Summariser.prototype.setFile = function (file) {
@@ -98,6 +126,9 @@
 		this.dropMsg.textContent = file
 			? file.name + '  ·  ' + Math.max(1, Math.round(file.size / 1024)) + ' KB'
 			: T.dropFile;
+		// Every route that sets a file lands here — click, drop and clearing —
+		// so the banner stays honest without three separate hooks.
+		this.syncScope();
 	};
 
 	Summariser.prototype.note = function (cls, html) {
