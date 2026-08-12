@@ -633,6 +633,108 @@ if ( is_wp_error( $eduai_sit ) ) {
 	}
 }
 
+/* ---- a SECOND student: who may obtain the paper that is allowed to
+ *      contain everything ------------------------------------------------
+ *
+ * Everything above asks what is IN a payload. On the marked-paper route that
+ * is deliberately the wrong question — after an attempt, the mark scheme and
+ * the explanations are the product, and :360 says so. Which means the only
+ * thing between one student and another student's complete answer key is
+ * exam_owned(), and until now this file read exactly two states: the owner,
+ * and signed out. The realistic attacker is neither. Exam ids are sequential,
+ * so the attack is a for-loop by anyone with a valid student session.
+ *
+ * `download-gate` has asserted "a link copied from student A is refused for
+ * student B" since it was written, for a route that serves a PDF. This route
+ * serves the answer key, legitimately, and had no equivalent. Found by the
+ * Tester's cold pass, who measured all three states and left the file alone.
+ */
+$eduai_other = get_user_by( 'login', 'leaktest-student-b' );
+
+if ( ! $eduai_other ) {
+	$eduai_other_id = wp_insert_user( array(
+		'user_login' => 'leaktest-student-b',
+		'user_pass'  => wp_generate_password( 24 ),
+		'user_email' => 'leaktest-student-b@example.invalid',
+		'role'       => get_role( 'student' ) ? 'student' : 'subscriber',
+	) );
+
+	if ( is_wp_error( $eduai_other_id ) ) {
+		fwrite( STDERR, 'could not create the second test student: ' . $eduai_other_id->get_error_message() . "\n" );
+		exit( 1 );
+	}
+
+	$eduai_other = get_user_by( 'id', $eduai_other_id );
+}
+
+if ( isset( $eduai_exam_id ) ) {
+
+	/* Control 1 — the payload really does contain the key right now.
+	 * Without this, "student B got no answer key" is satisfied by an exam that
+	 * never had one, or by a route that has stopped returning anything. */
+	wp_set_current_user( $user->ID );
+	$eduai_owner_body = leak_searchable( rest_do_request(
+		new WP_REST_Request( 'GET', '/eduai/v1/exam/' . $eduai_exam_id )
+	)->get_data() );
+
+	check(
+		'control: the owner\'s marked paper carries the answer key to be protected',
+		false !== strpos( $eduai_owner_body, '"answer_index"' ),
+		'the owner got no answer key, so refusing the second student proves nothing about ownership'
+	);
+
+	wp_set_current_user( $eduai_other->ID );
+
+	/* Control 2 — and the second student is genuinely SIGNED IN.
+	 * This is the one that decides whether the block below means anything. A
+	 * failed wp_set_current_user, a role without read, a session that never
+	 * established: every one of those makes each request 401 and every
+	 * assertion below pass for a reason that has nothing to do with ownership.
+	 * /history is the cheapest route that any signed-in student may use. */
+	$eduai_b_hist = rest_do_request( new WP_REST_Request( 'GET', '/eduai/v1/history' ) );
+
+	check(
+		'control: the second student has a working session of their own',
+		200 === $eduai_b_hist->get_status(),
+		'status ' . $eduai_b_hist->get_status() . ' on a route any signed-in student may use — '
+			. 'the refusals below would be about being logged out, not about ownership'
+	);
+
+	/* The three ways to reach another student's paper. Each asserts the STATUS,
+	 * because that is the load-bearing half: an error body contains no answer
+	 * key either, so "no key in the response" is satisfied by any failure at
+	 * all. The key check rides along to catch a 200 that leaks. */
+	$eduai_cross = array(
+		'GET /exam/<id>'          => new WP_REST_Request( 'GET', '/eduai/v1/exam/' . $eduai_exam_id ),
+		'GET /exam/<id>?retake=1' => new WP_REST_Request( 'GET', '/eduai/v1/exam/' . $eduai_exam_id ),
+		// The sharpest of the three: submit legitimately returns the full key,
+		// so a student able to submit against someone else's exam is handed it.
+		'POST /exam/<id>/submit'  => new WP_REST_Request( 'POST', '/eduai/v1/exam/' . $eduai_exam_id . '/submit' ),
+	);
+	$eduai_cross['GET /exam/<id>?retake=1']->set_param( 'retake', true );
+	$eduai_cross['POST /exam/<id>/submit']->set_body_params( array( 'answers' => array() ) );
+
+	foreach ( $eduai_cross as $eduai_what => $eduai_req_b ) {
+		$eduai_res_b  = rest_do_request( $eduai_req_b );
+		$eduai_body_b = leak_searchable( $eduai_res_b->get_data() );
+
+		check(
+			sprintf( 'another student is refused: %s', $eduai_what ),
+			in_array( $eduai_res_b->get_status(), array( 401, 403, 404 ), true ),
+			'status was ' . $eduai_res_b->get_status() . ' — a signed-in student reached another student\'s exam'
+		);
+
+		check(
+			sprintf( 'and gets no answer key from: %s', $eduai_what ),
+			false === strpos( $eduai_body_b, '"answer_index"' )
+				&& false === strpos( $eduai_body_b, '"expected"' ),
+			'the response carried the answer key to a student who does not own the exam'
+		);
+	}
+
+	wp_set_current_user( $user->ID );
+}
+
 /* ---- signed out, the route must not answer at all ----------------------- */
 
 wp_set_current_user( 0 );
