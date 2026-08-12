@@ -89,6 +89,7 @@ declare -a MANIFEST=(
   submit-contract
   rate-limit
   page-drift
+  render-safety
   download-gate
   roundtrip
   ui-geometry
@@ -219,6 +220,22 @@ run_wp "rate-limit         the assistant's quota is per user, not shared" rate-l
 # Missing slug fails; content mismatch only warns, because make_page skips
 # existing pages and editing copy in wp-admin is expected rather than wrong.
 run_wp "page-drift         the running site has the pages setup.sh declares" page-drift.php
+
+# HERE, NOT IN THE LINT JOB, and the distinction is worth stating because the
+# obvious reading puts it there. It guards shipped code — EduAI_REST::to_html()
+# is in a plugin that rsyncs — and chat.js assigns its output straight into
+# innerHTML, so it is the most-rendered surface in the product and the front end
+# has nothing left to escape. Both true, and neither decides where it can run.
+#
+# It needs a live WordPress: it calls wp_kses() and esc_html(), and to_html()
+# does too. Run standalone it refuses outright — "Run me through wp-cli, not
+# php.", exit 1 — which is why it is not beside redaction-guard.php despite the
+# resemblance. That one is standalone by construction: it defines ABSPATH and
+# requires the class file directly. This one does neither.
+#
+# "What it protects" and "what it needs to run" are independent questions, and
+# only the second one picks the home.
+run_wp "render-safety      model output cannot reach the page as live markup" render-safety.php
 
 # TWO THINGS ABOUT THIS ONE THAT ARE NOT VISIBLE FROM THE CALL.
 #
