@@ -20,6 +20,37 @@ class EduAI_Students {
 	private const CAP  = 'list_users';
 	private const SLUG = 'eduai-students';
 
+	private const PER_PAGE = 50;
+
+	/**
+	 * Rows per page.
+	 *
+	 * Filterable rather than constant for two reasons, and the second is the
+	 * honest one: a site with thousands of accounts may want a different
+	 * page, and a constant page size larger than any test fixture means the
+	 * paging code never executes in a test. A branch that cannot be reached
+	 * is not covered by a suite that passes.
+	 */
+	private static function per_page(): int {
+		return max( 1, (int) apply_filters( 'eduai_students_per_page', self::PER_PAGE ) );
+	}
+
+	/**
+	 * The roster is a teaching screen, so it opens on the people being
+	 * taught. Administrators and instructors hold accounts too and used to
+	 * appear among them, which makes "how many students do I have" a question
+	 * the screen answers wrongly.
+	 */
+	private const DEFAULT_ROLE = 'student';
+
+	/**
+	 * Single-sourced so the roster query and the "have sat" count cannot end
+	 * up searching different columns — that divergence would show up as a
+	 * header disagreeing with the table under it, which reads as a data bug
+	 * rather than a filter bug.
+	 */
+	private const SEARCH_COLUMNS = array( 'user_login', 'user_email', 'display_name', 'user_nicename' );
+
 	public static function init(): void {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 	}
@@ -72,30 +103,99 @@ class EduAI_Students {
 	private static function render_roster(): void {
 		$roster = EduAI_Exams::roster();
 
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only list controls.
+		$role   = isset( $_GET['sl_role'] ) ? sanitize_key( wp_unslash( $_GET['sl_role'] ) ) : self::DEFAULT_ROLE;
+		$search = isset( $_GET['s'] ) ? trim( sanitize_text_field( wp_unslash( $_GET['s'] ) ) ) : '';
+		$paged  = max( 1, isset( $_GET['paged'] ) ? absint( wp_unslash( $_GET['paged'] ) ) : 1 );
+		// phpcs:enable
+
 		// Driven from the user list, not from the attempts table: a student who
 		// has sat nothing has no row in attempts, and they are precisely who a
 		// teacher is looking for. Merging the other way hides them.
-		$users = get_users( array(
+		$args = array(
 			'orderby' => 'display_name',
-			'number'  => 500,
-		) );
+			'order'   => 'ASC',
+			'number'  => self::per_page(),
+			'offset'  => ( $paged - 1 ) * self::per_page(),
+		);
 
-		$sat = count( array_filter( $roster, static fn( array $r ) => $r['taken'] > 0 ) );
+		if ( 'all' !== $role ) {
+			$args['role'] = $role;
+		}
+
+		if ( '' !== $search ) {
+			$args['search']         = '*' . $search . '*';
+			$args['search_columns'] = self::SEARCH_COLUMNS;
+		}
+
+		// WP_User_Query rather than get_users(), for get_total(): the old code
+		// asked for 500 and printed count() of what came back, so on account
+		// 501 students silently stopped appearing while the header went on
+		// saying 500 — a number that is its own alibi.
+		$query = new WP_User_Query( $args );
+		$users = (array) $query->get_results();
+		$total = (int) $query->get_total();
+		$pages = (int) ceil( $total / self::per_page() );
+
+		// Counted across everyone the filter matches, not just this page —
+		// otherwise the sentence changes meaning as you page through it. The
+		// roster is keyed by people who have actually sat something, so this
+		// is bounded by that, not by the account count.
+		$sat = 0;
+
+		if ( $roster ) {
+			$sat_args = array(
+				'include' => array_keys( $roster ),
+				'fields'  => 'ID',
+				'number'  => -1,
+			);
+
+			if ( 'all' !== $role ) {
+				$sat_args['role'] = $role;
+			}
+
+			// The search belongs here too, and leaving it out produced a
+			// sentence that contradicted itself: a search matching two
+			// accounts reported "2 accounts matching, 4 of whom have sat a
+			// practice paper". Whatever narrows the list has to narrow both
+			// halves of the count, or the second number is about a different
+			// population than the first.
+			if ( '' !== $search ) {
+				$sat_args['search']         = '*' . $search . '*';
+				$sat_args['search_columns'] = self::SEARCH_COLUMNS;
+			}
+
+			$sat = count( get_users( $sat_args ) );
+		}
+		// An empty `include` means "no restriction" to get_users, not "nobody",
+		// so the guard above is load-bearing: without it, a site where nobody
+		// has sat a paper would report every account as having sat one.
 
 		printf( '<h1>%s</h1>', esc_html__( 'Student progress', 'eduai' ) );
 
 		printf(
 			'<p class="description">%s</p>',
 			esc_html(
-				sprintf(
-					/* translators: 1: number of accounts 2: number who have sat a paper */
-					__( '%1$d registered %2$s, %3$d of whom have sat a practice paper.', 'eduai' ),
-					count( $users ),
-					_n( 'account', 'accounts', count( $users ), 'eduai' ),
-					$sat
-				)
+				'' !== $search
+					? sprintf(
+						/* translators: 1: number of matches 2: account/accounts 3: the search term 4: number who have sat a paper */
+						__( '%1$d %2$s matching "%3$s", %4$d of whom have sat a practice paper.', 'eduai' ),
+						$total,
+						_n( 'account', 'accounts', $total, 'eduai' ),
+						$search,
+						$sat
+					)
+					: sprintf(
+						/* translators: 1: number of accounts 2: number who have sat a paper */
+						__( '%1$d registered %2$s, %3$d of whom have sat a practice paper.', 'eduai' ),
+						$total,
+						_n( 'account', 'accounts', $total, 'eduai' ),
+						$sat
+					)
 			)
 		);
+
+		self::render_filters( $role, $search );
 
 		echo '<table class="wp-list-table widefat fixed striped">';
 		echo '<thead><tr>';
@@ -128,7 +228,120 @@ class EduAI_Students {
 			echo '</tr>';
 		}
 
+		if ( ! $users ) {
+			printf(
+				'<tr><td colspan="6">%s</td></tr>',
+				esc_html(
+					'' !== $search
+						? __( 'No accounts match that search.', 'eduai' )
+						: __( 'No accounts with that role yet.', 'eduai' )
+				)
+			);
+		}
+
 		echo '</tbody></table>';
+
+		self::render_pager( $paged, $pages, $total );
+	}
+
+	/**
+	 * Role filter and search.
+	 *
+	 * A GET form with no nonce, deliberately: it reads a list the viewer is
+	 * already authorised to see and changes nothing, so a nonce would only
+	 * make the URL unshareable between two people who both hold the
+	 * capability.
+	 *
+	 * @param string $role   Current role filter.
+	 * @param string $search Current search term.
+	 */
+	private static function render_filters( string $role, string $search ): void {
+		echo '<form method="get" class="eduai-students__filters">';
+		printf( '<input type="hidden" name="page" value="%s">', esc_attr( self::SLUG ) );
+
+		printf(
+			'<label class="screen-reader-text" for="eduai-students-role">%s</label>',
+			esc_html__( 'Filter by role', 'eduai' )
+		);
+
+		echo '<select name="sl_role" id="eduai-students-role">';
+
+		printf(
+			'<option value="all"%s>%s</option>',
+			selected( $role, 'all', false ),
+			esc_html__( 'All roles', 'eduai' )
+		);
+
+		foreach ( wp_roles()->get_names() as $slug => $label ) {
+			printf(
+				'<option value="%s"%s>%s</option>',
+				esc_attr( $slug ),
+				selected( $role, $slug, false ),
+				esc_html( translate_user_role( $label ) )
+			);
+		}
+
+		echo '</select> ';
+
+		printf(
+			'<label class="screen-reader-text" for="eduai-students-search">%s</label>',
+			esc_html__( 'Search students', 'eduai' )
+		);
+
+		printf(
+			'<input type="search" id="eduai-students-search" name="s" value="%s" placeholder="%s"> ',
+			esc_attr( $search ),
+			esc_attr__( 'Name or email', 'eduai' )
+		);
+
+		printf( '<button type="submit" class="button">%s</button>', esc_html__( 'Filter', 'eduai' ) );
+
+		echo '</form>';
+	}
+
+	/**
+	 * Page links, printed only when there is more than one page.
+	 *
+	 * @param int $paged Current page.
+	 * @param int $pages Total pages.
+	 * @param int $total Total accounts matched.
+	 */
+	private static function render_pager( int $paged, int $pages, int $total ): void {
+		if ( $pages < 2 ) {
+			return;
+		}
+
+		$links = paginate_links( array(
+			// remove_query_arg keeps the role filter and the search term on
+			// the URL: paging out of your own filter is the classic version
+			// of this control being wrong.
+			'base'      => remove_query_arg( 'paged' ) . '%_%',
+			'format'    => '&paged=%#%',
+			'current'   => $paged,
+			'total'     => $pages,
+			'prev_text' => __( '&laquo; Previous', 'eduai' ),
+			'next_text' => __( 'Next &raquo;', 'eduai' ),
+		) );
+
+		if ( ! $links ) {
+			return;
+		}
+
+		echo '<div class="tablenav bottom"><div class="tablenav-pages">';
+
+		printf(
+			'<span class="displaying-num">%s</span> ',
+			esc_html(
+				sprintf(
+					/* translators: %s: number of accounts */
+					_n( '%s account', '%s accounts', $total, 'eduai' ),
+					number_format_i18n( $total )
+				)
+			)
+		);
+
+		echo wp_kses_post( $links );
+		echo '</div></div>';
 	}
 
 	/**
