@@ -70,6 +70,22 @@ function findBrowser() {
 }
 const EDGE = findBrowser();
 
+// Checked BEFORE the browser is spawned, for two reasons: a failure here would
+// otherwise leave an orphaned browser behind, and on Node 20 the missing global
+// WebSocket surfaces only at connect time — AFTER the browser is up — so it
+// reads as a harness bug rather than a toolchain one. That cost a CI run to
+// diagnose (72404b1), which pinned the workflow to Node 22. The pin fixes CI;
+// this names the requirement for anyone running the script anywhere else,
+// where no workflow comment is in front of them.
+if (typeof WebSocket === 'undefined') {
+  console.error(
+    `FAILED: this harness speaks CDP over a global WebSocket, added in Node 22.\n` +
+    `  running: ${process.version}\n` +
+    `  fix:     use Node 22 or newer (the workflow pins it; nvm use 22 locally)`
+  );
+  process.exit(1);
+}
+
 // --no-sandbox and --disable-dev-shm-usage are for CI, and both are required
 // there rather than nice to have. GitHub's runners restrict the user namespaces
 // Chrome's sandbox needs, so without the first flag the process starts and dies
