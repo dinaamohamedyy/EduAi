@@ -71,6 +71,24 @@ if ( ! $video_id || ! file_exists( (string) get_attached_file( $video_id ) ) ) {
 update_post_meta( $post_id, '_scholaris_access', 'members' );
 update_post_meta( $post_id, '_scholaris_video_id', $video_id );
 
+/*
+ * REQUIRED, and its absence cost an hour and nearly a false defect report.
+ *
+ * SL_Meta::has_video() keys on `_scholaris_video_source` and returns false when
+ * it is unset, WHATEVER `_scholaris_video_id` holds. Without this line the
+ * material has a video attached, streams correctly over ?sl_stream=, and the
+ * template renders no player at all — which from outside is indistinguishable
+ * from the video block not having been built yet. That is what I reported, and
+ * it was wrong.
+ *
+ * Worth knowing beyond this fixture: any material created programmatically -
+ * an import, a migration, a seeder - that writes the attachment id without the
+ * source has a video nothing will ever display, and nothing anywhere fails.
+ * Same shape as the fresh-install placement hole, which was also a fixture
+ * writing meta in an order the product did not expect.
+ */
+update_post_meta( $post_id, '_scholaris_video_source', 'file' );
+
 printf( "POST_VIDEO=%d\n", $post_id );
 printf( "VIDEO_ID=%d\n", $video_id );
 printf( "RAW_URL=%s\n", wp_get_attachment_url( $video_id ) );

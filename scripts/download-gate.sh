@@ -248,13 +248,13 @@ result="$(fetch "$LINK_ANON_PUBLIC")"
 # wrong-offset probes below are here: they establish that different offsets
 # return different content, so a matching marker cannot be a coincidence.
 #
-# KNOWN WEAKER THAN THE DOWNLOAD HALF, DELIBERATELY AND TEMPORARILY. Every link
-# above is scraped off the rendered page as a student really obtains it. The
-# stream nonce is MINTED, because the material template does not render a video
-# block yet (measured: 0 occurrences of sl_stream=, <video, or sl_download= on
-# the video material's page). So this proves the streamer, NOT that a student
-# can ever reach it. Swap to scraping the moment the template lands — a minted
-# nonce cannot fail the way a missing player element can.
+# The stream URL is scraped off the rendered page with a real login, like every
+# link above. An earlier version minted the nonce instead, on a measurement that
+# showed no player on the page — which was wrong, and wrong in a way worth
+# recording: the fixture had not set _scholaris_video_source, so has_video()
+# returned false and the template correctly rendered nothing. "The feature is
+# not built yet" and "my fixture does not satisfy its precondition" look
+# identical from outside, and only one of them is somebody else's bug.
 
 say ""
 say "--- gated video, signed in, seeking over HTTP ---"
@@ -267,28 +267,22 @@ if [ -z "$vid" ]; then
 else
   eval "$vid"
 
-  # [A-Z_0-9], not [A-Z_]: the nonce key carries the material id
-  # (NONCE_SL_STREAM_111), so the pattern used for the document fixtures above
-  # drops the one line this whole section depends on — and drops it silently,
-  # leaving a symptom ("no nonce") two steps from its cause.
-  creds="$(MSYS_NO_PATHCONV=1 docker compose --profile tools run --rm cli \
-    wp eval-file /scripts/mint-cookies.php "$USER_A" "sl_stream_$POST_VIDEO" --allow-root 2>/dev/null | grep -E '^[A-Z_0-9]+=')"
+  # Scraped off the rendered page with student A's real login cookies, exactly
+  # like the document links above — NOT minted. An earlier version minted the
+  # nonce because the player appeared not to render; it renders, and the reason
+  # it seemed not to is recorded in video-gate-probe.php. Scraping is strictly
+  # stronger: a minted nonce proves the streamer works, while a scraped one also
+  # proves a student can obtain it, so the player element vanishing is a failure
+  # here rather than something the harness routes around.
+  V_URL="$(curl -s -b "$tmp/a.jar" "$PERMALINK" \
+    | grep -oE 'https?://[^"'"'"' ]*\?sl_stream=[0-9]+(&|&amp;|&#038;)_wpnonce=[a-z0-9]+' \
+    | head -1 | sed -e 's/&#038;/\&/g' -e 's/&amp;/\&/g')"
 
-  # eval into a namespace of its own: mint-cookies.php also emits SITE, and
-  # clobbering the one the document half is using would be a silent cross-wire.
-  V_LOGGED_IN=""; V_AUTH=""; V_NONCE=""
-  V_LOGGED_IN="$(printf '%s' "$creds" | grep -m1 '^LOGGED_IN_COOKIE=' | cut -d= -f2-)"
-  V_LI_NAME="$(printf '%s' "$creds" | grep -m1 '^LOGGED_IN_COOKIE_NAME=' | cut -d= -f2-)"
-  V_AUTH="$(printf '%s' "$creds" | grep -m1 '^AUTH_COOKIE=' | cut -d= -f2-)"
-  V_AU_NAME="$(printf '%s' "$creds" | grep -m1 '^AUTH_COOKIE_NAME=' | cut -d= -f2-)"
-  V_NONCE="$(printf '%s' "$creds" \
-    | grep -m1 "^NONCE_$(printf 'SL_STREAM_%s' "$POST_VIDEO")=" | cut -d= -f2-)"
-
-  if [ -z "$V_NONCE" ] || [ -z "$V_LOGGED_IN" ]; then
-    bad "a session could be minted for $USER_A" "mint-cookies.php returned no nonce or no cookie; every range result below would be a 403 about the wrong thing"
+  if [ -z "$V_URL" ]; then
+    bad "the video material page offers a stream link to a signed-in student" \
+        "no ?sl_stream= URL on $PERMALINK — either the player block stopped rendering, or the material lost _scholaris_video_source (SL_Meta::has_video() returns false without it whatever the attachment id says)"
   else
-    V_JAR="$V_LI_NAME=$V_LOGGED_IN; $V_AU_NAME=$V_AUTH"
-    V_URL="$SITE/?sl_stream=$POST_VIDEO&_wpnonce=$V_NONCE"
+    V_JAR="$tmp/a.jar"
 
     # Control, same discipline as the document half: if the whole file will not
     # stream to its owner, every refusal and every byte count below is noise.

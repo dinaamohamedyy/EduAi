@@ -78,15 +78,48 @@ $GLOBALS['wp_session_token_for_nonce'] = $token;
  * value that wp_get_session_token() parses is what makes them agree.
  */
 $logged_in = wp_generate_auth_cookie( $uid, $exp, 'logged_in', $token );
-$auth      = wp_generate_auth_cookie( $uid, $exp, 'auth', $token );
+
+/*
+ * BOTH auth schemes, emitted unconditionally. This is the one thing in this
+ * file that reproduces, if got wrong, exactly the bug the file exists to stop.
+ *
+ * Over http WordPress resolves wp-admin against AUTH_COOKIE (wordpress_<hash>);
+ * over https it uses SECURE_AUTH_COOKIE (wordpress_sec_<hash>), and the two are
+ * signed with different salts, so one is not a re-spelling of the other. Mint
+ * only the plain one and point a harness at https://…/wp-admin/ and you have
+ * minted a cookie admin never reads. The symptom is "admin is unconditionally
+ * blocked while the front end works" — the false conclusion this helper was
+ * written to prevent, produced by the helper.
+ *
+ * is_ssl() cannot decide it here: wp-cli has no $_SERVER['HTTPS'], so it is
+ * always false, and the site URL is http on this stack while the public tunnel
+ * is https — the same install is reached both ways. Rather than guess from a
+ * scheme that is right locally and wrong through the tunnel, emit both and let
+ * the caller send both; WordPress reads whichever matches the request it got,
+ * and the unused one is inert.
+ */
+$auth        = wp_generate_auth_cookie( $uid, $exp, 'auth', $token );
+$secure_auth = wp_generate_auth_cookie( $uid, $exp, 'secure_auth', $token );
 
 $_COOKIE[ LOGGED_IN_COOKIE ] = $logged_in;
 
 printf( "UID=%d\n", $uid );
 printf( "LOGGED_IN_COOKIE_NAME=%s\n", LOGGED_IN_COOKIE );
 printf( "AUTH_COOKIE_NAME=%s\n", AUTH_COOKIE );
+printf( "SECURE_AUTH_COOKIE_NAME=%s\n", SECURE_AUTH_COOKIE );
 printf( "LOGGED_IN_COOKIE=%s\n", $logged_in );
 printf( "AUTH_COOKIE=%s\n", $auth );
+printf( "SECURE_AUTH_COOKIE=%s\n", $secure_auth );
+
+/* Send all three over https, the first two over http. Emitted ready-made so a
+ * caller does not have to rebuild it and get the https case wrong again. */
+printf(
+	"COOKIE_HEADER=%s\n",
+	LOGGED_IN_COOKIE . '=' . $logged_in . '; ' .
+	AUTH_COOKIE . '=' . $auth . '; ' .
+	SECURE_AUTH_COOKIE . '=' . $secure_auth
+);
+
 printf( "ADMIN_URL=%s\n", untrailingslashit( admin_url() ) );
 printf( "SITE=%s\n", untrailingslashit( home_url() ) );
 
