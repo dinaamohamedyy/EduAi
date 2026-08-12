@@ -220,77 +220,136 @@ Show the download button to
 Rename first, and the warning gets shorter, stops contradicting anything, and
 has only one job left.
 
-### The label
+### The label — INVERTED 12 Aug 2026, and the trigger changed with it
 
-Shown whenever a file is attached and access is `Signed-in students` — if access
-is "Anyone" there is no false belief to correct.
+`SL_Private` closed the leak: files on a `members` material move to an
+Apache-denied directory and are served only through the nonced handler. The
+warning below was true when written and is **false now**, on exactly the
+materials it was shown on.
 
-> **The file itself is not protected.** Anyone with its address can open it,
-> signed in or not — this setting only controls the button on the page.
+**Key the copy on `SL_Private::is_secured( $material_id )`, never on
+`_scholaris_access === 'members'`.** This is the whole lesson of the original
+bug repeating one level up. The old label described what the *setting meant*
+rather than what the *system did*, and inverting it to describe intent again —
+"access is members, therefore protected" — would rebuild the same defect with
+the sign flipped, which is strictly worse: a false reassurance is the failure
+mode this project has hit all week, and a false warning is at least
+conservative.
 
-Then one remedy line, and **it must branch**, because the drafted single version
-is impossible to follow in the case that was measured:
+The predicate already exists and back-end's own docblock names its purpose:
+*"the question the rest of the plugin should ask before it claims a file is
+protected."* Ask it.
 
-- **Video attached:** *For a lecture that must stay inside the class, paste an
-  unlisted YouTube or Vimeo link instead of uploading.*
-- **Document attached:** *Don't upload anything here that must stay inside the
-  class.*
+**Three states, not two.** The middle one is the reason this cannot be a
+boolean on the access level:
 
-A PDF cannot be pasted as a Vimeo link. Telling the owner to do the impossible
-in exactly the case we proved would spend the credibility this label needs.
+| Condition | Copy |
+|---|---|
+| `public` + file | **Nothing.** The file being fetchable is the point of "Anyone"; a notice there is noise. |
+| `members` + file + `is_secured()` | Reassurance, below. |
+| `members` + file + **not** `is_secured()` | The old warning — still true, still needed, and now *actionable*. |
 
-### Show him the URL, and invite him to test it
+**State 2 — the protection works:**
 
-The spec's instinct to print the file's real public URL is the strongest part of
-the draft, and it should go further: make it clickable, with
+> **This file is protected.** It is stored outside the public folder and served
+> only to signed-in students. Its web address returns "Forbidden" to everyone,
+> including you.
+>
+> [`…/scholaris-private/lecture-3.mp4`] — *open it in a private window; the
+> "Forbidden" page is the protection working.*
 
-> *Open this in a private window to see what a stranger sees.*
+The last clause is load-bearing. The proof-of-safety demo produces an **error
+page**, and an error page shown to an owner without framing reads as *my file is
+broken*. Say what he will see before he clicks it, or the demonstration
+undermines the sentence it is meant to prove.
 
-That converts a claim into something he can verify in ten seconds. It is the
-same method this project has used on everything else, applied to the one belief
-we most need him not to hold by accident.
+**State 3 — intent and reality disagree:**
 
-### It is interim, and must be driven by one flag
+> **This file is not protected yet.** It is set to signed-in students, but the
+> file itself is still at a public address that anyone can open. Save this
+> material to move it.
 
-**Write this as production text, not as a placeholder.** An earlier draft of
-this section said the label had a near end date, on a measurement that has since
-been overturned: Apache appeared to satisfy byte ranges *above* PHP, which would
-have made gated video free. Re-measured at 2 MB rather than 86 bytes, the
-handler **ignores the range and sends the whole file from byte 0** — Apache only
-slices small buffered responses, and the boundary sits between 1 KB and 64 KB.
+That state is reachable in two real ways, which is why it must not be assumed
+away: a material created before `SL_Private` shipped and never re-saved (nothing
+has changed its meta, so nothing has reconciled it), and a move that **failed** —
+`reconcile()` returns a `failed` array precisely because moving a file can fail
+on permissions or disk, and a members material whose move errored is public
+while every setting on screen says otherwise.
 
-The fix still works, but gated video now needs real streaming in PHP rather than
-something inherited for nothing. **The warning is live for considerably longer
-than first implied**, so it should read as finished copy that an owner relies on,
-not as scaffolding someone will delete next week.
+### Show him the URL — same mechanism, opposite conclusion
 
-*(The measurement lesson is the same one this project keeps re-learning: 86
-bytes and 2 MB are not the same test. A probe run below the scale where the
-mechanism engages returns a confident answer about nothing — the sibling of the
-wp-cli upload check that reports a limit nobody is subject to.)*
+The clickable address was the strongest part of the original design and it
+survives the inversion intact, which is the point worth noticing: it was never
+an argument, it was an **instrument**. It proved danger when there was danger and
+it proves safety now, and it will keep telling the truth if these facts change a
+third time. Copy that asserts a conclusion goes stale; copy that hands the owner
+a way to check does not.
 
-**Drive every part of it from one flag** — the label, the list column, the
-remedy lines. I had planned this as insurance against the Tester's finding going
-either way; it is load-bearing now, because whoever eventually switches it off
-must not have to hunt for hard-coded copy to do it.
+In state 3 it still shows the public address that works. In state 2 it shows the
+private one that does not.
 
-Worth knowing how bad the interim actually is, because it justifies the
-bluntness of the wording: `/wp-json/wp/v2/media` publishes `source_url` for
-every attachment **anonymously**. There is a public index of the paths, so this
-is not even security by obscurity — "anyone with the file address" understates
-it, since anyone can list the addresses.
+### Not a flag any more — a predicate
+
+Two earlier drafts said this copy hung off one boolean someone would eventually
+switch off. **Delete that idea.** A flag is a statement about the world made
+once, by hand, and it goes stale silently — which is precisely how the label
+ended up lying today. `is_secured()` is asked per material, per render, and
+cannot drift from the thing it describes.
+
+The flag was the right design when the answer was the same for every material.
+It stopped being right the moment the answer became per-file, and per-file is
+what it now is: state 3 exists for individual materials while state 2 is true of
+their neighbours.
+
+### The list column — invert it, and it stops being un-failable
+
+The column was flagging materials whose files were exposed. With the leak closed
+that would be empty forever, and an always-empty check is one that cannot fail —
+the exact pattern in `docs/09` §6.7.
+
+**Flag state 3 instead: `members` materials that are not `is_secured()`.** That
+column is not empty today and it is not decorative:
+
+- Every material created before `SL_Private` shipped and not re-saved since —
+  nothing has changed its meta, so nothing has reconciled it. `migrate()` exists
+  and sweeps every material, but I could find **no caller for it** in the plugin
+  or in `scripts/`, so on any site where nobody has run it by hand, every legacy
+  file is still public.
+- Any material whose move **failed**.
+
+It empties as migration completes, and that is a completion signal rather than a
+dead check. When it is empty, the migration is genuinely done — which is a fact
+worth being able to see, and which nobody can currently establish at all.
+
+**Whoever picks this up: confirm whether `migrate()` has been run on the live
+site.** If it has not, the reassurance in state 2 is correct for new materials
+and state 3 is correct for every older one — which is exactly why the copy must
+ask the predicate rather than the setting.
 
 ### It warns, it does not block
 
 A members-only material with a deliberately public file is a reasonable thing to
 want, and hard-blocking a combination the platform can express only teaches him
 to route around the tool. What must be impossible is *arriving* there without
-having read this.
+having read what is true.
 
-### One addition, now that the leak is confirmed
+### The upload window — a real residual, and copy is the wrong fix
 
-**The same flag belongs on the study-material list screen**, as a column. A
-warning that only appears while editing is invisible to someone auditing what is
-already published — and since this is true of every file on the site today, the
-material that leaks is far likelier to be one created months ago than the one
-currently open.
+The media modal uploads through `async-upload.php` before the material is saved,
+so a file sits at a public address until placement reconciles. Back-end's own
+header explains why deciding at upload time is impossible: on a new material the
+post does not exist yet, so `_scholaris_access` cannot be known.
+
+It matters more than "brief" suggests. The window closes when the owner *saves*,
+which is user-controlled — he may upload, write a description, and save ten
+minutes later — and `/wp-json/wp/v2/media` publishes `source_url` anonymously, so
+during that window the file is not merely fetchable but **indexed**.
+
+**It should not go in the label.** A permanent notice about a transient state is
+the same false-warning failure being fixed today, and it would be shown on every
+material forever to describe a condition that is over by the time he reads it.
+
+The honest mitigation is technical, not editorial: **restrict the anonymous
+media REST index**, which also removes the public path listing in general. That
+is worth raising as its own item rather than papering over with a sentence — I
+am flagging it rather than deciding it, since it is not a design question.
