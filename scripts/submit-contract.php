@@ -171,11 +171,25 @@ check(
 	'awarded came back as ' . var_export( $r['awarded'] ?? null, true )
 );
 
+/*
+ * Two different defects live behind this one assertion, and the failure line
+ * has to say which. A missing `correct` key and a `correct` that came back
+ * false are not the same bug: the first is a response that never carried the
+ * field, the second is a full-credit answer rendered to the student as wrong.
+ * Reported as "not false", a MISSING key sends the reader looking for a false
+ * that is not there — the same wrong direction as a fixture that cannot detect
+ * its own absence. Name the case, then describe it.
+ */
+$correct_present = array_key_exists( 'correct', $r );
+
 check(
-	sprintf( '§3: `correct` is null on a short answer, not false (q%d)', $full['id'] ),
-	array_key_exists( 'correct', $r ) && null === $r['correct'],
-	'correct came back as ' . var_export( $r['correct'] ?? '<absent>', true )
-		. ' — false here is a full-credit answer rendered as wrong'
+	sprintf( '§3: `correct` is present and null on a short answer (q%d)', $full['id'] ),
+	$correct_present && null === $r['correct'],
+	$correct_present
+		? 'correct came back as ' . var_export( $r['correct'], true )
+			. ' — false here is a full-credit answer rendered as wrong'
+		: 'the `correct` key is ABSENT from the result, not merely wrong — '
+			. 'nothing set it, so there is no value to inspect'
 );
 
 check(
@@ -185,17 +199,31 @@ check(
 );
 
 /* Every short, not just the sampled one. */
-$bad_tristate = array();
+$absent_correct = array();
+$wrong_correct  = array();
 foreach ( $shorts as $q ) {
 	$row = $by_id[ $q['id'] ] ?? array();
-	if ( ! array_key_exists( 'correct', $row ) || null !== $row['correct'] ) {
-		$bad_tristate[] = 'q' . $q['id'];
+	if ( ! array_key_exists( 'correct', $row ) ) {
+		$absent_correct[] = 'q' . $q['id'];
+	} elseif ( null !== $row['correct'] ) {
+		$wrong_correct[] = 'q' . $q['id'] . '=' . var_export( $row['correct'], true );
 	}
 }
+
+/* Same split as the sampled case above: a list of ids reported as "not null"
+ * is actively misleading when the key was never there to be null. */
+$tristate_detail = array();
+if ( $absent_correct ) {
+	$tristate_detail[] = '`correct` ABSENT on: ' . implode( ', ', $absent_correct );
+}
+if ( $wrong_correct ) {
+	$tristate_detail[] = 'present but not null on: ' . implode( ', ', $wrong_correct );
+}
+
 check(
-	sprintf( '§3: `correct` is null on all %d short answers', count( $shorts ) ),
-	! $bad_tristate,
-	'not null on: ' . implode( ', ', $bad_tristate )
+	sprintf( '§3: `correct` is present and null on all %d short answers', count( $shorts ) ),
+	! $absent_correct && ! $wrong_correct,
+	implode( '; ', $tristate_detail )
 );
 
 /* ---- every key on every result ------------------------------------------- */
