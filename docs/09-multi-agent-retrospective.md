@@ -83,6 +83,13 @@ original. That third session had been giving other people the "a quiet file is
 not an unowned file" advice all week, and the second had it written in their own
 notes — and neither rule fired, because **nothing prompted the question.**
 
+One of them sharpened it afterwards, and the sharper version is the one to keep:
+they were told the file had been reassigned **in the same message** that
+corrected their verdict, and edited anyway, because they had already decided it
+was theirs. **Being told is not the same as having heard it.** Information
+arriving alongside a correction competes with the correction for attention, and
+loses.
+
 That is a mechanism failure, not three lapses. The map lived in the manager's
 head while messages crossed faster than it could be relayed, so "is anyone in
 this file?" had no answer except asking, and asking requires already suspecting.
@@ -443,10 +450,21 @@ noticed was the control asserting that the probes must fire on known-positive
 data — an assertion about the test's own machinery, with nothing to do with the
 product.
 
-The surviving mechanism is the AI engineer's, and their reason for it is the
-general one: a needle pinned to one exact representation misses a leak that
-arrived in another encoding, and **in a leak detector, narrower is the wrong
-direction.**
+The surviving mechanism is the AI engineer's — *attributed by assignment and by
+their own report, not confirmed by the tree*, for the reason two paragraphs
+below — and their reason for keeping it is the general one:
+
+> Narrower is the wrong direction. Being broad costs a false positive somebody
+> investigates; being narrow costs an answer key on the wire that nothing
+> reports.
+
+**Not everything that encodes should be normalised, which is the trap.** The
+same file makes three deliberately *inconsistent* encoding calls, in the stub
+that impersonates the model's response. Those are an **input** to the code under
+test, not a haystack to search — normalising them for consistency would have
+made the stand-in less faithful than the thing it stands in for. Two of us
+missed that; the third caught it. A tidy-up justified by symmetry is how a
+fixture stops resembling production.
 
 A mutation performed once could not have caught this. It proves a check could
 fail on the day someone checked; it says nothing about what a second correct
