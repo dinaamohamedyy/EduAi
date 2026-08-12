@@ -185,8 +185,38 @@ class EduAI_Knowledge {
 		$url   = (string) get_permalink( $post_id );
 		$title = get_the_title( $post_id );
 
+		$written = 0;
+		$lost    = 0;
+
 		foreach ( $chunks as $i => $chunk ) {
-			$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			/*
+			 * PDF extraction produces byte sequences that are not valid UTF-8 —
+			 * ligatures, embedded font subsets, maths glyphs that did not map.
+			 * MySQL REJECTS such a row, $wpdb->insert returns false, and this
+			 * loop used to ignore the return value entirely.
+			 *
+			 * The result was silent, partial indexing. Measured on material 143
+			 * before this fix: chunk() produced 35 chunks, 18 of them carried
+			 * invalid UTF-8, and the table held exactly the other 17 — with
+			 * gaps at 0, 1, 5, 6, 7 and so on, matching the bad ones one for
+			 * one. The document was in the index at 56% of its length and every
+			 * grounded answer drawn from it was quietly partial. Nothing
+			 * reported anything: the rows were newer than the file, so it did
+			 * not even look like a stale index.
+			 *
+			 * wp_check_invalid_utf8( $s, true ) strips the offending bytes —
+			 * WordPress's own function, rather than a second opinion about what
+			 * valid UTF-8 is. A chunk that is nothing but bad bytes becomes
+			 * empty and is skipped rather than stored blank.
+			 */
+			$clean = wp_check_invalid_utf8( $chunk, true );
+
+			if ( '' === trim( $clean ) ) {
+				++$lost;
+				continue;
+			}
+
+			$ok = $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$table,
 				array(
 					'post_id'       => $post_id,
@@ -194,15 +224,36 @@ class EduAI_Knowledge {
 					'chunk_index'   => $i,
 					'source_title'  => $title,
 					'source_url'    => $url,
-					'chunk_text'    => $chunk,
-					'word_count'    => str_word_count( $chunk ),
+					'chunk_text'    => $clean,
+					'word_count'    => str_word_count( $clean ),
 					'updated_at'    => $now,
 				),
 				array( '%d', '%d', '%d', '%s', '%s', '%s', '%d', '%s' )
 			);
+
+			if ( false === $ok ) {
+				++$lost;
+				continue;
+			}
+
+			++$written;
 		}
 
-		return count( $chunks );
+		// Report what landed, not what was attempted. The old return value was
+		// count( $chunks ), so the settings screen and every caller believed
+		// the optimistic number while the table held half of it.
+		if ( $lost ) {
+			/**
+			 * Fires when part of a document could not be indexed.
+			 *
+			 * @param int $post_id Source material.
+			 * @param int $lost    Chunks that did not reach the table.
+			 * @param int $written Chunks that did.
+			 */
+			do_action( 'eduai_index_incomplete', $post_id, $lost, $written );
+		}
+
+		return $written;
 	}
 
 	/**
