@@ -546,6 +546,47 @@ class SL_Meta {
 	}
 
 	/**
+	 * Does this material have a video the front end should render?
+	 *
+	 * The one definition. It existed independently in three places —
+	 * single-study_material.php, library-grid.php and SL_Console — all
+	 * agreeing, which is the dangerous state: the rule is not obvious
+	 * (`link` needs a URL, `file` needs an attachment id, `''` means none),
+	 * so a fourth copy written from memory would be subtly wrong rather than
+	 * obviously wrong. When they disagree the symptom is the blank material
+	 * page the §2.4 restructure just fixed, or a lecture the console counts
+	 * and the listing will not show.
+	 *
+	 * @param int $material_id Material ID.
+	 */
+	public static function has_video( int $material_id ): bool {
+		$source = (string) get_post_meta( $material_id, '_scholaris_video_source', true );
+
+		if ( 'link' === $source ) {
+			return '' !== (string) get_post_meta( $material_id, '_scholaris_video_url', true );
+		}
+
+		if ( 'file' === $source ) {
+			return (bool) (int) get_post_meta( $material_id, '_scholaris_video_id', true );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Does this material have anything to show at all — document or video?
+	 *
+	 * The health question the console asks, and the gate the single template
+	 * asks. Kept beside has_video() so the two cannot drift.
+	 *
+	 * @param int $material_id Material ID.
+	 */
+	public static function has_media( int $material_id ): bool {
+		return (bool) (int) get_post_meta( $material_id, '_scholaris_file_id', true )
+			|| self::has_video( $material_id );
+	}
+
+	/**
 	 * Can the current visitor download this document?
 	 *
 	 * @param int $post_id Material ID.

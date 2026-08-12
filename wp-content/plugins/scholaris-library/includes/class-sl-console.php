@@ -145,12 +145,10 @@ class SL_Console {
 		$without_media = 0;
 
 		foreach ( $empty as $material_id ) {
-			$has_file  = (int) get_post_meta( $material_id, '_scholaris_file_id', true );
-			$source    = (string) get_post_meta( $material_id, '_scholaris_video_source', true );
-			$has_video = ( 'link' === $source && get_post_meta( $material_id, '_scholaris_video_url', true ) )
-				|| ( 'file' === $source && (int) get_post_meta( $material_id, '_scholaris_video_id', true ) );
-
-			if ( ! $has_file && ! $has_video ) {
+			// SL_Meta::has_media(), not a local copy of the rule: this
+			// predicate lived in three files and the console held one of
+			// them. See the note on SL_Meta::has_video().
+			if ( ! SL_Meta::has_media( $material_id ) ) {
 				++$without_media;
 			}
 		}
