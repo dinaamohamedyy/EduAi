@@ -61,6 +61,15 @@ final class Scholaris_Library {
 	 */
 	public static function activate(): void {
 		SL_Post_Types::register();
+
+		// Belt and braces alongside the meta-change hooks: on a fresh install
+		// nothing has saved a material yet, so without this the denied
+		// directory would not exist until the first save — and a gated file
+		// uploaded before that moment is served by Apache directly. A newly
+		// deployed site is exactly the owner's case.
+		SL_Private::ensure_denied();
+		SL_Private::migrate();
+
 		flush_rewrite_rules();
 	}
 

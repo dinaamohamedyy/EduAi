@@ -45,7 +45,50 @@ class SL_Private {
 		// After SL_Meta::save() at 10, so the access level and attachment ids
 		// are already written when placement is decided.
 		add_action( 'save_post_study_material', array( __CLASS__, 'reconcile' ), 20 );
+
+		// save_post is not enough, and assuming it was shipped a hole.
+		//
+		// Anything that creates a material programmatically — wp-cli, an
+		// importer, the download-gate fixtures, a future REST route — inserts
+		// the post FIRST and sets `_scholaris_access` and the attachment ids
+		// AFTER. At save_post time there is no file to place, and no later
+		// save ever comes, so the file stays public while the label says
+		// members. That is not a missing call site to add; it is the wrong
+		// trigger. Placement depends on exactly three values, so watch those
+		// three values instead of guessing which code path writes them.
+		foreach ( array( 'added_post_meta', 'updated_post_meta', 'deleted_post_meta' ) as $hook ) {
+			add_action( $hook, array( __CLASS__, 'on_meta_change' ), 20, 3 );
+		}
+
 		add_action( 'template_redirect', array( __CLASS__, 'handle_stream' ) );
+	}
+
+	/**
+	 * Reconcile when one of the three inputs to placement changes, whoever
+	 * changed it and however.
+	 *
+	 * @param int    $meta_id  Unused.
+	 * @param int    $post_id  Post the meta belongs to.
+	 * @param string $meta_key Key that changed.
+	 */
+	public static function on_meta_change( $meta_id, $post_id, $meta_key ): void {
+		static $busy = false;
+
+		if ( $busy ) {
+			return;
+		}
+
+		if ( ! in_array( $meta_key, array( '_scholaris_access', '_scholaris_file_id', '_scholaris_video_id' ), true ) ) {
+			return;
+		}
+
+		if ( 'study_material' !== get_post_type( (int) $post_id ) ) {
+			return;
+		}
+
+		$busy = true;
+		self::reconcile( (int) $post_id );
+		$busy = false;
 	}
 
 	/* ---------------------------------------------------------------- paths */
@@ -62,6 +105,66 @@ class SL_Private {
 	 */
 	public static function is_private( string $path ): bool {
 		return $path && str_starts_with( wp_normalize_path( $path ), wp_normalize_path( self::base_dir() ) . '/' );
+	}
+
+	/**
+	 * Is this material's media actually where its access level requires?
+	 *
+	 * The question the rest of the plugin should ask before it claims a file
+	 * is protected. Cheap: two meta reads and a string comparison.
+	 *
+	 * @param int $material_id Material.
+	 */
+	public static function is_secured( int $material_id ): bool {
+		if ( 'members' !== ( (string) get_post_meta( $material_id, '_scholaris_access', true ) ?: 'members' ) ) {
+			return true; // Public material has nothing to secure.
+		}
+
+		foreach ( array( '_scholaris_file_id', '_scholaris_video_id' ) as $key ) {
+			$attachment_id = (int) get_post_meta( $material_id, $key, true );
+
+			if ( ! $attachment_id ) {
+				continue;
+			}
+
+			$path = get_attached_file( $attachment_id );
+
+			if ( $path && ! self::is_private( $path ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Last line: make sure a gated material's files are placed, and say so if
+	 * they are not.
+	 *
+	 * Called from the serve paths. It cannot stop Apache answering a file that
+	 * is already in the public tree — nothing in PHP can, which is why
+	 * placement is guarded at every write above — but it does mean the moment
+	 * anyone uses a legitimate route, a misplaced file is corrected rather
+	 * than left for the next person to discover from outside.
+	 *
+	 * @param int $material_id Material.
+	 * @return true|WP_Error
+	 */
+	public static function assert_secured( int $material_id ) {
+		if ( self::is_secured( $material_id ) ) {
+			return true;
+		}
+
+		self::reconcile( $material_id );
+
+		if ( self::is_secured( $material_id ) ) {
+			return true;
+		}
+
+		return new WP_Error(
+			'sl_private_unsecured',
+			__( 'This material is restricted but its file is not in protected storage.', 'scholaris-library' )
+		);
 	}
 
 	/**
@@ -305,6 +408,15 @@ class SL_Private {
 		// The same gate as the download handler. One access rule, two ways out.
 		if ( ! SL_Meta::can_download( $material_id ) ) {
 			wp_die( esc_html__( 'This material is available to signed-in students.', 'scholaris-library' ), '', array( 'response' => 403 ) );
+		}
+
+		// Fail closed: if this material claims to be restricted and its file
+		// is sitting in the public tree, serving it here would be the one
+		// route that quietly worked while the file was reachable anyway.
+		$secured = self::assert_secured( $material_id );
+
+		if ( is_wp_error( $secured ) ) {
+			wp_die( esc_html( $secured->get_error_message() ), '', array( 'response' => 500 ) );
 		}
 
 		$attachment_id = (int) get_post_meta( $material_id, '_scholaris_video_id', true );

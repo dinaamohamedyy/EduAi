@@ -169,6 +169,15 @@ class SL_Library {
 			exit;
 		}
 
+		// Same fail-closed check as the streamer: a restricted material whose
+		// file is still in the public tree must not be served quietly through
+		// the one route that looks correct.
+		$secured = SL_Private::assert_secured( $post_id );
+
+		if ( is_wp_error( $secured ) ) {
+			wp_die( esc_html( $secured->get_error_message() ), '', array( 'response' => 500 ) );
+		}
+
 		$file_id = (int) get_post_meta( $post_id, '_scholaris_file_id', true );
 		$path    = $file_id ? get_attached_file( $file_id ) : '';
 
