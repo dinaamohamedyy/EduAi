@@ -30,8 +30,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit( 1 );
 }
 
-$GLOBALS['rl_pass'] = 0;
-$GLOBALS['rl_fail'] = 0;
+$GLOBALS['rl_pass']  = 0;
+$GLOBALS['rl_fail']  = 0;
+$GLOBALS['rl_calls'] = 0;
 
 function check( string $rule, bool $ok, string $detail ): void {
 	if ( $ok ) {
@@ -53,6 +54,11 @@ add_filter(
 		if ( false === strpos( $url, '/v1/' ) ) {
 			return $pre;
 		}
+		/* Counted, so a refused request that still paid the provider is
+		 * visible. The stub is free, which is exactly why nothing would
+		 * otherwise notice. */
+		$GLOBALS['rl_calls']++;
+
 		$format = EduAI_Claude::provider()['format'];
 		$text   = 'A stubbed reply; this test is about the counter, not the answer.';
 
@@ -179,7 +185,9 @@ check(
 
 /* ---- and the one over it ------------------------------------------------- */
 
-$over = rl_ask( $a->ID, 'One past the limit' );
+$calls_before = (int) $GLOBALS['rl_calls'];
+$over         = rl_ask( $a->ID, 'One past the limit' );
+$calls_after  = (int) $GLOBALS['rl_calls'];
 
 check(
 	sprintf( 'request %d is refused', $limit + 1 ),
@@ -191,6 +199,74 @@ check(
 	'the refusal is the rate limiter, not something else',
 	'eduai_rate' === $over['code'],
 	'error code was ' . var_export( $over['code'], true )
+);
+
+/* ---- three claims this file used to make and never test ------------------ */
+
+/*
+ * THE COST. The stub is free, so nothing here would otherwise notice whether a
+ * REFUSED request called the provider first. A limiter that spends and then
+ * says no does not protect the budget — which, on an install running a free
+ * Groq tier because the owner's paid key 401s, is most of what the limiter is
+ * for. Cheap to assert and invisible without counting.
+ */
+check(
+	'the refused request did not call the provider',
+	$calls_after === $calls_before,
+	sprintf(
+		'the provider was called %d time(s) for a request that was then refused — the limiter runs after the spend, so the quota protects nothing but the reply',
+		$calls_after - $calls_before
+	)
+);
+
+/*
+ * THE WINDOW. The header of this file says it tests the README's "per user per
+ * HOUR". It proved per-user and it proved refusal at N+1; nothing in it ever
+ * observed time, so a limiter with no expiry — one that locks a student out
+ * permanently after their twentieth question — passed every assertion here.
+ * "Per hour" was the word doing the most work in the claim and the one word
+ * untested.
+ *
+ * Read from the option WordPress stores the expiry in, rather than inferred
+ * from the set_transient() call site, and without waiting an hour to find out.
+ */
+$rl_timeout = get_option( '_transient_timeout_eduai_rl_u' . $a->ID );
+$rl_secs    = false === $rl_timeout ? -1 : (int) $rl_timeout - time();
+
+check(
+	'the counter expires in about an hour, rather than never',
+	$rl_secs > 3000 && $rl_secs <= 3700,
+	false === $rl_timeout
+		? 'no expiry is stored at all — the counter never resets, so twenty questions locks a student out for good'
+		: sprintf( 'expires in %d seconds (%.2f hours), not the hour the README promises', $rl_secs, $rl_secs / 3600 )
+);
+
+/*
+ * RETRYING MUST NOT EXTEND THE LOCKOUT. If a refused request still writes the
+ * counter it writes a fresh hour with it, and a student who keeps clicking is
+ * never let back in — the window slides ahead of them for as long as they keep
+ * asking. That is the failure that looks like "the assistant is broken for me
+ * specifically" and is unreproducible for anyone who waits quietly.
+ *
+ * Observable without waiting: if the counter climbs past the limit on refused
+ * requests, the transient is being rewritten and its expiry with it.
+ */
+$rl_at_limit = (int) get_transient( 'eduai_rl_u' . $a->ID );
+
+for ( $rl_i = 0; $rl_i < 3; $rl_i++ ) {
+	rl_ask( $a->ID, 'retrying while locked out' );
+}
+
+$rl_after_retries = (int) get_transient( 'eduai_rl_u' . $a->ID );
+
+check(
+	'retrying while locked out does not push the window further away',
+	$rl_after_retries === $rl_at_limit,
+	sprintf(
+		'the counter went %d -> %d across three refused retries, so each retry rewrites the transient and buys another full hour of lockout',
+		$rl_at_limit,
+		$rl_after_retries
+	)
 );
 
 /* ---- the half that matters: is the bucket shared? ------------------------ */
