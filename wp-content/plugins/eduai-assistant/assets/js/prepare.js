@@ -248,9 +248,19 @@
 				(q.options || []).forEach(function (opt, idx) {
 					var id = 'q' + q.id + '-' + idx;
 					var row = el('label', 'eduai-prep__option');
+
+					/* Raw here, escaped below, and the asymmetry is deliberate.
+					 * setAttribute() stores the string verbatim — the DOM does
+					 * no parsing — while the innerHTML on the next line IS
+					 * parsed, so its copy has to be escaped or a quote in the
+					 * value closes the attribute. Escaping both would leave
+					 * for="q1&amp;x" pointing at an element whose id parsed to
+					 * "q1&x", breaking the label association silently: the
+					 * option would still render and simply stop being clickable
+					 * by its label, which no test asserts. */
 					row.setAttribute('for', id);
 					row.innerHTML =
-						'<input type="radio" id="' + id + '" name="q' + q.id + '" value="' + idx + '">' +
+						'<input type="radio" id="' + esc(id) + '" name="q' + esc(q.id) + '" value="' + idx + '">' +
 						'<span class="eduai-prep__letter">' + LETTERS[idx] + '</span>' +
 						'<span>' + esc(opt) + '</span>';
 					list.appendChild(row);
