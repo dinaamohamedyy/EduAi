@@ -1846,7 +1846,7 @@ sub check_doc_citations {
 
     # Only now is it worth scanning the tree: a number with one file cannot be
     # cited wrongly, however many times it appears.
-    my @problems;
+    my %found;      # number => [ "file:citation", ... ]
     my $checked = 0;
 
     for my $rel ( source_files() ) {
@@ -1856,16 +1856,35 @@ sub check_doc_citations {
 
         for my $n (@ambiguous) {
             while ( $text =~ /docs\/$n\s+§([0-9.]+)/g ) {
-                push @problems,
-                    "$rel cites \"docs/$n §$1\", but docs/ has "
-                    . scalar( @{ $by_number{$n} } ) . " files numbered $n ("
-                    . join( ', ', sort @{ $by_number{$n} } )
-                    . ') — name the file in full';
+                push @{ $found{$n} }, "$rel — \"docs/$n §$1\"";
             }
         }
     }
 
     return ("scanned no source files — this check examined nothing") unless $checked;
+
+    # One finding per ambiguous NUMBER, not per citation, and both remedies on
+    # it. The count decides which remedy is right: six broken citations are
+    # worth editing, but creating a second docs/06 file makes 39 existing ones
+    # ambiguous at once, and there the fix is to rename the new file rather
+    # than edit thirty-nine working references. Repeating "name the file in
+    # full" thirty-nine times points at the symptom and hides the cause — the
+    # reader would reasonably start doing the expensive thing.
+    my @problems;
+
+    for my $n ( sort keys %found ) {
+        my @cites = @{ $found{$n} };
+        my @files = sort @{ $by_number{$n} };
+
+        push @problems,
+            "docs/ has " . scalar(@files) . " files numbered $n (" . join( ', ', @files ) . "), "
+            . 'so ' . scalar(@cites)
+            . ( 1 == @cites ? " bare citation of docs/$n no longer resolves" : " bare citations of docs/$n no longer resolve" )
+            . ( @cites > 5
+                ? ". Rename one of those files, OR name the file in full at each citation below"
+                : ". Name the file in full at each, or rename one of those files" )
+            . ":\n          " . join( "\n          ", @cites );
+    }
 
     return @problems;
 }
