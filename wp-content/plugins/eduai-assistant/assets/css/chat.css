@@ -572,6 +572,22 @@
   text-transform: uppercase; color: hsl(var(--eduai-muted)); flex: none;
 }
 .eduai-scope__name { min-width: 0; overflow-wrap: anywhere; }
+/* Truncation notice. Its own line at narrow widths — flex-basis 100% after a
+   wrap — so it reads as a caveat about the lecture named above rather than as
+   more of the title. */
+.eduai-scope__part {
+  flex: 1 1 100%;
+  font-size: 0.82rem;
+  color: hsl(var(--eduai-muted));
+}
+/* A rate limit is not a failure of the student's lecture: warm rather than
+   red, because red says "you did something wrong" and the remedy is to wait. */
+.eduai-sum__busy {
+  padding: var(--eduai-space-xs) var(--eduai-space-s);
+  border-left: 3px solid hsl(var(--eduai-warning, 33 85% 38%));
+  background: hsl(var(--eduai-warning, 33 85% 38%) / 0.08);
+  border-radius: var(--eduai-radius-s);
+}
 /* An attached file or pasted text beats the scope server-side, so the banner
    is naming something that will not be read. Struck through and drained of
    colour rather than hidden: removing it would leave no trace that the page

@@ -193,14 +193,27 @@
 			body: body
 		})
 			.then(function (res) {
-				return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+				// status carried through: the 429 branch below reads it, and
+				// without it that condition would be permanently undefined —
+				// an always-false test that looks like a guard.
+				return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
 			})
 			.then(function (r) {
 				if (!r.ok) {
 					// The endpoint's errors are already written for a student —
 					// "that deck has no text on its slides", not a status code.
-					self.note('eduai-error', escapeHtml(
-						(r.data && r.data.message) || T.error
+					//
+					// 429 is branched because it is the one failure whose remedy
+					// is TIME. Back-end originally read these as a 20k context
+					// ceiling and only the status code separated the two: a
+					// rate limit and a length limit both fail large and pass
+					// small. Rendered as an error it reads as "your lecture is
+					// wrong"; the student then splits a deck that was fine.
+					var code = (r.data && r.data.code) || '';
+					var isBusy = code === 'eduai_api_429' || r.status === 429;
+
+					self.note(isBusy ? 'eduai-sum__busy' : 'eduai-error', escapeHtml(
+						(r.data && r.data.message) || (isBusy ? T.busy || 'The assistant is busy. Wait a moment and try again — nothing is wrong with your lecture.' : T.error)
 					));
 					return;
 				}

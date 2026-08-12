@@ -44,6 +44,46 @@ $eduai_sum_id = 'eduai-sum-' . wp_unique_id();
 		<p class="eduai-scope">
 			<span class="eduai-scope__label"><?php esc_html_e( 'Summarising', 'eduai' ); ?></span>
 			<strong class="eduai-scope__name"><?php echo esc_html( $eduai_scope['title'] ); ?></strong>
+			<?php
+			/*
+			 * Truncation, said at RENDER rather than in the response, because
+			 * this is the one that changes a decision: a student who sees it
+			 * before pressing can attach the section they actually need
+			 * instead of waiting through the slowest call in the product to
+			 * find out they got half a lecture.
+			 *
+			 * Coarse buckets rather than the character counts. 18,000 of
+			 * 35,928 is exact and meaningless — a student does not think in
+			 * characters, and a precise number invites the belief that the cut
+			 * fell somewhere principled. "About the first half" is what they
+			 * can act on, and below a third no fraction is honest enough to
+			 * name.
+			 */
+			$eduai_trunc = $eduai_scope['truncated'] ?? null;
+
+			if ( ! empty( $eduai_trunc['of'] ) ) :
+				$eduai_ratio = (float) $eduai_trunc['used'] / (float) $eduai_trunc['of'];
+
+				if ( $eduai_ratio >= 0.7 ) {
+					$eduai_part = __( 'covers most of it', 'eduai' );
+				} elseif ( $eduai_ratio >= 0.45 ) {
+					$eduai_part = __( 'covers about the first half', 'eduai' );
+				} elseif ( $eduai_ratio >= 0.28 ) {
+					$eduai_part = __( 'covers about the first third', 'eduai' );
+				} else {
+					$eduai_part = __( 'covers the first part only', 'eduai' );
+				}
+				?>
+				<span class="eduai-scope__part">
+					<?php
+					printf(
+						/* translators: %s: how much of the lecture is covered, e.g. "covers about the first half" */
+						esc_html__( 'Long lecture — this %s', 'eduai' ),
+						esc_html( $eduai_part )
+					);
+					?>
+				</span>
+			<?php endif; ?>
 		</p>
 	<?php endif; ?>
 
