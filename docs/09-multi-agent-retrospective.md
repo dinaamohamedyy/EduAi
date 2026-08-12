@@ -280,7 +280,7 @@ earlier, and then committed it myself. That is how structural it is.
 
 ## 6. The failure catalogue — the genuinely transferable part
 
-Ten patterns, each of which bit this project more than once. These generalise to
+Eleven patterns, each of which bit this project more than once. These generalise to
 any agent-assisted codebase.
 
 **Read this first, because it is why the other ten survive.** Every section below
@@ -763,9 +763,47 @@ is a per-material claim and someone will generalise it.
 > to say out loud what it excludes — **where the person who would generalise is
 > standing.**
 
-### 6.11 What the whole catalogue adds up to
+### 6.11 Five sites that look alike are not one class
 
-One claim, and it is falsifiable — check it against the ten sections above:
+The counterweight, and the document needs it. Nearly every section above ends in
+some version of *fix the class, not the instance* — the `hidden` patch applied to
+one element instead of the attribute, the mojibake search keyed on one sequence
+instead of the lead byte, the redaction blanking two named fields instead of the
+projection. All correct. All of which teach a reader to reach for the widest key
+that still means something.
+
+Here is what that lesson does when the class is drawn wrong.
+
+An unescaped value was found being concatenated into an HTML attribute, and the
+obvious next move was to sweep the four sibling sites. But the siblings were
+building **CSS selectors**, not markup. HTML-escaping a selector does not produce
+a safe selector; it produces a broken one — a `SyntaxError` that stops submission
+rather than an injection. The tool for those is `CSS.escape`.
+
+> Someone applying the same escape uniformly across all five would feel thorough,
+> would have fixed nothing, and would have made two of them subtly wrong.
+
+And they would never look again, because they had just been careful.
+
+**The same commit has the smaller version, which is sharper.** An id was escaped
+where it went through `innerHTML` and deliberately left raw where it went through
+`setAttribute('for', …)` — because `setAttribute` stores the value verbatim while
+`innerHTML` parses it. Escaping both would leave a label pointing at an id that no
+longer matches: the radio still renders, and silently stops being clickable. **A
+security fix producing an accessibility regression that nothing asserts.**
+
+Both are §6's disease one level up: the class was **measured by shape rather than
+by mechanism**. Grouped by "a value concatenated into a string" they are
+identical. Grouped by what parses the output — an HTML parser, a selector engine,
+nothing at all — they are three different problems.
+
+> Before applying a fix across a class, name what makes the members the same
+> **mechanically**, not what makes them look the same. "They all do X
+> syntactically" is a shape, not a class.
+
+### 6.12 What the whole catalogue adds up to
+
+One claim, and it is falsifiable — check it against the eleven sections above:
 
 > **Not one of these was found by review.** Every one is a correct thing
 > measured, reported or scoped slightly wrong, and reading the code found none
