@@ -1,0 +1,121 @@
+/* ==========================================================================
+   EduAi console + study-material meta boxes (wp-admin only)
+
+   DELIBERATELY NOT the site's token system. library.css inherits the theme's
+   ink/paper/laurel palette, which is right for the student-facing site and
+   wrong here: this screen sits inside wp-admin, beside core's own panels, and
+   an admin screen that looks like the front end reads as a plugin that has
+   escaped its box. The values below are core's own admin greys and link blue,
+   so the console looks like part of WordPress rather than a guest in it.
+
+   Geometry is measured, not assumed — see the note above .sl-console__cards.
+   ========================================================================== */
+
+.sl-console__lead {
+  max-width: 60ch;
+  margin: 0 0 1.25rem;
+  font-size: 14px;
+  color: #50575e;
+}
+
+/* ------------------------------------------------------------- status strip */
+/* A row of counts, not a table: each is a number and its meaning, and they
+   wrap as a group rather than scrolling. flex-wrap is doing the work — at
+   narrow widths these stack into as many rows as they need. */
+.sl-console__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 0 0 1.5rem;
+  padding: 0.85rem 1rem;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  border-left: 4px solid #2271b1;
+  border-radius: 4px;
+}
+.sl-console__status li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+  /* min-width:0 so a long label can shrink before the row overflows: flex
+     items default to min-width:auto, which is their content width. */
+  min-width: 0;
+}
+.sl-console__status strong {
+  font-size: 18px;
+  line-height: 1.2;
+  color: #1d2327;
+}
+.sl-console__status span {
+  font-size: 13px;
+  color: #50575e;
+}
+/* The one count that is a call to action rather than a fact: materials with
+   neither a document nor a video render as an empty page to a student. */
+.sl-console__status--warn strong { color: #bd3c14; }
+.sl-console__status--warn span { color: #bd3c14; }
+
+/* -------------------------------------------------------------------- cards */
+/* auto-fill with a min(100%, 260px) floor rather than fixed breakpoints: the
+   admin content column is not the viewport — wp-admin's menu takes 160px, and
+   folds to 36px under 960px and to an overlay under 782px — so a media query
+   on viewport width would be measuring the wrong box. The floor lets the
+   track count fall out of whatever width the column actually has.
+
+   Measured on the real screen: see the table in the commit for c-column
+   widths and card counts at 375 / 900 / 1190 / 1400. */
+.sl-console__cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  align-items: start;
+}
+.sl-console__card {
+  padding: 1rem 1.15rem 1.15rem;
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  border-radius: 4px;
+}
+.sl-console__card h2 {
+  margin: 0 0 0.35rem;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1.3;
+}
+.sl-console__card p {
+  margin: 0 0 0.75rem;
+  font-size: 13px;
+  color: #50575e;
+}
+.sl-console__card ul {
+  margin: 0;
+  list-style: none;
+}
+.sl-console__card li + li { margin-top: 0.3rem; }
+.sl-console__card a {
+  display: inline-block;
+  padding: 0.1rem 0;
+  text-decoration: none;
+}
+.sl-console__card a:hover { text-decoration: underline; }
+
+/* A card with no links left after capability filtering is dropped in the
+   template, so this only styles the last card, which is prose by design. */
+.sl-console__card p:last-child { margin-bottom: 0; }
+
+/* --------------------------------------------------- dashboard-widget list */
+.sl-console__widget {
+  margin: 0;
+  list-style: none;
+}
+.sl-console__widget li + li { margin-top: 0.35rem; }
+
+/* ---------------------------------------------------------- video meta box */
+/* The panes are toggled by admin.js on the source radios. Nothing here hides
+   them — the hiding is the `hidden` attribute, and adding a competing CSS
+   rule would be a second mechanism for one behaviour. */
+.sl-video-pane { margin-top: 0.75rem; }
+#sl_video_label,
+#sl_file_label { word-break: break-all; }
