@@ -171,6 +171,46 @@ Two things to take from it, and the second is the one that gets used:
 > Before concluding a feature does not work, check whether anyone has ever made
 > it work. **Zero rows is a question, not an answer.**
 
+**The sharpest statement of it came from a different session, and it explains a
+whole class of survivor:**
+
+> Both defects live on the no-access path, which is the path nobody develops
+> against, because everyone testing is logged in as the owner. **That is why it
+> survived: the owner's view is the one view that is correct.**
+
+Three findings, from three sessions, that nobody had connected until that
+sentence:
+
+- Lesson bodies shipped to anonymous visitors inside an `og:description` tag —
+  on a page that correctly refused to render that body. Found while fixing
+  something unrelated. *(Since fixed; the tag now carries only the title.)*
+- A **doubled document** on lesson pages. The LMS template opens its own
+  document, then on the no-access branch loads a partial and `return`s with the
+  document still open — so a second complete page renders on top of the first.
+  Measured anonymously and confirmed independently: `<!DOCTYPE` once,
+  `<!doctype` once, two `<body>` tags, two site headers. **The casing
+  fingerprints which template produced which half.** Anonymous 2, logged-in-not-
+  enrolled 2, enrolled 1, owner 1 — access-specific, not lesson-specific. Still
+  live.
+- A permission check falling through to an administrator capability, denying the
+  enrolled student and admitting the owner. The same shape, inverted.
+
+All three are invisible from every session on this project, because all six test
+as an administrator — and the administrator is the one visitor for whom every one
+of them renders correctly. They would have tested green forever.
+
+> **A permission system's defects concentrate on the paths its authors never
+> occupy.**
+
+Two layers were built that week to stop the assistant becoming a way around the
+gate, while an existing surface was already handing content out — because the
+surface looked like metadata and the author was always admitted.
+
+**The practical form, and it is one request:** for anything gated, check the
+**least** privileged path first, not the most. Every one of those three would
+have been caught by a single anonymous fetch. None would have been caught by a
+signed-in one.
+
 And the sharper one, offered by the session it caught — three times in one day:
 
 > **Grepping for the variant you have already seen produces a confident zero.**
