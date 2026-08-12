@@ -315,6 +315,105 @@ check(
 	)
 );
 
+/* ---- the route's own bound, which nothing has ever exercised -------------
+ *
+ * `exam_submit` rejects more than 100 answers with a 400 before grade() is
+ * reached. Everything above tests grade(); this is the only assertion here
+ * about the *route*. A bound that has never been exercised is a bound nobody
+ * knows is there, and it is exactly the kind removed as dead code during a
+ * refactor.
+ *
+ * Needs a stored, owned exam — the route checks ownership before the count —
+ * so generation is stubbed the same way the grade call is.
+ */
+/* Everything above this point runs against the fixture with no user at all,
+ * because grade() does not need one. The route does: exam_submit checks
+ * ownership before it checks the count, so the bound is unreachable without a
+ * student who owns a stored exam. */
+$login = 'sc-student';
+$user  = get_user_by( 'login', $login );
+
+if ( ! $user ) {
+	$new  = wp_insert_user( array(
+		'user_login' => $login,
+		'user_pass'  => wp_generate_password( 24 ),
+		'user_email' => $login . '@example.invalid',
+		'role'       => get_role( 'student' ) ? 'student' : 'subscriber',
+	) );
+	$user = is_wp_error( $new ) ? null : get_user_by( 'id', $new );
+}
+
+$fixture_exam = wp_json_encode( array(
+	'schema_version' => 1,
+	'title'          => $exam['title'],
+	'questions'      => $exam['questions'],
+) );
+
+add_filter(
+	'pre_http_request',
+	static function ( $pre, $args, $url ) use ( $fixture_exam, $format ) {
+		if ( false === strpos( $url, '/v1/' ) || false !== strpos( (string) ( $args['body'] ?? '' ), 'award' ) ) {
+			return $pre;   // leave the grading stub alone
+		}
+		return array(
+			'headers'  => array(),
+			'response' => array( 'code' => 200, 'message' => 'OK' ),
+			'cookies'  => array(),
+			'filename' => null,
+			'body'     => 'openai' === $format
+				? wp_json_encode( array( 'model' => 'stub', 'choices' => array( array( 'message' => array( 'content' => $fixture_exam ) ) ), 'usage' => array() ) )
+				: wp_json_encode( array( 'model' => 'stub', 'content' => array( array( 'type' => 'text', 'text' => $fixture_exam ) ), 'stop_reason' => 'end_turn', 'usage' => array() ) ),
+		);
+	},
+	20,
+	3
+);
+
+$stored = $user
+	? EduAI_Exams::generate(
+		(int) $user->ID,
+		array( array( 'type' => 'text', 'text' => 'Bound probe.' ) ),
+		'bound-probe',
+		'bound-' . wp_generate_password( 8, false, false ),
+		10
+	)
+	: new WP_Error( 'sc_no_user', 'could not create a student to submit as' );
+
+if ( is_wp_error( $stored ) ) {
+	check( 'route bound: could not store an exam to submit against', false, $stored->get_error_message() );
+} else {
+	$submit = static function ( array $answer_list ) use ( $stored, $user ) {
+		wp_set_current_user( $user->ID );
+		$r = new WP_REST_Request( 'POST', '/eduai/v1/exam/' . (int) $stored['id'] . '/submit' );
+		$r->set_param( 'answers', $answer_list );
+		$resp = rest_do_request( $r );
+		$d    = $resp->get_data();
+		return array( $resp->get_status(), is_array( $d ) && isset( $d['code'] ) ? (string) $d['code'] : '' );
+	};
+
+	/* Control first: a legal submission must NOT be refused, or "101 is
+	 * refused" would be true of every request and prove nothing about the
+	 * bound. */
+	list( $ok_status ) = $submit( array( array( 'id' => (int) $exam['questions'][0]['id'], 'choice' => 0 ) ) );
+	check(
+		'control: a submission inside the bound is accepted',
+		200 === $ok_status,
+		sprintf( 'a one-answer submission returned %d — the refusal below would prove nothing', $ok_status )
+	);
+
+	$over = array();
+	for ( $i = 0; $i < 101; $i++ ) {
+		$over[] = array( 'id' => 1, 'choice' => 0 );
+	}
+	list( $over_status, $over_code ) = $submit( $over );
+
+	check(
+		'§3: more than 100 answers is refused with 400',
+		400 === $over_status,
+		sprintf( 'returned %d (%s) — the route bound is not enforced', $over_status, $over_code )
+	);
+}
+
 printf( "\n%d passed, %d failed\n", $GLOBALS['sc_pass'], $GLOBALS['sc_fail'] );
 
 if ( 0 === $GLOBALS['sc_pass'] + $GLOBALS['sc_fail'] ) {
