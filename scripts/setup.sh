@@ -73,18 +73,90 @@ PLUGINS=(
 	loco-translate              # Edit theme/plugin strings without touching code
 )
 
+# Two defects lived in this loop and both were silent, which is why a fresh
+# install could end up without a security plugin and report success:
+#
+#   1. "is-installed" is not "is-active". A plugin present but deactivated hit
+#      the first branch, printed "already installed", and was never activated —
+#      the create-only shape that make_page has, in a place where it means a
+#      firewall is sitting there switched off.
+#   2. `install --activate && ok` swallows failure. `set -e` does not fire on
+#      the left of `&&`, so a wordpress.org hiccup printed nothing at all and
+#      the run carried on. Observed: two fresh-stack bootstraps of the same
+#      commit, one with wps-hide-login active and wp-login.php 404, one with it
+#      absent and wp-login.php answering 200. Nothing in the output differed.
+#
+# Failures are collected rather than fatal: one unreachable download should not
+# abandon a bootstrap that is otherwise fine. But they are named at the end, and
+# the verification block below asserts the security-critical ones are active, so
+# "collected" cannot decay into "ignored".
+failed_plugins=()
+
 for plugin in "${PLUGINS[@]}"; do
 	if $WP plugin is-installed "$plugin" 2>/dev/null; then
-		ok "$plugin already installed"
+		if $WP plugin is-active "$plugin" 2>/dev/null; then
+			ok "$plugin already active"
+		elif $WP plugin activate "$plugin" >/dev/null 2>&1; then
+			ok "$plugin activated (was installed but switched off)"
+		else
+			failed_plugins+=("$plugin — installed but could not be activated")
+		fi
+	elif $WP plugin install "$plugin" --activate >/dev/null 2>&1; then
+		ok "$plugin installed and activated"
 	else
-		$WP plugin install "$plugin" --activate && ok "$plugin installed"
+		failed_plugins+=("$plugin — install failed")
 	fi
 done
+
+if [ ${#failed_plugins[@]} -gt 0 ]; then
+	printf '\n  \033[0;31m!!\033[0m %d plugin(s) did not end up active:\n' "${#failed_plugins[@]}"
+	printf '     %s\n' "${failed_plugins[@]}"
+	printf '     Re-run this script once the network is available. The verification\n'
+	printf '     block below will fail if a security-critical one is still missing.\n\n'
+fi
 
 # Activate ours (they are bind-mounted, not downloaded)
 $WP plugin activate scholaris-library eduai-assistant 2>/dev/null || true
 $WP plugin activate tutor 2>/dev/null || true
 ok "Custom plugins activated"
+
+# ------------------------------------------------------------ login url ----
+# Installing a login-hiding plugin and leaving it unconfigured is worse than not
+# installing it: the plugin list becomes evidence of protection that does not
+# exist. Activation alone gives WPS Hide Login's DEFAULT slug, which is `login`
+# — the single most guessable alternative to wp-login.php.
+#
+# NOT hard-coded here, deliberately. This repository is public, so a slug
+# committed to it is a slug anyone can read, which would be the same vacuous
+# protection one level up. Set LOGIN_SLUG to choose your own; otherwise one is
+# generated.
+#
+# Idempotent, like make_page: an existing setting is kept, never overwritten, so
+# re-running this script cannot move the login URL out from under a live site.
+#
+# NOBODY IS LOCKED OUT BY THIS. The theme's /sign-in/ page posts to
+# wp_login_url(), which the plugin filters, so the human route keeps working
+# whatever the slug is. The slug matters for direct access and for bots.
+say "Setting the login URL"
+
+login_slug="$($WP option get whl_page 2>/dev/null || true)"
+
+if [ -n "$login_slug" ]; then
+	ok "login slug already set — keeping it"
+elif [ -n "${LOGIN_SLUG:-}" ]; then
+	login_slug="$LOGIN_SLUG"
+	$WP option update whl_page "$login_slug" >/dev/null
+	ok "login slug set from LOGIN_SLUG"
+else
+	login_slug="$($WP eval 'echo strtolower( wp_generate_password( 12, false, false ) );' 2>/dev/null)"
+	if [ -n "$login_slug" ]; then
+		$WP option update whl_page "$login_slug" >/dev/null
+		ok "login slug generated"
+	else
+		login_slug="login"
+		printf '  \033[0;33m!!\033[0m could not generate a slug — the plugin default (login) applies\n'
+	fi
+fi
 
 # ---------------------------------------------------------------- theme ----
 say "Activating the Scholaris theme"
@@ -453,6 +525,29 @@ echo ( "student" === get_option( "default_role" ) ) ? "  ok  default role: stude
 foreach ( array( "sign-in", "register", "reset-password", "progress", "library" ) as $slug ) {
 	echo get_page_by_path( $slug ) ? "  ok  page /{$slug}/\n" : "  !!  MISSING page /{$slug}/\n";
 }
+
+/*
+ * Security plugins, asserted ACTIVE rather than merely installed.
+ *
+ * This block checked tables, options and pages, so a plugin whose download
+ * failed passed verification clean — which is exactly how a fresh install
+ * ended up serving wp-login.php with the login-hider absent and nothing
+ * saying so. "Installed" is not the property that protects anyone.
+ */
+if ( ! function_exists( "is_plugin_active" ) ) {
+	require_once ABSPATH . "wp-admin/includes/plugin.php";
+}
+foreach ( array(
+	"wps-hide-login/wps-hide-login.php" => "wps-hide-login (wp-login.php stays exposed without it)",
+	"wordfence/wordfence.php"           => "wordfence (no firewall or login throttling without it)",
+) as $file => $why ) {
+	if ( is_plugin_active( $file ) ) {
+		echo "  ok  active  " . strtok( $file, "/" ) . "\n";
+	} else {
+		echo "  !!  NOT ACTIVE — " . $why . "\n";
+		$fail = 1;
+	}
+}
 exit( $fail );
 '
 ok "Database ready"
@@ -463,6 +558,8 @@ cat <<EOF
 
   Site:      $SITE_URL
   Admin:     $SITE_URL/wp-admin  ($ADMIN_USER)
+  Sign in:   $SITE_URL/sign-in/  (students and staff — always works)
+  Login URL: $SITE_URL/$login_slug/  <-- wp-login.php now 404s. Save this.
   Mail:      http://localhost:\${MAILPIT_PORT:-8025}  (catches every e-mail the site sends)
 
   Next steps
