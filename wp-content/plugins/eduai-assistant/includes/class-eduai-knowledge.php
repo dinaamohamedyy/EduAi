@@ -329,6 +329,22 @@ class EduAI_Knowledge {
 	/**
 	 * Retrieve the passages most relevant to a question, filtered by who asked.
 	 *
+	 * SCOPE IS THE DECK, NOT THE LESSON, AND THE NEXT REQUEST WILL BE TO TIGHTEN
+	 * IT. Resist that, or make it a ranking change rather than a scope one.
+	 *
+	 * A lesson is a section of one lecture, and the terminology a student needs
+	 * was defined in an earlier section: "what's a residual?" asked inside
+	 * *Least Squares in d-Dimensions* is answered three sections earlier under
+	 * *squared residuals*. Scope to the lesson and that definition is invisible,
+	 * so the assistant answers confidently and incompletely — which is worse
+	 * than answering from the whole deck, because the student cannot tell. What
+	 * the complaint is actually about is passages from an unrelated module, and
+	 * the deck boundary excludes those.
+	 *
+	 * If same-lesson passages should rank higher, that is a BOOST, not a filter.
+	 * Ordering can be wrong without being harmful; a filter cannot — it removes
+	 * the answer and leaves nothing to say so.
+	 *
 	 * @param string $query Student question.
 	 * @param int    $limit Passages wanted.
 	 * @param int    $scope Restrict to one material, or 0 for the whole library.

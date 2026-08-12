@@ -281,6 +281,104 @@ class EduAI_Lessons {
 	}
 
 	/**
+	 * Write one lesson's body from its section.
+	 *
+	 * WHAT A LESSON CONTAINS, and why it is not the extract.
+	 *
+	 * The extracted text is slide fragments: `y i = 10.34cm`, bare URLs, a
+	 * formula whose symbols were images and did not survive. Dropped into a
+	 * lesson body verbatim it produces something strictly worse than opening the
+	 * PDF — the student loses the layout that made the fragments legible and
+	 * gains nothing. So the lesson carries prose written from those slides.
+	 *
+	 * But generated prose alone would quietly replace the lecturer's material
+	 * with a model's paraphrase of it, with no way to tell and nothing to check
+	 * against. So every lesson also carries a pointer back to the deck it came
+	 * from, and says which slides. That pointer is what makes "generated"
+	 * honest rather than hidden, and it is the part a student needs when the
+	 * prose and the lecture disagree.
+	 *
+	 * The section is the ONLY source. No retrieval, no other lessons, no general
+	 * knowledge — a lesson that quietly imports facts the lecturer did not teach
+	 * is worse than a thin one, because it will be revised from and examined
+	 * against.
+	 *
+	 * @param array  $section  One entry from segment()['sections'].
+	 * @param int    $post_id  Source material, for the pointer.
+	 * @param string $subject  Topic name, for context.
+	 * @return string|WP_Error HTML body.
+	 */
+	public static function lesson_body( array $section, int $post_id, string $subject = '' ) {
+		$text = trim( (string) ( $section['text'] ?? '' ) );
+
+		if ( '' === $text ) {
+			return new WP_Error( 'eduai_lesson_empty', __( 'That section has no readable text.', 'eduai' ) );
+		}
+
+		$system = 'You turn a lecturer\'s slide fragments into readable lesson notes for a student revising. '
+			. 'You are not writing a summary and not adding to the lecture: you are setting out what these slides '
+			. 'teach, in prose a student can follow without the slides in front of them.'
+			. "\n\n" . EduAI_Agents::house_rules_section( 'Notation' );
+
+		$instruction = 'These are the slides of one section of a lecture'
+			. ( '' !== $subject ? ' on ' . $subject : '' ) . ".\n\n"
+			. "Write the lesson.\n\n"
+			. "Rules:\n"
+			. "- Use ONLY what is in these slides. Do not add examples, definitions, history or applications from your own knowledge, however helpful they would be — a student will revise from this and be examined against the lecture, not against you.\n"
+			. "- Where the extraction has lost something — a formula that was an image, a symbol that came through as stray letters — say plainly that the slide has a formula to check in the original, rather than reconstructing it. A guessed formula is the worst thing this can produce.\n"
+			. "- Ignore anything administrative: assignment deadlines, office hours, forum threads, reading links.\n"
+			. "- Open with one short paragraph on what this section is about. Then the substance, under `##` headings that follow the lecture's own order.\n"
+			. "- Define each term the first time the lecture uses it.\n"
+			. "- Keep the lecturer's own terminology, including where they note that different fields use different words for the same thing.\n"
+			. "- Markdown only. No preamble, no sign-off, no \"in this lesson we will\".\n\n"
+			. "SLIDES:\n" . $text;
+
+		$result = EduAI_Claude::message(
+			array( array( 'role' => 'user', 'content' => $instruction ) ),
+			$system,
+			array(
+				'model'       => 'strongest',
+				// Low, not zero: this is prose, and zero makes it list-shaped.
+				'temperature' => 0.2,
+				'max_tokens'  => 2400,
+			)
+		);
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$html = EduAI_REST::to_html( (string) $result['text'] );
+
+		return $html . self::provenance( $section, $post_id );
+	}
+
+	/**
+	 * The line that says where this lesson came from.
+	 *
+	 * Not decoration. A generated lesson that does not name its source is a
+	 * paraphrase presented as the lecture, and the student has no way to check
+	 * it against the thing they will actually be examined on.
+	 *
+	 * @param array $section One section.
+	 * @param int   $post_id Source material.
+	 */
+	private static function provenance( array $section, int $post_id ): string {
+		$title = trim( wp_strip_all_tags( (string) get_the_title( $post_id ) ) );
+		$url   = (string) get_permalink( $post_id );
+		$count = count( $section['slides'] ?? array() );
+
+		return "\n" . '<p class="eduai-lesson__source"><em>' . sprintf(
+			/* translators: 1: number of slides 2: linked lecture title */
+			esc_html__( 'Written from %1$s slides of %2$s. Check the original for anything that matters.', 'eduai' ),
+			esc_html( (string) $count ),
+			$url
+				? '<a href="' . esc_url( $url ) . '">' . esc_html( $title ) . '</a>'
+				: esc_html( $title )
+		) . '</em></p>';
+	}
+
+	/**
 	 * Tidy a heading for use as a lesson title.
 	 *
 	 * @param string $raw Raw heading.
