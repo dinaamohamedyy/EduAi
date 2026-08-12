@@ -60,7 +60,52 @@ class SL_Private {
 			add_action( $hook, array( __CLASS__, 'on_meta_change' ), 20, 3 );
 		}
 
+		// Close the upload window.
+		//
+		// The media modal uploads through async-upload.php as its own request
+		// and the file lands in the public tree; placement then waits for the
+		// meta write. Measured: between those two moments the file answers 200
+		// at a real URL — and if the editor never saves, or abandons the draft,
+		// "until the post is saved" means forever.
+		//
+		// It is closeable because the modal passes post_id, so the attachment
+		// knows its material the instant it exists (post_parent, verified).
+		// Note this cannot go through reconcile(): at this point the material
+		// does not reference the attachment yet — _scholaris_video_id is
+		// written on save — so the material's own meta would say there is
+		// nothing to move. The rule is about the attachment: a file uploaded
+		// into restricted material is restricted from the moment it exists.
+		add_action( 'add_attachment', array( __CLASS__, 'on_attachment_added' ) );
+
 		add_action( 'template_redirect', array( __CLASS__, 'handle_stream' ) );
+	}
+
+	/**
+	 * Place a freshly uploaded file immediately, by its parent's access level.
+	 *
+	 * @param int $attachment_id New attachment.
+	 */
+	public static function on_attachment_added( $attachment_id ): void {
+		$attachment_id = (int) $attachment_id;
+		$parent        = (int) wp_get_post_parent_id( $attachment_id );
+
+		if ( ! $parent || 'study_material' !== get_post_type( $parent ) ) {
+			return;
+		}
+
+		if ( 'members' !== ( (string) get_post_meta( $parent, '_scholaris_access', true ) ?: 'members' ) ) {
+			return;
+		}
+
+		$moved = self::relocate( $attachment_id, true );
+
+		if ( is_wp_error( $moved ) && method_exists( 'SL_Meta', 'flag_public' ) ) {
+			SL_Meta::flag_public( $parent, sprintf(
+				/* translators: %s: reason the upload could not be secured. */
+				__( 'An uploaded file could not be moved out of the public folder: %s. It is reachable by address until this is resolved.', 'scholaris-library' ),
+				$moved->get_error_message()
+			) );
+		}
 	}
 
 	/**

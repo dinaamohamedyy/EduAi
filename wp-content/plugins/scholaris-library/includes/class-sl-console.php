@@ -101,7 +101,13 @@ class SL_Console {
 				'title' => __( 'Courses', 'scholaris-library' ),
 				'lead'  => __( 'Courses, lessons and quizzes are built inside Tutor LMS.', 'scholaris-library' ),
 				'links' => array(
-					array( 'admin.php?page=create-course', __( 'New course', 'scholaris-library' ), 'manage_tutor_instructor' ),
+					// Labels match the destination's <title>, not an invented
+					// name: three of the four Tutor screens have no <h1> at
+					// all, so the tab title is what the owner actually sees on
+					// arrival. "All courses" deliberately keeps its wording —
+					// renaming it to "Courses" would put that word as a link
+					// inside a card already titled Courses.
+					array( 'admin.php?page=create-course', __( 'Course Builder', 'scholaris-library' ), 'manage_tutor_instructor' ),
 					array( 'admin.php?page=tutor', __( 'All courses', 'scholaris-library' ), 'manage_tutor_instructor' ),
 					array( 'edit-tags.php?taxonomy=course-category&post_type=courses', __( 'Course categories', 'scholaris-library' ), 'manage_tutor' ),
 					// The escape hatch: `courses` is still registered
@@ -115,7 +121,7 @@ class SL_Console {
 				'lead'  => __( 'Who is registered, and how they are doing.', 'scholaris-library' ),
 				'links' => array(
 					array( 'users.php?page=eduai-students', __( 'Results and progress', 'scholaris-library' ), 'list_users' ),
-					array( 'admin.php?page=tutor-students', __( 'Enrolled students', 'scholaris-library' ), 'manage_tutor' ),
+					array( 'admin.php?page=tutor-students', __( 'Students', 'scholaris-library' ), 'manage_tutor' ),
 					array( 'users.php', __( 'All accounts', 'scholaris-library' ), 'list_users' ),
 				),
 			),
