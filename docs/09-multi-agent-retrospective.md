@@ -652,6 +652,28 @@ defect into a guard twenty minutes after reading this section's source, labelled
 two iterations `fresh` and `reused` off a constant input where both took the
 reuse path, and caught it only because the finding was still in front of me.
 
+**The same defect at the level of a whole file's stated purpose.** A rate limiter
+guard's own docblock says it tests "per user per **hour**". It proved per-user.
+It proved refusal at N+1. **It never observed time at all** — so a limiter with
+no expiry, one that locks a student out permanently after their twentieth
+question, passed every assertion in the file. "Per hour" was the word doing the
+most work in the claim, and the only word untested.
+
+Two more gaps sat beside it, both invisible for the same reason. Nothing checked
+whether a *refused* request called the provider first — the test stub is free, so
+a limiter that pays and then says no was indistinguishable from one that protects
+the budget. And nothing checked whether a refusal **rewrites** the counter, and
+with it the expiry: a student who keeps clicking is never let back in, the window
+sliding ahead of them for as long as they keep trying.
+
+That last one deserves its own sentence for how it *presents*: it looks like
+"the assistant is broken for me specifically", and it is unreproducible by
+anyone who waits quietly. **A support ticket nobody can ever close.**
+
+All three behaviours were correct in the product. None of the three was asserted.
+The docblock had been describing a claim the file only partly defended, and the
+gap sat in the difference between the two.
+
 ### 6.9 The check knew. The plumbing dropped it.
 
 Every failure above is a check that could not *see* something — by scale,
@@ -824,6 +846,32 @@ Which is also the answer to the question §3 opens with. The reason a second
 session kept being the thing that found the defect is not that the second person
 was sharper. It is that **they measured again instead of reading again** — and
 against this class of failure, only measuring works.
+
+**One refinement, because "measure again" is not quite enough.** The second pass
+paid by changing **direction**, not by looking harder. The rate-limiter's
+assertions all ran along identity and count — *who is asking, how many times*.
+Nobody had looked along **time** or **money**, and all three gaps were there.
+Every axis that had been examined was clean; every axis that had not been
+examined held a gap.
+
+> The finder was, three times in one day, the person who had not already decided
+> what the file was about.
+
+So the practical form is not "check it again" but: **name the axes this check
+does not measure, and go down one of those.** A second pass along the first
+pass's axis mostly re-confirms the first pass.
+
+**And a green run cannot prove a removal.** Tearing out a mutation harness, the
+removal ran through a `python` heredoc — and Python is not installed in that
+shell. The heredoc errored, changed nothing, and the very next line reported
+`9 passed, 0 failed`, because the harness left sitting in the file did nothing
+without its trigger variable set. Passing was exactly what a failed removal
+looked like.
+
+The only evidence that means anything is re-running **with the trigger set** and
+watching it *not* fire — the difference between "I removed it" and "the removal
+is observable". Same family as an empty `origin/main..HEAD` read off a stale
+tracking ref: **an absence produced by an instrument that was not looking.**
 
 ### Bonus: fixtures should be generators, not binaries
 
