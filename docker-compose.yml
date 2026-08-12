@@ -98,6 +98,10 @@ services:
       - ./wp-content/plugins/eduai-assistant:/var/www/html/wp-content/plugins/eduai-assistant
       - ./wp-content/plugins/scholaris-library:/var/www/html/wp-content/plugins/scholaris-library
       - ./scripts:/scripts
+      # Without this, wp-cli runs PHP defaults (2M/8M) while the web container
+      # is at 64M — so `wp eval` reporting wp_max_upload_size() answers for a
+      # process no upload ever goes through. It has already misled one survey.
+      - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
 
   # Catches all outgoing e-mail: web UI at http://localhost:8025.
   # Password resets and the "check your e-mail" registration fallback are

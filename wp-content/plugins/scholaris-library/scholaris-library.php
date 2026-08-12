@@ -16,7 +16,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SL_VERSION', '1.0.2' );
+// Bump on every admin.js/admin.css change: both are cache-keyed on ?ver=.
+define( 'SL_VERSION', '1.1.0' );
 define( 'SL_FILE', __FILE__ );
 define( 'SL_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SL_URL', plugin_dir_url( __FILE__ ) );

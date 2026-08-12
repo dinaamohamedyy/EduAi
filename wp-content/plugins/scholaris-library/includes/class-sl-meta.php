@@ -16,6 +16,129 @@ class SL_Meta {
 		add_action( 'add_meta_boxes', array( __CLASS__, 'add_box' ) );
 		add_action( 'save_post_study_material', array( __CLASS__, 'save' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'admin_assets' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'admin_notices' ) );
+
+		// See filter_media_query(). Deliberate policy, not a core bug fix.
+		add_filter( 'rest_attachment_query', array( __CLASS__, 'filter_media_query' ), 10, 2 );
+		add_filter( 'rest_pre_dispatch', array( __CLASS__, 'guard_media_item' ), 10, 3 );
+	}
+
+	/**
+	 * Attachment ids referenced by a members-only material.
+	 *
+	 * Materials reference their files by meta, not by post_parent — a file
+	 * chosen from the media library keeps whatever parent it already had —
+	 * so the meta is the only reliable link.
+	 */
+	public static function gated_attachment_ids(): array {
+		static $ids = null;
+
+		if ( null !== $ids ) {
+			return $ids;
+		}
+
+		$ids       = array();
+		$materials = get_posts( array(
+			'post_type'      => 'study_material',
+			'post_status'    => 'publish',
+			'numberposts'    => -1,
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				array(
+					'key'   => '_scholaris_access',
+					'value' => 'members',
+				),
+			),
+		) );
+
+		foreach ( $materials as $material_id ) {
+			foreach ( array( '_scholaris_file_id', '_scholaris_video_id' ) as $key ) {
+				$attachment = (int) get_post_meta( $material_id, $key, true );
+				if ( $attachment ) {
+					$ids[] = $attachment;
+				}
+			}
+		}
+
+		$ids = array_values( array_unique( $ids ) );
+
+		return $ids;
+	}
+
+	/**
+	 * Keep files belonging to members-only material out of the anonymous
+	 * media index.
+	 *
+	 * `wp/v2/media` listing attachments of published posts to anonymous
+	 * callers is **stock WordPress behaviour, not a regression** — which is
+	 * why this is written as a deliberate policy filter rather than a patch.
+	 * Do not "restore core defaults" here: without it, /wp-json/wp/v2/media
+	 * publishes the direct source_url of every gated lecture, so a visitor
+	 * does not even have to guess a path.
+	 *
+	 * Scope, stated so nobody mistakes it for more than it is: this removes
+	 * the public *index*. It does NOT make the file unreachable — Apache
+	 * still serves the direct URL, which is the separate denied-directory
+	 * work. Defence in depth, not the gate.
+	 *
+	 * The rule mirrors can_download(): `members` means signed-in, so signed-in
+	 * callers are unaffected and only anonymous ones are filtered.
+	 *
+	 * @param array $args Query args.
+	 * @return array
+	 */
+	public static function filter_media_query( $args ) {
+		if ( is_user_logged_in() ) {
+			return $args;
+		}
+
+		$gated = self::gated_attachment_ids();
+
+		if ( $gated ) {
+			$args['post__not_in'] = array_merge( (array) ( $args['post__not_in'] ?? array() ), $gated );
+		}
+
+		return $args;
+	}
+
+	/**
+	 * Single-item route: refuse the record, do not redact it.
+	 *
+	 * The first version of this blanked `source_url` and `guid` and looked
+	 * right. It was not: `description.rendered` embeds the file URL inside an
+	 * anchor, and `filename` hands over the last segment of a path whose
+	 * shape (`/uploads/YYYY/MM/`) is fixed. Redaction meant enumerating the
+	 * fields that happen to carry the address today — and any field added by
+	 * core or a plugin tomorrow reopens it silently. Withholding the whole
+	 * record closes the class instead of its instances.
+	 *
+	 * 404 rather than 403, matching core's own `rest_post_invalid_id`: a 403
+	 * would confirm that the id exists, which is the thing being withheld.
+	 *
+	 * @param mixed           $result  Short-circuit value, null to continue.
+	 * @param WP_REST_Server  $server  Server instance.
+	 * @param WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public static function guard_media_item( $result, $server, $request ) {
+		if ( null !== $result || is_user_logged_in() ) {
+			return $result;
+		}
+
+		if ( ! preg_match( '#^/wp/v2/media/(\d+)$#', (string) $request->get_route(), $m ) ) {
+			return $result;
+		}
+
+		if ( ! in_array( (int) $m[1], self::gated_attachment_ids(), true ) ) {
+			return $result;
+		}
+
+		return new WP_Error(
+			'rest_post_invalid_id',
+			__( 'Invalid post ID.', 'scholaris-library' ),
+			array( 'status' => 404 )
+		);
 	}
 
 	public static function add_box(): void {
@@ -27,6 +150,77 @@ class SL_Meta {
 			'side',
 			'high'
 		);
+
+		add_meta_box(
+			'sl_material_video',
+			__( 'Video', 'scholaris-library' ),
+			array( __CLASS__, 'render_video' ),
+			'study_material',
+			'side',
+			'default'
+		);
+	}
+
+	/**
+	 * The one sentence the owner has to be told, printed wherever a file is
+	 * attached — document or video, because the leak we actually measured was
+	 * a document. Warning only on video would label the case we were thinking
+	 * about and leave unlabelled the case we proved (docs/07 §3.3).
+	 */
+	private static function file_reach_warning( string $kind = 'document' ): string {
+		// One job for the warning: the label no longer needs un-teaching,
+		// because "Show the download button to" says what the setting does.
+		$lead = __( '<strong>The file itself is not protected.</strong> Anyone with its address can open it, signed in or not — this setting only controls the button on the page.', 'scholaris-library' );
+
+		// Only the remedy branches. "Paste an unlisted link instead" is not
+		// advice you can follow about a PDF, and the leak we measured was a
+		// document.
+		$remedy = 'video' === $kind
+			? __( 'To keep a recording inside the class, paste an unlisted YouTube or Vimeo link instead of uploading.', 'scholaris-library' )
+			: __( 'Do not upload anything here that must stay inside the class.', 'scholaris-library' );
+
+		return $lead . ' ' . $remedy;
+	}
+
+	/**
+	 * The warning, wrapped. Kept in one place so the document and video boxes
+	 * cannot drift apart in wording or in styling.
+	 *
+	 * @param string $kind  'document' or 'video'.
+	 * @param string $url   Public address to offer for checking, if known.
+	 */
+	private static function print_reach_warning( string $kind, string $url = '' ): void {
+		?>
+		<p class="description" style="margin-top:6px;padding:6px 8px;border-left:3px solid #d63638;background:#fcf0f1">
+			<?php
+			echo wp_kses( self::file_reach_warning( $kind ), array( 'strong' => array() ) );
+
+			// A claim the editor can check in ten seconds beats a claim they
+			// have to believe — the method that has actually worked here.
+			if ( $url ) :
+				?>
+				<br><br>
+				<a href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $url ); ?></a>
+				<br>
+				<em><?php esc_html_e( 'Open this in a private window to see what a stranger sees.', 'scholaris-library' ); ?></em>
+			<?php endif; ?>
+		</p>
+		<?php
+	}
+
+	/**
+	 * Hosts whose URLs we will embed. The allowlist is not decoration: it is
+	 * also what stops core's embed_oembed_discover from making an outbound
+	 * fetch to any host an admin happens to type (docs/07 §2.3 rule 5).
+	 */
+	public static function video_hosts(): array {
+		return (array) apply_filters( 'scholaris_video_hosts', array(
+			'youtube.com',
+			'm.youtube.com',
+			'youtu.be',
+			'vimeo.com',
+			'player.vimeo.com',
+		) );
 	}
 
 	/**
@@ -90,12 +284,82 @@ class SL_Meta {
 		</p>
 
 		<p>
-			<label for="sl_access"><strong><?php esc_html_e( 'Who can download', 'scholaris-library' ); ?></strong></label><br>
+			<?php // Names what the setting does. The old "Who can download" was a promise the system does not keep. ?>
+			<label for="sl_access"><strong><?php esc_html_e( 'Show the download button to', 'scholaris-library' ); ?></strong></label><br>
 			<select class="widefat" id="sl_access" name="sl_access">
 				<option value="public" <?php selected( $access, 'public' ); ?>><?php esc_html_e( 'Anyone', 'scholaris-library' ); ?></option>
 				<option value="members" <?php selected( $access, 'members' ); ?>><?php esc_html_e( 'Signed-in students', 'scholaris-library' ); ?></option>
 			</select>
+			<?php
+			// Keyed on "a file is attached", never on "the file is a video" —
+			// the measured leak was a .txt on a document.
+			if ( $file_id && 'members' === $access ) {
+				self::print_reach_warning( 'document', (string) $url );
+			}
+			?>
 		</p>
+		<?php
+	}
+
+	/**
+	 * Video meta box: one radio decides the source, so a link and an upload
+	 * can never both look active and silently disagree.
+	 *
+	 * @param WP_Post $post Current post.
+	 */
+	public static function render_video( $post ): void {
+		// No second nonce: the Document box already emitted sl_material_nonce
+		// for this same form, and one write path is the point (docs/07 §2.1).
+		$source = (string) get_post_meta( $post->ID, '_scholaris_video_source', true );
+		$source = in_array( $source, array( 'link', 'file' ), true ) ? $source : '';
+		$url    = (string) get_post_meta( $post->ID, '_scholaris_video_url', true );
+		$vid    = (int) get_post_meta( $post->ID, '_scholaris_video_id', true );
+		$access = (string) get_post_meta( $post->ID, '_scholaris_access', true ) ?: 'members';
+		$vurl   = $vid ? wp_get_attachment_url( $vid ) : '';
+		$vname  = $vid ? basename( (string) get_attached_file( $vid ) ) : '';
+		?>
+		<p>
+			<label><input type="radio" name="sl_video_source" value="" <?php checked( $source, '' ); ?>> <?php esc_html_e( 'None', 'scholaris-library' ); ?></label><br>
+			<label><input type="radio" name="sl_video_source" value="link" <?php checked( $source, 'link' ); ?>> <?php esc_html_e( 'Link (recommended)', 'scholaris-library' ); ?></label><br>
+			<label><input type="radio" name="sl_video_source" value="file" <?php checked( $source, 'file' ); ?>> <?php esc_html_e( 'Uploaded file', 'scholaris-library' ); ?></label>
+		</p>
+
+		<div data-sl-video-pane="link" <?php echo 'link' === $source ? '' : 'hidden'; ?>>
+			<p>
+				<label for="sl_video_url"><strong><?php esc_html_e( 'Video address', 'scholaris-library' ); ?></strong></label>
+				<input type="url" class="widefat" id="sl_video_url" name="sl_video_url"
+					value="<?php echo esc_attr( $url ); ?>" placeholder="https://www.youtube.com/watch?v=…">
+				<span class="description">
+					<?php
+					printf(
+						/* translators: %s: comma-separated host list. */
+						esc_html__( 'Paste the address from your browser bar. Accepted: %s. Nothing is uploaded, the 64 MB limit never applies, and the provider handles seeking and bandwidth.', 'scholaris-library' ),
+						esc_html( implode( ', ', self::video_hosts() ) )
+					);
+					?>
+				</span>
+			</p>
+		</div>
+
+		<div data-sl-video-pane="file" <?php echo 'file' === $source ? '' : 'hidden'; ?>>
+			<p>
+				<input type="hidden" id="sl_video_id" name="sl_video_id" value="<?php echo esc_attr( (string) $vid ); ?>">
+				<span id="sl_video_label" style="display:block;margin-bottom:8px;word-break:break-all">
+					<?php if ( $vurl ) : ?>
+						<a href="<?php echo esc_url( $vurl ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $vname ); ?></a>
+					<?php else : ?>
+						<em><?php esc_html_e( 'No video attached yet.', 'scholaris-library' ); ?></em>
+					<?php endif; ?>
+				</span>
+				<button type="button" class="button button-primary" id="sl_pick_video"><?php esc_html_e( 'Choose video', 'scholaris-library' ); ?></button>
+				<button type="button" class="button" id="sl_clear_video"><?php esc_html_e( 'Remove', 'scholaris-library' ); ?></button>
+			</p>
+			<?php
+			if ( $vid && 'members' === $access ) {
+				self::print_reach_warning( 'video', (string) $vurl );
+			}
+			?>
+		</div>
 		<?php
 	}
 
@@ -119,8 +383,16 @@ class SL_Meta {
 			return;
 		}
 
+		// An id that is not an attachment was accepted here until now: absint()
+		// alone will happily store a page id, or the id of a post the editor
+		// cannot see (docs/07 §2.3).
 		$file_id = isset( $_POST['sl_file_id'] ) ? absint( wp_unslash( $_POST['sl_file_id'] ) ) : 0;
+		if ( $file_id && 'attachment' !== get_post_type( $file_id ) ) {
+			$file_id = 0;
+		}
 		update_post_meta( $post_id, '_scholaris_file_id', $file_id );
+
+		self::save_video( $post_id );
 
 		$pages = isset( $_POST['sl_pages'] ) ? absint( wp_unslash( $_POST['sl_pages'] ) ) : 0;
 
@@ -142,6 +414,113 @@ class SL_Meta {
 
 		$access = isset( $_POST['sl_access'] ) ? sanitize_key( wp_unslash( $_POST['sl_access'] ) ) : 'members';
 		update_post_meta( $post_id, '_scholaris_access', in_array( $access, array( 'public', 'members' ), true ) ? $access : 'members' );
+	}
+
+	/**
+	 * Persist the video source, and refuse rather than blank.
+	 *
+	 * A rejected URL keeps the previous value and reports the host that was
+	 * refused: silently emptying a field the editor just filled in is the
+	 * worse failure, because it looks like the save worked (docs/07 §2.3).
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	private static function save_video( int $post_id ): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified by the caller.
+		$source = isset( $_POST['sl_video_source'] ) ? sanitize_key( wp_unslash( $_POST['sl_video_source'] ) ) : '';
+		$source = in_array( $source, array( 'link', 'file' ), true ) ? $source : '';
+
+		// ---------------------------------------------------------- link ---
+		$raw = isset( $_POST['sl_video_url'] ) ? trim( (string) wp_unslash( $_POST['sl_video_url'] ) ) : '';
+		$url = $raw ? esc_url_raw( $raw, array( 'http', 'https' ) ) : '';
+
+		if ( 'link' === $source && '' !== $raw ) {
+			$host = strtolower( (string) wp_parse_url( $url, PHP_URL_HOST ) );
+			$host = (string) preg_replace( '/^www\./', '', $host );
+			$path = (string) wp_parse_url( $url, PHP_URL_PATH );
+
+			// The parsed host, never strpos() on the whole string:
+			// https://evil.com/?x=youtube.com passes a substring test.
+			if ( ! $url || ! in_array( $host, self::video_hosts(), true ) ) {
+				self::flag( $post_id, sprintf(
+					/* translators: %s: the rejected host, or the raw value when it has none. */
+					__( 'That video address was not saved: %s is not on the accepted list. The previous value was kept.', 'scholaris-library' ),
+					$host ?: wp_html_excerpt( $raw, 60, '…' )
+				) );
+				return;
+			}
+
+			// An /embed/ URL is not a registered oEmbed provider, so it would
+			// render as a bare link with nothing explaining why.
+			if ( preg_match( '#^/(embed|v)/#', $path ) ) {
+				self::flag( $post_id, __( 'That video address was not saved: paste the address from your browser\'s address bar, not the embed address. The previous value was kept.', 'scholaris-library' ) );
+				return;
+			}
+
+			update_post_meta( $post_id, '_scholaris_video_url', $url );
+			update_post_meta( $post_id, '_scholaris_video_source', 'link' );
+			return;
+		}
+
+		// ---------------------------------------------------------- file ---
+		$video_id = isset( $_POST['sl_video_id'] ) ? absint( wp_unslash( $_POST['sl_video_id'] ) ) : 0;
+
+		if ( $video_id && ( 'attachment' !== get_post_type( $video_id )
+			|| ! str_starts_with( (string) get_post_mime_type( $video_id ), 'video/' ) ) ) {
+			self::flag( $post_id, __( 'That attachment was not saved as the video: it is not a video file.', 'scholaris-library' ) );
+			$video_id = 0;
+		}
+
+		// "file" with nothing attached is not a state worth storing: the
+		// renderer would treat it as no video anyway, and a source that
+		// claims a file it does not have is the disagreement this enum
+		// exists to prevent.
+		if ( 'file' === $source && ! $video_id ) {
+			$source = '';
+		}
+
+		update_post_meta( $post_id, '_scholaris_video_id', $video_id );
+		update_post_meta( $post_id, '_scholaris_video_source', $source );
+		// phpcs:enable
+	}
+
+	/**
+	 * Queue an editor-facing notice for the next admin screen.
+	 *
+	 * @param int    $post_id Post the notice belongs to.
+	 * @param string $message What to say.
+	 */
+	private static function flag( int $post_id, string $message ): void {
+		$notices   = (array) get_post_meta( $post_id, '_scholaris_admin_notices', true );
+		$notices[] = $message;
+		update_post_meta( $post_id, '_scholaris_admin_notices', array_slice( $notices, -5 ) );
+	}
+
+	/**
+	 * Print and clear anything save() refused to store.
+	 */
+	public static function admin_notices(): void {
+		$screen = get_current_screen();
+
+		if ( ! $screen || 'study_material' !== $screen->post_type || 'post' !== $screen->base ) {
+			return;
+		}
+
+		$post_id = isset( $_GET['post'] ) ? absint( wp_unslash( $_GET['post'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$notices = $post_id ? (array) get_post_meta( $post_id, '_scholaris_admin_notices', true ) : array();
+
+		if ( ! $notices ) {
+			return;
+		}
+
+		delete_post_meta( $post_id, '_scholaris_admin_notices' );
+
+		foreach ( $notices as $notice ) {
+			printf(
+				'<div class="notice notice-error is-dismissible"><p>%s</p></div>',
+				esc_html( (string) $notice )
+			);
+		}
 	}
 
 	/**
