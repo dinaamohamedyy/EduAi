@@ -171,6 +171,22 @@ Two things to take from it, and the second is the one that gets used:
 > Before concluding a feature does not work, check whether anyone has ever made
 > it work. **Zero rows is a question, not an answer.**
 
+**That generalises past databases, and the general form is the one to keep.** A
+fourth session counted four of these in a day: `summarise` searched as
+`summarize`; a hardcoded path assumed where none was; a grep whose *hit* meant
+the opposite of what was wanted because the task was a removal; and a heading
+searched in lower case that begins `### Before`. They nearly reported their own
+committed work as destroyed on the strength of the last one. Their diagnosis of
+the common thread is exact:
+
+> **The search ran, so I trusted the count rather than the question.** A zero
+> result deserves the scrutiny a surprising non-zero one gets, and almost never
+> receives it.
+
+A surprising *hit* gets read, opened, checked. A zero is accepted, because it
+feels like the absence of a thing rather than the output of an instrument. It is
+the output of an instrument.
+
 **The sharpest statement of it came from a different session, and it explains a
 whole class of survivor:**
 
@@ -678,6 +694,33 @@ stated it against themselves:
 > caught by a guard that watches almost nothing. The mutation has to be as
 > narrow as the coverage question you are actually asking, and mine was shaped
 > like the answer I already believed.
+
+**And a repair cannot be validated by the run that applies it.** A setup script
+treated "installed" as "active", so a plugin present but switched off was
+reported already-installed and never activated. The fix landed, and in the same
+change an assertion that the security plugins are active. To prove the assertion
+could fail, the plugin was deactivated and the script re-run.
+
+It passed — and printed `wps-hide-login activated (was installed but switched
+off)`. **The repaired loop reactivated the plugin before the assertion ran.**
+
+Nothing was wrong with either half. The fix applied perfectly and the assertion
+does fail correctly. They *interfered*, in the direction that produces a pass:
+
+> A test is valid when written and invalid by the time it runs, because of a
+> change in the same commit. **Proving a detector fires needs the broken state,
+> and the repair beside it removes that state first.**
+
+So a fix and its detector want **separate runs**: extract the assertion and run
+it alone against the broken state, then apply the repair. Done that way it exits
+1 naming the inactive plugin, and passes once active.
+
+There is a second-order version in the same episode, and it is the older shape
+wearing new clothes: the extracted probe was written without a `<?php` tag, so
+the runner printed the file's *source* rather than executing it — and both
+strings being grepped for appeared in that output, **because they are in the
+code**. It read as a pass. An extracted test wants its own smoke check before it
+is trusted.
 
 That is why the same guard passed one person's mutation and failed another's.
 Stripping the projection from *one* route, leaving the others intact, gave the
