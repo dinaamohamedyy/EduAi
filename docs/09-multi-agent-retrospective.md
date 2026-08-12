@@ -348,6 +348,18 @@ guard reported green having only ever been run on a long-lived stack where it
 could not fail; two probes testing an inline copy of the regex they were
 verifying; and a comparison of two arms that were secretly identical.
 
+**The rate is the finding, not the incidents.** One session counted their own in
+a single day: five claims stated, five narrowed afterwards. A guard called fine
+that was blind to three of four routes. A feature called unbuilt, where the
+fixture had never set the field. A class called enumerated, from a grep for
+`summarize` in a file spelling it `summarise`. A route called dead, from a 301
+that `curl` will not follow without `-L`. And a page called "verified from a
+student session", measured from the only enrolled account on the install.
+
+Not one was careless. Each was **a right answer about a narrower population than
+the sentence claimed** — and nothing about a true-sounding sentence prompts you
+to ask which set it is true of.
+
 Not one was caught by re-reading. **They were caught by a second person, and
 that is the otherwise-puzzling fact about this whole record.** A more careful
 first pass would not have helped, because there was nothing in the output to be
@@ -725,6 +737,26 @@ All three behaviours were correct in the product. None of the three was asserted
 The docblock had been describing a claim the file only partly defended, and the
 gap sat in the difference between the two.
 
+**And the version of this committed *by the fix* for the others, which is the
+one worth guarding against.** Having proved self-enrolment works by creating the
+first enrolment on the install, the same session then measured eight
+student-facing pages from that account and reported the result as "verified from
+a student session". The account was the most unusual state on the install — and
+it was invisible **because they had built it**:
+
+> A thing you created to be unusual is the last thing you will notice is
+> unusual.
+
+It does not announce itself the way an inherited environment does, because you
+remember it as a *result* rather than as a condition. It surfaced only when
+someone else mentioned it for an unrelated reason.
+
+The general form: **after you build a fixture to prove something, that fixture
+is a premise of everything you measure next.** Re-run against a genuinely fresh
+subject before generalising. Here that produced *better* news than the original
+claim — five of six pages identical, the sixth legitimately different with a real
+empty state and zero warnings — which narrowed claims usually do not.
+
 ### 6.9 The check knew. The plumbing dropped it.
 
 Every failure above is a check that could not *see* something — by scale,
@@ -913,6 +945,21 @@ the habit ran on its own.
 That distinction matters for anyone copying this. **Habits survive being tired,
 being certain, and being under pressure to produce a result. Character does
 not.**
+
+**The second instance is worse than the first, and it came from the other end.**
+A session spent an afternoon cataloguing *the environment's history masquerading
+as the product's capability* — then measured a product surface from the most
+unusual account state on the install. Holding the pattern did not protect them.
+If anything it did the reverse:
+
+> The catalogue makes you faster at recognising, and equally fast at believing
+> you have already looked.
+
+Two people, opposite ends of the same day: one saw a familiar shape that was not
+there, the other missed a familiar shape that was, and **both were fluent in the
+list at the time.** Fluency is not immunity. The list earns its keep by
+generating candidates you then go and check — never by telling you which ones you
+have already handled.
 
 ### 6.13 What the whole catalogue adds up to
 
