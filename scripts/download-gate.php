@@ -78,6 +78,29 @@ function gate_material( string $slug, string $access ): int {
 
 	$file_id = (int) get_post_meta( $post_id, '_scholaris_file_id', true );
 
+	/*
+	 * THIS FIXTURE IS DELIBERATELY TINY, AND THAT IS SAFE FOR EXACTLY ONE KIND
+	 * OF ASSERTION.
+	 *
+	 * Sound for status codes. Every assertion in download-gate.sh is 200 versus
+	 * 403, and an HTTP status does not depend on how many bytes follow it.
+	 *
+	 * UNSOUND FOR ANY RANGE ASSERTION. Apache's byterange filter satisfies a
+	 * Range request itself on responses it has fully buffered, so a small file
+	 * returns 206 with a correct Content-Range *whether or not the PHP handler
+	 * implements ranges at all*. Measured on this stack:
+	 *
+	 *     1 KB → 206      64 KB → 200      1 MB → 200      50 MB → 200
+	 *
+	 * At 50 MB with a seek to 94%, handle_download() returned 200 and the whole
+	 * 52,428,800 bytes; the marker planted at that offset never came back.
+	 *
+	 * So when the streaming handler lands and somebody adds "restricted video
+	 * seeks correctly" here, writing it against this 87-byte file will pass on a
+	 * completely broken implementation. Add a fixture of at least 1 MB for that
+	 * assertion. Three sessions reached the opposite conclusion from one small
+	 * file before this comment existed.
+	 */
 	if ( ! $file_id || ! get_attached_file( $file_id ) ) {
 		$uploads = wp_upload_dir();
 		$path    = trailingslashit( $uploads['path'] ) . $slug . '.txt';
