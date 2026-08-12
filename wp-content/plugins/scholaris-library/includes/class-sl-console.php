@@ -244,9 +244,6 @@ class SL_Console {
 			'without_media' => $without_media,
 			'courses'       => $courses,
 			'accounts'      => (int) count_users()['total_users'],
-			// Rendered in the web container, so this is the real ceiling —
-			// pre-answering "why did my upload fail".
-			'max_upload'    => size_format( wp_max_upload_size() ),
 			// The one count that implies an action, so the one worth linking:
 			// a number the owner then has to go and find is a report, not a
 			// dashboard. Additive on purpose — the template is front-end's

@@ -213,11 +213,18 @@ class EduAI_Shortcodes {
 		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
 		wp_enqueue_script( 'eduai-summarise', EDUAI_URL . 'assets/js/summarise.js', array(), EDUAI_VERSION, true );
 
+		// One call, both consumers. The banner below and the id the script
+		// posts back come from this single resolution, so the label the page
+		// promises and the scope the endpoint honours cannot disagree — they
+		// are the same answer rendered twice, not two answers that match.
+		$eduai_scope = EduAI_Scope::for_script();
+
 		wp_localize_script( 'eduai-summarise', 'EduAISumConfig', array(
 			'root'        => esc_url_raw( rest_url( EduAI_REST::NS ) ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'loggedIn'    => is_user_logged_in(),
 			'maxUploadMb' => 20,
+			'scope'       => $eduai_scope,
 			'i18n'        => array(
 				'dropFile'         => __( 'Drop a lecture here, or click to choose', 'eduai' ),
 				'reading'          => __( 'Reading…', 'eduai' ),

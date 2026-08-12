@@ -482,21 +482,26 @@ class EduAI_REST {
 		if ( EduAI_Settings::get( 'enable_rag', true ) ) {
 			$limit    = (int) EduAI_Settings::get( 'context_chunks', 6 );
 
-			if ( $scope ) {
-				// A constraint, not a bias: scoped means this source or
-				// nothing. retrieve() still applies may_read() per row, so
-				// the gate holds even if this resolution were ever bypassed.
-				$passages = EduAI_Knowledge::retrieve( $message, $limit, $scope['id'] );
-			} else {
-				$passages = EduAI_Knowledge::retrieve( $message, $limit );
-			}
+			$passages = EduAI_Knowledge::retrieve( $message, $limit );
 
-			// Bias toward the document the student is currently reading.
-			// Skipped when scoped — merging unscoped hits into a scoped answer
-			// is how "summarise this lecture" quietly starts quoting a
-			// different one.
-			if ( $post_id && ! $scope ) {
-				$current = EduAI_Knowledge::retrieve( get_the_title( $post_id ) . ' ' . $message, 2 );
+			// A BOOST, never a filter — see EduAI_Scope, which is one gate
+			// with two meanings. Ask retrieves from the whole deck: "what is
+			// a residual" asked inside lesson four is defined in lesson one,
+			// and filtering to the lesson would hide the definition and
+			// return a confidently incomplete answer. Ordering can be wrong
+			// without being harmful; a filter cannot.
+			//
+			// The scoped pull is gated the same as any other — retrieve()
+			// applies may_read() per row — so boosting cannot surface a
+			// passage the plain query would have been refused.
+			if ( $scope ) {
+				$scoped   = EduAI_Knowledge::retrieve( $message, 2, $scope['id'] );
+				$passages = array_merge( $scoped, $passages );
+			} elseif ( $post_id ) {
+				// Same shape, older mechanism: the document the student is
+				// reading. Yields to a resolved scope, which is the gated and
+				// deliberate version of the same idea.
+				$current  = EduAI_Knowledge::retrieve( get_the_title( $post_id ) . ' ' . $message, 2 );
 				$passages = array_merge( $current, $passages );
 			}
 
@@ -529,14 +534,13 @@ class EduAI_REST {
 			$system .= "\n\n" . $context;
 
 			if ( $scope ) {
-				$system .= "\n\nThe student is working inside \"" . $scope['title'] . '" and the material above is from it. Answer from that material. If it does not cover the question, say which part is missing rather than filling the gap from elsewhere.';
+				// Careful with this wording: the boost means SOME of the
+				// material above is from the scope and some is not. Telling
+				// the model it is all from one lecture would make it attribute
+				// the rest to that lecture, which is the misattribution the
+				// filter was rejected for causing in the other direction.
+				$system .= "\n\nThe student is reading \"" . $scope['title'] . '". Some of the material above is from it and some from elsewhere in the same course. Prefer it where both fit, and do not imply the rest came from that lecture.';
 			}
-		} elseif ( $scope ) {
-			// Scoped and empty is a different situation from unscoped and
-			// empty, and must not inherit the general-knowledge escape: the
-			// student pointed at one lecture, so an answer sourced from
-			// anywhere else reads as if it came from that lecture.
-			$system .= "\n\nNothing in \"" . $scope['title'] . '" matched this question. Say that plainly, name what the student asked for, and suggest they check the rest of the material or ask their lecturer. Do not answer from general knowledge.';
 		} elseif ( EduAI_Settings::get( 'allow_general_knowledge', true ) ) {
 			$system .= "\n\nNo course material matched this question. Open with one short line saying so, then answer it in full anyway under the heading \"Beyond the course material\".";
 		} else {
@@ -780,6 +784,12 @@ class EduAI_REST {
 		$content     = array();
 		$label       = '';
 
+		// Re-gated here and not trusted from the render pass. The banner and
+		// this call are one predicate invoked twice, never two predicates
+		// that agree today — same discipline as SL_Private::is_secured()
+		// being the single question asked before claiming a file is safe.
+		$scope = EduAI_Scope::resolve( (int) $request->get_param( 'source' ) );
+
 		if ( ! empty( $files['file']['tmp_name'] ) ) {
 			$file = $files['file'];
 
@@ -844,10 +854,36 @@ class EduAI_REST {
 			}
 		} else {
 			$text = trim( (string) $request->get_param( 'text' ) );
-			if ( strlen( $text ) < 80 ) {
+
+			if ( strlen( $text ) >= 80 ) {
+				// An upload or a paste is an explicit act and wins over the
+				// scope, even on a scoped page. The response echoes `label`
+				// so the client can correct a banner that now names the wrong
+				// thing — a screen claiming to summarise the lesson while
+				// summarising something else is the lie worth avoiding.
+				$content[] = array( 'type' => 'text', 'text' => self::cap( wp_strip_all_tags( $text ) ) );
+			} elseif ( $scope ) {
+				// Scoped summarise does not retrieve: the object is given.
+				// This is the one request a scoped page exists to make, which
+				// is why the "attach or paste something" guard yields here.
+				$document = self::scoped_source_text( $scope );
+
+				if ( '' === $document ) {
+					return new WP_Error(
+						'eduai_scope_empty',
+						__( 'There is no readable text on that lecture yet. Attach a file or paste the part you need.', 'eduai' ),
+						array( 'status' => 422 )
+					);
+				}
+
+				$label     = $scope['title'];
+				$content[] = array(
+					'type' => 'text',
+					'text' => sprintf( "Lecture: %s\n\n", $scope['title'] ) . self::cap( $document ),
+				);
+			} else {
 				return new WP_Error( 'eduai_short', __( 'Paste at least a paragraph of the lecture, or attach a file.', 'eduai' ), array( 'status' => 400 ) );
 			}
-			$content[] = array( 'type' => 'text', 'text' => self::cap( wp_strip_all_tags( $text ) ) );
 		}
 
 		$content[] = array( 'type' => 'text', 'text' => $instruction );
@@ -883,6 +919,49 @@ class EduAI_REST {
 			'label'   => $label,
 			'style'   => $style,
 		), 200 );
+	}
+
+	/**
+	 * The full text of a scoped source, for summarising.
+	 *
+	 * Takes the RESOLVED scope array rather than an id, deliberately. The
+	 * only way to obtain one is EduAI_Scope::resolve(), so an ungated id
+	 * cannot reach this function by any call that type-checks — the gate is
+	 * enforced by the signature instead of by remembering to call it.
+	 *
+	 * Reads the chunk index rather than re-extracting, so the summary is
+	 * built from the same text the assistant retrieves and there is no second
+	 * extraction path to drift. Falls back to the post body when nothing is
+	 * indexed — a lesson saved seconds ago, or a material whose document
+	 * yielded no text layer.
+	 *
+	 * This belongs on EduAI_Knowledge beside the writer that produced the
+	 * rows; it lives here only because that file is owned and in flight
+	 * elsewhere. Moving it is a rename, not a redesign.
+	 *
+	 * @param array{id:int,title:string} $scope Resolved, gated scope.
+	 */
+	private static function scoped_source_text( array $scope ): string {
+		global $wpdb;
+
+		$table = EduAI_Knowledge::table();
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$chunks = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT chunk_text FROM {$table} WHERE post_id = %d ORDER BY chunk_index ASC",
+				(int) $scope['id']
+			)
+		);
+		// phpcs:enable
+
+		if ( $chunks ) {
+			return trim( implode( "\n\n", $chunks ) );
+		}
+
+		$post = get_post( (int) $scope['id'] );
+
+		return $post ? trim( wp_strip_all_tags( strip_shortcodes( (string) $post->post_content ) ) ) : '';
 	}
 
 	/**

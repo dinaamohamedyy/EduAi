@@ -18,9 +18,24 @@
  * THE TITLE COMES FROM HERE, NEVER FROM THE URL. A title carried in a query
  * string is attacker-controlled text that renders into the page.
  *
- * This is the ACCESS gate. Constraining retrieval to the scoped source is a
- * separate mechanism with a separate purpose — relevance — and must not be
- * mistaken for this one: EduAI_Knowledge has no capability filtering at all.
+ * This is the ACCESS gate, and it is the only one. Relevance is a separate
+ * mechanism with a separate purpose and must not be mistaken for it.
+ *
+ * ONE ID, TWO MEANINGS, DECIDED BY THE CONSUMER — worth stating here so no
+ * caller has to infer it:
+ *
+ *   Summarise treats the scope as the SUBJECT. It does not retrieve; the
+ *   object is given, and the answer is about that thing exclusively.
+ *
+ *   Ask treats it as the ROOT OF A CONTEXT and boosts, never filters. "What
+ *   is a residual", asked inside lesson four, is defined in lesson one;
+ *   filtering to the lesson would hide the definition and produce a
+ *   confidently incomplete answer. Ordering can be wrong without being
+ *   harmful — a filter cannot. "Scope it tighter" is the first thing anyone
+ *   asks for the moment they see an unexpected passage, and it is the wrong
+ *   instinct.
+ *
+ * Both call the same gate. The difference is what they do after it says yes.
  *
  * @package EduAI
  */
@@ -38,10 +53,25 @@ class EduAI_Scope {
 	 * @return array{id:int,title:string,type:string}|null
 	 */
 	public static function current(): ?array {
+		// Resolved once per request. The banner, the button label and the
+		// localized config all ask, and asking is a capability check —
+		// memoising is also what keeps "one predicate" literally true rather
+		// than merely intended.
+		static $resolved = false;
+		static $scope    = null;
+
+		if ( $resolved ) {
+			return $scope;
+		}
+
+		$resolved = true;
+
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only scope hint, gated below.
 		$raw = isset( $_GET['source'] ) ? absint( wp_unslash( $_GET['source'] ) ) : 0;
 
-		return $raw ? self::resolve( $raw ) : null;
+		$scope = $raw ? self::resolve( $raw ) : null;
+
+		return $scope;
 	}
 
 	/**

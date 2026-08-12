@@ -34,6 +34,30 @@
 # stale container. Four separate instrument failures on this project were tools
 # reporting confidently about a state they had never established.
 #
+# A GREEN FROM THIS SUITE MEANS "GREEN ON A STACK OF THIS AGE", AND THAT IS NOT
+# A CAVEAT BELONGING TO ONE HARNESS. Three instances in one day, pointing both
+# ways:
+#
+#   FRESH stack reds are MISSING SETUP. `download-gate` passed on the
+#   long-lived stack for as long as anyone had run it while a fresh install
+#   served gated study material to anyone holding the URL —
+#   uploads/scholaris-private/ existed here from months of use and was never
+#   created on a new one. Green on a used stack was evidence about that stack's
+#   history, not about what a deployment would do.
+#
+#   LONG-LIVED stack reds are ACCUMULATED STATE. `submit-contract` and
+#   `projection-leak` both go through routes behind check_rate_limit(), so on a
+#   stack that has had these harnesses run against it all day the fixture user
+#   is out of quota and the route answers 429 before it can reach the thing
+#   being tested. Both pass on a fresh stack for a reason that has nothing to
+#   do with what they assert. The remedy is per-harness: clear the fixture
+#   user's transient before asserting, as rate-limit.php has always done.
+#
+# So the nightly and a developer re-run are not the same test, and neither is
+# the strict one. The nightly boots fresh, so it can NEVER show the second kind
+# — which inverts the usual assumption that CI is strict and local is lenient.
+# When recording a green, record which stack produced it.
+#
 # ON INTERMITTENT FAILURES SEEN LOCALLY. `download-gate` and `ui-geometry` have
 # each gone red once on a wrapper run, passed when run directly, and passed on
 # every run since — neither reproducible. Both are harnesses that create a
