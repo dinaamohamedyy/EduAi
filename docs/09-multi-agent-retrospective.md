@@ -266,8 +266,44 @@ earlier, and then committed it myself. That is how structural it is.
 
 ## 6. The failure catalogue — the genuinely transferable part
 
-Five patterns, each of which bit this project more than once. These generalise to
+Ten patterns, each of which bit this project more than once. These generalise to
 any agent-assisted codebase.
+
+**Read this first, because it is why the other ten survive.** Every section below
+is a specific way an instrument misleads. This is the reason *any* of them lasts
+long enough to be written up:
+
+> **A right answer from evidence that did not support it.** A wrong answer
+> recruits its own investigation. A right one does not — it gets trusted, and
+> then cited later as precedent.
+
+Six instances in a single day, once anyone looked for the shape: two sessions
+reading the remote's state off a stale tracking ref and being correct anyway; a
+guard reported green having only ever been run on a long-lived stack where it
+could not fail; two probes testing an inline copy of the regex they were
+verifying; and a comparison of two arms that were secretly identical.
+
+Not one was caught by re-reading. **They were caught by a second person, and
+that is the otherwise-puzzling fact about this whole record.** A more careful
+first pass would not have helped, because there was nothing in the output to be
+careful about. The premise was wrong and the conclusion was right, so care spent
+on the conclusion found nothing.
+
+The demonstration is exact. A leak detector's probe was replaced with a string
+that **cannot occur anywhere** — and both verbatim checks still reported `ok`,
+because a search that can never match finds nothing, and finding nothing is what
+passing looks like. Only the built-in control went red. As its author put it: no
+amount of reading the checks would reveal it, **because the checks are correct**.
+
+**A note on this document's own honesty.** An earlier draft of the sweep results
+recorded "three guards defective, three clean". The true figure is **five of
+six**: two were vacuous when first met and appear clean only because they were
+repaired before the second pass. A `clean` beside a just-fixed guard is the same
+green a never-broken guard shows, and in six months it reads as *four of six were
+fine*. Any table that outlives the week needs **as found** and **as left**
+columns — otherwise the record acquires the exact defect it documents. Only one
+guard of the six was sound as found, and that one is now the most suspicious
+result of the week rather than the least.
 
 ### 6.1 A green check that cannot go red
 
