@@ -26,6 +26,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Pinned rather than inherited from whatever the runner image ships.
+      # mock-state-pass.mjs drives the browser over CDP and needs a global
+      # WebSocket, which is Node 22+ — on Node 20 it dies with "WebSocket is not
+      # defined" AFTER the browser has started, which reads like a harness bug
+      # rather than a version one. An unpinned toolchain also means this job's
+      # result can change without a commit, which is the opposite of what a gate
+      # is for.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       # First, and deliberately: a live key reaching a public repository is the
       # one failure here that cannot be undone by a follow-up commit.
       - name: No secrets in shippable files

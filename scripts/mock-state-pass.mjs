@@ -70,9 +70,28 @@ function findBrowser() {
 }
 const EDGE = findBrowser();
 
-const edge = spawn(EDGE, ['--headless=new', '--disable-gpu', `--remote-debugging-port=${PORT}`,
+// --no-sandbox and --disable-dev-shm-usage are for CI, and both are required
+// there rather than nice to have. GitHub's runners restrict the user namespaces
+// Chrome's sandbox needs, so without the first flag the process starts and dies
+// immediately; /dev/shm is 64 MB in most containers, which the second flag
+// routes around. Locally they change nothing — this harness renders one static
+// file it already trusts, so the sandbox is not protecting anything here.
+//
+// stderr is captured rather than discarded. It used to be `stdio: 'ignore'`,
+// and when this failed in CI the entire diagnosis available was "browser did
+// not open its debugging port" — true, useless, and indistinguishable between
+// "no browser installed", "browser crashed" and "port already in use". Chrome
+// prints the actual reason; there is no reason to throw it away.
+const launchArgs = ['--headless=new', '--disable-gpu', '--no-sandbox',
+  '--disable-dev-shm-usage', `--remote-debugging-port=${PORT}`,
   '--no-first-run', '--allow-file-access-from-files',
-  '--user-data-dir=' + join(tmpdir(), 'edge-mock-state'), 'about:blank'], { stdio: 'ignore' });
+  '--user-data-dir=' + join(tmpdir(), 'edge-mock-state'), 'about:blank'];
+
+const edge = spawn(EDGE, launchArgs, { stdio: ['ignore', 'ignore', 'pipe'] });
+
+let browserErr = '';
+edge.stderr.on('data', (b) => { browserErr += b.toString(); });
+edge.on('error', (e) => { browserErr += `spawn failed: ${e.message}\n`; });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let ws, msgId = 0;
@@ -172,7 +191,19 @@ function check(name, pass, detail) {
 try {
   let ver = null;
   for (let i = 0; i < 40 && !ver; i++) { try { ver = await json('/json/version'); } catch { await sleep(250); } }
-  if (!ver) throw new Error('browser did not open its debugging port');
+  if (!ver) {
+    // Say which browser, and what it printed on the way down. "Did not open its
+    // debugging port" alone sent one CI failure to a dead end: it is equally
+    // consistent with no browser installed, a browser that crashed on launch,
+    // and a port already in use, and it names none of them.
+    const why = browserErr.trim() || '(the browser printed nothing at all — it may not have started)';
+    throw new Error(
+      `browser did not open its debugging port on ${PORT}\n` +
+      `  browser: ${EDGE}\n` +
+      `  exited:  ${edge.exitCode === null ? 'still running' : `code ${edge.exitCode}`}\n` +
+      `  stderr:  ${why.split('\n').slice(0, 6).join('\n           ')}`
+    );
+  }
   const target = await json('/json/new?about:blank', 'PUT');
   await connect(target.webSocketDebuggerUrl);
   await send('Runtime.enable');
