@@ -88,13 +88,38 @@ defined( 'ABSPATH' ) || exit;
 				$sl_subjects = get_the_terms( $sl_id, 'material_subject' );
 				$sl_types    = get_the_terms( $sl_id, 'material_type' );
 				$sl_ext      = $sl_file_id ? strtoupper( (string) pathinfo( (string) get_attached_file( $sl_file_id ), PATHINFO_EXTENSION ) ) : '';
+
+				/*
+				 * A video-only material has no attached file, so $sl_ext is ''
+				 * and the chip below fell back to 'DOC' — the listing labelled
+				 * every lecture a document.
+				 *
+				 * DUPLICATION, DELIBERATE AND TEMPORARY: this predicate now
+				 * exists in three places — here, single-study_material.php, and
+				 * SL_Console (:149). Three independent definitions of "does this
+				 * material have video" that must agree, and when they disagree
+				 * the symptom is the blank page the §2.4 restructure just fixed.
+				 * A single SL_Meta::has_video() belongs in includes/, which is
+				 * back-end's file; asked for, and all three call sites switch to
+				 * it when it lands.
+				 */
+				$sl_video_src = (string) get_post_meta( $sl_id, '_scholaris_video_source', true );
+				$sl_has_video = ( 'link' === $sl_video_src && '' !== (string) get_post_meta( $sl_id, '_scholaris_video_url', true ) )
+					|| ( 'file' === $sl_video_src && (int) get_post_meta( $sl_id, '_scholaris_video_id', true ) );
 				?>
 				<article class="sl-card">
 					<a class="sl-card__thumb" href="<?php the_permalink(); ?>" aria-hidden="true" tabindex="-1">
 						<?php if ( has_post_thumbnail() ) : ?>
 							<?php the_post_thumbnail( 'medium' ); ?>
 						<?php else : ?>
-							<span class="sl-card__ext"><?php echo esc_html( $sl_ext ?: 'DOC' ); ?></span>
+							<?php
+							// The document's type when there is one, VIDEO when
+							// the material is a lecture recording, and only then
+							// the old DOC fallback. A student should not have to
+							// open a card to find out which it is.
+							$sl_chip = $sl_ext ?: ( $sl_has_video ? __( 'VIDEO', 'scholaris-library' ) : 'DOC' );
+							?>
+							<span class="sl-card__ext"><?php echo esc_html( $sl_chip ); ?></span>
 						<?php endif; ?>
 					</a>
 
@@ -117,6 +142,10 @@ defined( 'ABSPATH' ) || exit;
 							<?php
 							$sl_bits = array_filter( array(
 								$sl_ext,
+								// Listed alongside the document type rather than
+								// instead of it: a material can carry both, and
+								// the thumb chip only has room for one of them.
+								$sl_has_video ? __( 'Video', 'scholaris-library' ) : '',
 								$sl_pages ? sprintf(
 									/* translators: %d: pages */
 									_n( '%d page', '%d pages', $sl_pages, 'scholaris-library' ),

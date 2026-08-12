@@ -253,6 +253,14 @@
      768px — column 720, raw 0 (560 happens to fit), wrapped 0
    Ratio measured 1.778 at every width, and the iframe fills the box exactly.
 
+   Re-measured on a real uploaded-video material, where one number reads as an
+   error until you know why: 837x471 at 900px but 775x436 at 1190px. The box
+   gets SMALLER as the viewport grows, because .sl-single adds the 320px
+   sidebar at its 960px breakpoint and the content column narrows on the way
+   up. Full set: 327x184 at 375, 372x209 at 420, 837x471 at 900, 775x436 at
+   1190, 848x477 at 1400 — zero document overflow at every one. Written down so
+   the next person does not re-measure it hunting a bug that is not there.
+
    An iframe has NO intrinsic aspect ratio, so something must tell it one;
    width alone gives a full-width box still 315px tall. Hence the wrapper.
 
