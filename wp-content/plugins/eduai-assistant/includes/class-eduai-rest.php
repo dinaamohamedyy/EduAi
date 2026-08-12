@@ -39,6 +39,14 @@ class EduAI_REST {
 					'type'    => 'integer',
 					'default' => 0,
 				),
+				// The scope the student is working inside. Declared but NOT
+				// trusted: it is re-resolved and re-gated in the handler,
+				// because the localized copy is a UI hint and this is the
+				// entry point where material is actually read.
+				'source'    => array(
+					'type'    => 'integer',
+					'default' => 0,
+				),
 				'agent'     => array(
 					'type'              => 'string',
 					'default'           => '',
@@ -464,14 +472,30 @@ class EduAI_REST {
 			$thread_id = wp_generate_password( 16, false, false );
 		}
 
+		// Re-resolved from the id, never taken on the browser's word, and
+		// never taken from `post_id` — that one is an ungated relevance bias
+		// and must not be allowed to become a scope by accident.
+		$scope = EduAI_Scope::resolve( (int) $request->get_param( 'source' ) );
+
 		// ------------------------------------------------------------- context
 		$passages = array();
 		if ( EduAI_Settings::get( 'enable_rag', true ) ) {
 			$limit    = (int) EduAI_Settings::get( 'context_chunks', 6 );
-			$passages = EduAI_Knowledge::retrieve( $message, $limit );
+
+			if ( $scope ) {
+				// A constraint, not a bias: scoped means this source or
+				// nothing. retrieve() still applies may_read() per row, so
+				// the gate holds even if this resolution were ever bypassed.
+				$passages = EduAI_Knowledge::retrieve( $message, $limit, $scope['id'] );
+			} else {
+				$passages = EduAI_Knowledge::retrieve( $message, $limit );
+			}
 
 			// Bias toward the document the student is currently reading.
-			if ( $post_id ) {
+			// Skipped when scoped — merging unscoped hits into a scoped answer
+			// is how "summarise this lecture" quietly starts quoting a
+			// different one.
+			if ( $post_id && ! $scope ) {
 				$current = EduAI_Knowledge::retrieve( get_the_title( $post_id ) . ' ' . $message, 2 );
 				$passages = array_merge( $current, $passages );
 			}
@@ -503,6 +527,16 @@ class EduAI_REST {
 		$context = EduAI_Knowledge::to_context( $passages );
 		if ( $context ) {
 			$system .= "\n\n" . $context;
+
+			if ( $scope ) {
+				$system .= "\n\nThe student is working inside \"" . $scope['title'] . '" and the material above is from it. Answer from that material. If it does not cover the question, say which part is missing rather than filling the gap from elsewhere.';
+			}
+		} elseif ( $scope ) {
+			// Scoped and empty is a different situation from unscoped and
+			// empty, and must not inherit the general-knowledge escape: the
+			// student pointed at one lecture, so an answer sourced from
+			// anywhere else reads as if it came from that lecture.
+			$system .= "\n\nNothing in \"" . $scope['title'] . '" matched this question. Say that plainly, name what the student asked for, and suggest they check the rest of the material or ask their lecturer. Do not answer from general knowledge.';
 		} elseif ( EduAI_Settings::get( 'allow_general_knowledge', true ) ) {
 			$system .= "\n\nNo course material matched this question. Open with one short line saying so, then answer it in full anyway under the heading \"Beyond the course material\".";
 		} else {

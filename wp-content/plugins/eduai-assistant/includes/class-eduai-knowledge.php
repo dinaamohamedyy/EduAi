@@ -239,13 +239,6 @@ class EduAI_Knowledge {
 	}
 
 	/**
-	 * Retrieve the passages most relevant to a question.
-	 *
-	 * @param string $query Student question.
-	 * @param int    $limit Max passages.
-	 * @return array<int,array{title:string,url:string,text:string,score:float}>
-	 */
-	/**
 	 * May the current user read this material's contents?
 	 *
 	 * The assistant quotes indexed passages back to whoever asked, so retrieval
@@ -295,6 +288,26 @@ class EduAI_Knowledge {
 			$allowed = class_exists( 'SL_Meta' ) && method_exists( 'SL_Meta', 'can_download' )
 				? (bool) SL_Meta::can_download( $post_id )
 				: false;
+		} elseif ( 'lesson' === $post->post_type ) {
+			/*
+			 * Enrolment, or the capability to edit. `read_post` is NOT the
+			 * enrolment check it looks like — measured on this install against
+			 * one published lesson:
+			 *
+			 *                        is_enrolled  read_post  enrolled_access
+			 *   anonymous            false        false      false
+			 *   student, unenrolled  false        false      false
+			 *   student, ENROLLED    true         FALSE      true
+			 *   administrator        false        true       false
+			 *
+			 * So `read_post` denied the one person entitled to the lesson and
+			 * admitted the one person Tutor's own check denies. Neither column
+			 * is the rule on its own: enrolment is what entitles a student,
+			 * and staff are never enrolled in their own course.
+			 */
+			$allowed = ( function_exists( 'tutor_utils' )
+					&& (bool) tutor_utils()->has_enrolled_content_access( 'lesson', $post_id ) )
+				|| current_user_can( 'edit_posts' );
 		} else {
 			// Everything else answers to WordPress, which already knows about
 			// private posts, drafts and restricted types.
@@ -314,9 +327,12 @@ class EduAI_Knowledge {
 	}
 
 	/**
+	 * Retrieve the passages most relevant to a question, filtered by who asked.
+	 *
 	 * @param string $query Student question.
 	 * @param int    $limit Passages wanted.
 	 * @param int    $scope Restrict to one material, or 0 for the whole library.
+	 * @return array<int,array{post_id:int,title:string,url:string,text:string,score:float}>
 	 */
 	public static function retrieve( string $query, int $limit = 6, int $scope = 0 ): array {
 		global $wpdb;

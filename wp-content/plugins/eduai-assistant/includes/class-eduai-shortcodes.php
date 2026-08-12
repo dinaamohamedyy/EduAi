@@ -71,6 +71,9 @@ class EduAI_Shortcodes {
 			'root'     => esc_url_raw( rest_url( EduAI_REST::NS ) ),
 			'nonce'    => wp_create_nonce( 'wp_rest' ),
 			'loggedIn' => is_user_logged_in(),
+			// See the note on the same key in enqueue_chat_assets(): null, or
+			// a server-resolved { id, title }.
+			'scope'    => EduAI_Scope::for_script(),
 			'i18n'     => array(
 				'dropFile'        => __( 'Drop a lecture here, or click to choose', 'eduai' ),
 				'needSource'      => __( 'Attach a lecture, or paste at least a paragraph of it.', 'eduai' ),

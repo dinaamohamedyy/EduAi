@@ -33,6 +33,7 @@ require_once EDUAI_DIR . 'includes/class-eduai-pdf.php';
 require_once EDUAI_DIR . 'includes/class-eduai-knowledge.php';
 require_once EDUAI_DIR . 'includes/class-eduai-conversation.php';
 require_once EDUAI_DIR . 'includes/class-eduai-calc.php';
+require_once EDUAI_DIR . 'includes/class-eduai-scope.php';
 require_once EDUAI_DIR . 'includes/class-eduai-exams.php';
 require_once EDUAI_DIR . 'includes/class-eduai-rest.php';
 require_once EDUAI_DIR . 'includes/class-eduai-shortcodes.php';
@@ -164,6 +165,10 @@ final class EduAI_Assistant {
 			'defaultAgent' => EduAI_Agents::default_id(),
 			'agentPicker'  => (bool) EduAI_Settings::get( 'agent_picker', true ),
 			'maxUploadMb'  => 20,
+			// null, or { id, title } — resolved and gated server-side. A
+			// refused scope arrives identical to no scope, so the browser has
+			// nothing to distinguish and nothing to leak.
+			'scope'        => EduAI_Scope::for_script(),
 			'i18n'         => array(
 				'placeholder'   => __( 'Ask about your material…', 'eduai' ),
 				'send'          => __( 'Send', 'eduai' ),
