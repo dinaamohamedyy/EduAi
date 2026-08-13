@@ -1259,7 +1259,26 @@ class EduAI_REST {
 
 			$text = preg_replace( '/\\\\(?:d?frac|tfrac)\s*\{([^{}]*)\}\s*\{([^{}]*)\}/', '($1)/($2)', $text ) ?? $text;
 			$text = preg_replace( '/\\\\sqrt\s*\{([^{}]*)\}/', 'sqrt($1)', $text ) ?? $text;
-			$text = preg_replace( '/\\\\(?:text|mathrm|mathbf|operatorname)\s*\{([^{}]*)\}/', '$1', $text ) ?? $text;
+
+			/*
+			 * `\hat{y}` becomes `y-hat`, not `ŷ`, and that is a decision about
+			 * register rather than fidelity. Measured on a real generated
+			 * lesson: the surrounding text is already plain — `w_1`, `x_j`,
+			 * `sum_(j=1)^d` — so a combining accent would be the only Unicode
+			 * in an ASCII expression, and it renders inconsistently across
+			 * fonts at small sizes. 25 occurrences in one linear-algebra deck.
+			 *
+			 * In THIS pass and not the symbol map below, because it takes a
+			 * braced argument. Anything brace-consuming has to run while the
+			 * braces are still there — the degrees handler learned that the
+			 * other way, matching `^{\circ}` after an earlier pass had already
+			 * rewritten it to `^(\circ)`.
+			 */
+			$text = preg_replace( '/\\\\hat\s*\{([^{}]*)\}/', '$1-hat', $text ) ?? $text;
+
+			// boldsymbol joins the unwrappers: bold is typography, and there
+			// is no bold on the other side to carry it.
+			$text = preg_replace( '/\\\\(?:text|mathrm|mathbf|boldsymbol|operatorname)\s*\{([^{}]*)\}/', '$1', $text ) ?? $text;
 
 			if ( $before === $text ) {
 				break;
@@ -1295,6 +1314,12 @@ class EduAI_REST {
 			'\\leq' => ' <= ', '\\geq' => ' >= ', '\\neq' => ' != ',
 			'\\approx' => ' ~ ', '\\pm' => ' +/- ', '\\infty' => 'infinity',
 			'\\circ' => '°', '\\degree' => '°',
+			// `\dots` observed 6 times; `\ldots` and `\cdots` ride along
+			// because the mapping is mechanical rather than a judgement —
+			// unlike `\hat`, which needed a decision about register and so
+			// waited for real output before being written at all.
+			'\\dots' => '...', '\\ldots' => '...', '\\cdots' => '...',
+			'\\varepsilon' => 'epsilon', '\\epsilon' => 'epsilon',
 			'\\alpha' => 'alpha', '\\beta' => 'beta', '\\theta' => 'theta',
 			'\\lambda' => 'lambda', '\\mu' => 'mu', '\\pi' => 'pi',
 			'\\omega' => 'omega', '\\Delta' => 'delta', '\\sum' => 'sum',
