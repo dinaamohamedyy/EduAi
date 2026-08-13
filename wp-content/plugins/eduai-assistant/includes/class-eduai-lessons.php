@@ -755,7 +755,23 @@ class EduAI_Lessons {
 			. "- Open with one short paragraph on what this section is about. Then the substance, under `##` headings that follow the lecture's own order.\n"
 			. "- Define each term the first time the lecture uses it.\n"
 			. "- Keep the lecturer's own terminology, including where they note that different fields use different words for the same thing.\n"
-			. "- Markdown only. No preamble, no sign-off, no \"in this lesson we will\".\n\n"
+			. "- Markdown only. No preamble, no sign-off, no \"in this lesson we will\".\n"
+			// The renderer converts a known set of LaTeX commands to plain text
+			// and passes the rest through untouched, so anything unmapped
+			// reaches the student as source. That map is a safety net and this
+			// is the source: every command not emitted is one nobody has to
+			// add. Concrete strings because two rounds of abstract rules moved
+			// nothing on the last register problem and four real sentences
+			// moved it immediately — these are the ones this deck produced.
+			. "- Plain text for every symbol. NO LaTeX, and that includes the forms that look harmless:\n"
+			. "    \\hat y_i or \\hat{y}   ->  y-hat\n"
+			. "    \\mathsf T, \\top      ->  T          (as in x_i^T)\n"
+			. "    \\| y - Xw \\|         ->  ||y - Xw||\n"
+			. "    \\min_w, \\sum_{j=1}   ->  min over w, sum from j=1\n"
+			. "    \\begin{bmatrix} … \\end{bmatrix}  ->  describe the matrix in words, or put the\n"
+			. "                                          rows in a fenced code block\n"
+			. "  A matrix is two-dimensional and this page is a line of text, so an environment cannot\n"
+			. "  survive the conversion — it reaches the student as source either way.\n\n"
 			. "SLIDES:\n" . $text;
 
 		$result = EduAI_Claude::message(
