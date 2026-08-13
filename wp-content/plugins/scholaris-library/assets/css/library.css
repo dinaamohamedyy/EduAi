@@ -225,16 +225,39 @@
 .sl-course__lessons a:hover { color: hsl(var(--sl-brand)); text-decoration: underline; }
 .sl-course__more { margin: var(--sl-space-3xs) 0 0; font-size: var(--sl-step--1); }
 
+/* A deck with no section markers gets the same card and the same row, with a
+   document mark where the number goes. The number is the whole point of the
+   distinction: a counter says "section 1 of several" even when there is one
+   row, so a numbered row of one would claim a structure has_markers() has
+   already refused to invent. Suppressing the counter is what keeps the card
+   honest while it stays identical in every other respect. */
+.sl-course__lessons--whole li::before { content: none; }
+.sl-course__doc { color: hsl(var(--sl-muted)); flex: none; align-self: center; }
+/* The card's own height is set by its content, and a one-row card next to a
+   three-row course would sit short in the same track. Let it fill instead, so
+   the grid reads as one family rather than as courses plus offcuts. */
+.sl-course--single { align-content: start; }
+
 .sl-course__from { margin: var(--sl-space-2xs) 0 0; font-size: var(--sl-step--1); min-width: 0; }
 .sl-course__fromlabel {
   font-family: var(--sl-mono); font-size: 0.66rem; letter-spacing: 0.07em;
   text-transform: uppercase; color: hsl(var(--sl-muted)); margin-right: 0.35rem;
 }
+/* The deck's name when it can no longer be opened, and the standalone card's
+   subject. Full contrast in both cases: the affordance is what is missing, not
+   the information — the same call as a locked lesson title. */
+.sl-course__fromname,
+.sl-course__subject { color: hsl(var(--sl-text)); }
 
 /* ------------------------------------------------------------------ grid -- */
+/* Holds standalone material, which now uses the course card — so it needs the
+   course grid's 300px minimum for the same measured reason: at 280px a 1400px
+   viewport opens a fourth track and the row titles start truncating on the
+   widest screen. The two grids stay separate because this one is the WP loop
+   (search, filters, pagination) and the other is the catalogue tree. */
 .sl-grid {
   display: grid; gap: var(--sl-space-m);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
 }
 
 .sl-card {

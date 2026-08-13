@@ -42,6 +42,26 @@ foreach ( $sl_courses as $sl_course ) {
 		$sl_in_course[ (int) $sl_mid ] = true;
 	}
 }
+
+/*
+ * Does the loop below actually have anything left after the course-attached
+ * decks are skipped? The heading was printed whenever courses existed, so on
+ * this install it announced "Standalone material" above nothing at all —
+ * invisible while loose material was the normal case, and about to be the
+ * normal case itself once every segmentable deck becomes a course. Ask the
+ * same query the loop will walk, so the heading cannot disagree with it.
+ */
+$sl_has_loose = false;
+
+if ( isset( $query ) && $query instanceof WP_Query ) {
+	foreach ( (array) $query->posts as $sl_p ) {
+		$sl_pid = is_object( $sl_p ) ? (int) $sl_p->ID : (int) $sl_p;
+		if ( $sl_pid && ! isset( $sl_in_course[ $sl_pid ] ) ) {
+			$sl_has_loose = true;
+			break;
+		}
+	}
+}
 ?>
 <div class="sl-library" data-sl-library>
 
@@ -182,6 +202,34 @@ foreach ( $sl_courses as $sl_course ) {
 									</a>
 								</p>
 							<?php endif; ?>
+						<?php else : ?>
+							<?php
+							/*
+							 * A course with no lessons rendered as a title, the
+							 * words "0 lessons" and a large empty box — exactly
+							 * the blank the standalone card exists to avoid,
+							 * arrived at from the other direction. Seen on the
+							 * live library the moment a second course appeared.
+							 *
+							 * It gets the same one-row treatment: the course
+							 * page is a real place even before it has lessons,
+							 * so the row is a genuine way in rather than a
+							 * restatement of the count above it.
+							 */
+							?>
+							<ul class="sl-course__lessons sl-course__lessons--whole">
+								<li>
+									<svg class="sl-course__doc" width="11" height="11" viewBox="0 0 24 24"
+										fill="none" stroke="currentColor" stroke-width="2.2"
+										stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+										<path d="M14 3v5h5"/>
+									</svg>
+									<a href="<?php echo esc_url( (string) $sl_course['url'] ); ?>">
+										<?php esc_html_e( 'Open the course', 'scholaris-library' ); ?>
+									</a>
+								</li>
+							</ul>
 						<?php endif; ?>
 
 						<?php
@@ -198,11 +246,32 @@ foreach ( $sl_courses as $sl_course ) {
 								continue;
 							}
 							?>
+							<?php
+							/*
+							 * Link only if the target can actually be opened. The
+							 * decks these courses are built from are trashed once
+							 * segmentation succeeds, so this anchor was resolving
+							 * to HTTP 404 for every visitor — measured, not
+							 * suspected — on the card the owner singled out as the
+							 * design he wants everywhere.
+							 *
+							 * Same rule as the locked lesson a few lines up:
+							 * withhold the anchor, not the information. The deck's
+							 * name is what he recognises because he uploaded it,
+							 * and it stays whether or not the post survives.
+							 */
+							$sl_mlive = is_post_publicly_viewable( (int) $sl_mid )
+								|| current_user_can( 'read_post', (int) $sl_mid );
+							?>
 							<p class="sl-course__from">
 								<span class="sl-course__fromlabel"><?php esc_html_e( 'From', 'scholaris-library' ); ?></span>
-								<a href="<?php echo esc_url( (string) get_permalink( (int) $sl_mid ) ); ?>">
-									<?php echo esc_html( $sl_mtitle ); ?>
-								</a>
+								<?php if ( $sl_mlive ) : ?>
+									<a href="<?php echo esc_url( (string) get_permalink( (int) $sl_mid ) ); ?>">
+										<?php echo esc_html( $sl_mtitle ); ?>
+									</a>
+								<?php else : ?>
+									<span class="sl-course__fromname"><?php echo esc_html( $sl_mtitle ); ?></span>
+								<?php endif; ?>
 							</p>
 						<?php endforeach; ?>
 					</article>
@@ -210,9 +279,21 @@ foreach ( $sl_courses as $sl_course ) {
 			</div>
 		</section>
 
-		<h2 class="sl-courses__title sl-courses__title--loose">
-			<?php esc_html_e( 'Material not yet in a course', 'scholaris-library' ); ?>
-		</h2>
+		<?php
+		/*
+		 * "Material not yet in a course" defined these by what they lack, which
+		 * was fair while loose material was the normal case. Once every deck
+		 * that CAN be segmented becomes a course, the ones left are the ones
+		 * that legitimately cannot be — and a heading naming an absence turns
+		 * a correct refusal by has_markers() into a backlog the owner thinks
+		 * he has to clear. Name the property instead: they stand alone.
+		 */
+		?>
+		<?php if ( $sl_has_loose ) : ?>
+			<h2 class="sl-courses__title sl-courses__title--loose">
+				<?php esc_html_e( 'Standalone material', 'scholaris-library' ); ?>
+			</h2>
+		<?php endif; ?>
 	<?php endif; ?>
 
 	<?php if ( 'yes' === $atts['filters'] ) : ?>
@@ -301,59 +382,85 @@ foreach ( $sl_courses as $sl_course ) {
 				// every lecture a document.
 				$sl_has_video = SL_Meta::has_video( $sl_id );
 				?>
-				<article class="sl-card">
-					<a class="sl-card__thumb" href="<?php the_permalink(); ?>" aria-hidden="true" tabindex="-1">
-						<?php if ( has_post_thumbnail() ) : ?>
-							<?php the_post_thumbnail( 'medium' ); ?>
-						<?php else : ?>
-							<?php
-							// The document's type when there is one, VIDEO when
-							// the material is a lecture recording, and only then
-							// the old DOC fallback. A student should not have to
-							// open a card to find out which it is.
-							$sl_chip = $sl_ext ?: ( $sl_has_video ? __( 'VIDEO', 'scholaris-library' ) : 'DOC' );
-							?>
-							<span class="sl-card__ext"><?php echo esc_html( $sl_chip ); ?></span>
-						<?php endif; ?>
-					</a>
+				<?php
+				/*
+				 * THE SAME CARD AS A COURSE, because the owner asked for exactly
+				 * that — "I want every material I upload to look like this" — and
+				 * because a deck that cannot be segmented is not a lesser kind of
+				 * object, just one with a different unit inside it.
+				 *
+				 * Four zones, matching the course card one for one, each filled
+				 * with what is true of THIS object rather than left blank:
+				 *
+				 *   title  -> title
+				 *   meta   -> "44 pages"          where a course says "3 lessons"
+				 *   body   -> one row, the way in  where a course lists lessons
+				 *   foot   -> its subject          where a course names its deck
+				 *
+				 * The body row deliberately carries a document mark and NOT the
+				 * number 1. has_markers() refuses to fake a sectionless deck into
+				 * a single lesson containing everything; a numbered row of one
+				 * would put that same lie back on the card, in the one place the
+				 * owner actually looks.
+				 */
+				?>
+				<article class="sl-course sl-course--single">
+					<h3 class="sl-course__title">
+						<a href="<?php the_permalink(); ?>"><?php the_title(); ?></a>
+					</h3>
 
-					<div class="sl-card__body">
-						<div class="sl-card__tags">
-							<?php if ( $sl_subjects && ! is_wp_error( $sl_subjects ) ) : ?>
-								<span class="sl-badge sl-badge--brand"><?php echo esc_html( $sl_subjects[0]->name ); ?></span>
-							<?php endif; ?>
-							<?php if ( $sl_types && ! is_wp_error( $sl_types ) ) : ?>
-								<span class="sl-badge"><?php echo esc_html( $sl_types[0]->name ); ?></span>
-							<?php endif; ?>
-						</div>
+					<?php
+					// Mirrors "3 lessons": the same question — how much is in
+					// here — answered in the unit this object actually has.
+					$sl_count = implode( ' · ', array_filter( array(
+						$sl_pages ? sprintf(
+							/* translators: %d: pages */
+							esc_html( _n( '%d page', '%d pages', $sl_pages, 'scholaris-library' ) ),
+							$sl_pages
+						) : '',
+						$sl_has_video ? esc_html__( 'Video', 'scholaris-library' ) : '',
+						$sl_ext,
+					) ) );
+					if ( '' === $sl_count && $sl_types && ! is_wp_error( $sl_types ) ) {
+						$sl_count = $sl_types[0]->name;
+					}
+					?>
+					<?php if ( '' !== $sl_count ) : ?>
+						<p class="sl-course__meta"><?php echo esc_html( $sl_count ); ?></p>
+					<?php endif; ?>
 
-						<h3 class="sl-card__title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h3>
-						<p class="sl-card__excerpt"><?php echo esc_html( wp_trim_words( get_the_excerpt(), 20 ) ); ?></p>
-					</div>
+					<ul class="sl-course__lessons sl-course__lessons--whole">
+						<li>
+							<svg class="sl-course__doc" width="11" height="11" viewBox="0 0 24 24"
+								fill="none" stroke="currentColor" stroke-width="2.2"
+								stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+								<path d="M14 3v5h5"/>
+							</svg>
+							<a href="<?php the_permalink(); ?>">
+								<?php esc_html_e( 'Open the document', 'scholaris-library' ); ?>
+							</a>
+						</li>
+					</ul>
 
-					<div class="sl-card__foot">
-						<span class="sl-card__meta">
-							<?php
-							$sl_bits = array_filter( array(
-								$sl_ext,
-								// Listed alongside the document type rather than
-								// instead of it: a material can carry both, and
-								// the thumb chip only has room for one of them.
-								$sl_has_video ? __( 'Video', 'scholaris-library' ) : '',
-								$sl_pages ? sprintf(
-									/* translators: %d: pages */
-									_n( '%d page', '%d pages', $sl_pages, 'scholaris-library' ),
-									$sl_pages
-								) : '',
-								get_the_date(),
-							) );
-							echo esc_html( implode( ' · ', $sl_bits ) );
-							?>
-						</span>
-						<a class="sl-btn sl-btn--quiet" href="<?php the_permalink(); ?>">
-							<?php esc_html_e( 'Open', 'scholaris-library' ); ?> →
-						</a>
-					</div>
+					<?php
+					// The foot slot a course uses to name the deck it came from.
+					// A standalone material has no parent to name, so it carries
+					// the only provenance it has — leaving the slot empty would
+					// make the card read as a course missing its source.
+					$sl_prov = '';
+					if ( $sl_subjects && ! is_wp_error( $sl_subjects ) ) {
+						$sl_prov = $sl_subjects[0]->name;
+					} elseif ( $sl_types && ! is_wp_error( $sl_types ) ) {
+						$sl_prov = $sl_types[0]->name;
+					}
+					?>
+					<?php if ( '' !== $sl_prov ) : ?>
+						<p class="sl-course__from">
+							<span class="sl-course__fromlabel"><?php esc_html_e( 'Subject', 'scholaris-library' ); ?></span>
+							<span class="sl-course__subject"><?php echo esc_html( $sl_prov ); ?></span>
+						</p>
+					<?php endif; ?>
 				</article>
 			<?php endwhile; ?>
 		</div>
