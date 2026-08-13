@@ -65,6 +65,7 @@ my @checks = (
     [ 'abspath-tripwire-order' => \&check_abspath_tripwires ],
     [ 'admin-bar-offset'       => \&check_admin_bar_offset ],
     [ 'template-root-tokens'   => \&check_template_root_tokens ],
+    [ 'php-root-tokens'        => \&check_php_root_tokens ],
     [ 'nav-breakpoint-parity'  => \&check_nav_breakpoint ],
     [ 'admin-bar-pair'         => \&check_admin_bar_pair ],
     [ 'nowrap-asymmetry'       => \&check_nowrap_asymmetry ],
@@ -1183,20 +1184,221 @@ sub check_abspath_tripwires {
 # value. Matching on the subject rather than anywhere in the selector is what
 # keeps `.eduai-dock .eduai-app { ... var(--eduai-radius-l) ... }` from being
 # blamed on the dock.
-sub check_template_root_tokens {
+# The roots chat.css aliases --eduai-* onto.
+#
+# One reader, because two checks now depend on this list and a second copy of
+# the pattern would let them disagree about what "declared" means — the exact
+# failure the list itself exists to prevent, one level up.
+#
+# Returns ( \%declared, $error ).
+sub eduai_alias_roots {
     my $css = slurp($CHATCSS);
-    my @problems;
 
     # The declaration list: every selector before the block that defines the
     # properties. Anchored on --eduai-brand because that is the first token and
     # the one every other rule ultimately depends on.
     my ($selectors) = $css =~ /((?:^\s*\.[\w-]+\s*,\s*\n)+^\s*\.[\w-]+\s*)\{[^\}]*--eduai-brand:/m;
 
-    unless ( defined $selectors ) {
-        return ("$CHATCSS has no --eduai-brand declaration block — the token list this check reads is gone");
-    }
+    return ( {}, "$CHATCSS has no --eduai-brand declaration block — the token list this check reads is gone" )
+        unless defined $selectors;
 
     my %declared = map { $_ => 1 } $selectors =~ /\.([\w-]+)/g;
+
+    return ( {}, "$CHATCSS declares no roots — the token list parsed to nothing" )
+        unless %declared;
+
+    return ( \%declared, undef );
+}
+
+# Roots printed from PHP rather than from a template file.
+#
+# template-root-tokens reads the templates directory. A fallback — the markup a
+# handler prints when its template is absent — is BY DEFINITION the path that
+# runs when the file that check reads is not there, so the guard and this gap
+# are in complementary places by construction and no amount of care on one
+# reaches the other.
+#
+# Twice now: the archive intro, and the lesson panel's fallback printing
+# `class="eduai-lesson-panel"` against an alias list carrying `.eduai-lesson`.
+# `.eduai-lesson` does not match that class, so every --eduai-* in it resolved
+# to nothing — buttons transparent, text still fine because it inherits from
+# the theme, which is what makes this shape survive a look.
+#
+# Deliberately narrow: the FIRST eduai- class a file prints, normalised to its
+# block (BEM children and modifiers resolve to the root they hang off). A
+# broader scan would fire on strings that are not roots and be tuned out
+# inside a week.
+sub check_php_root_tokens {
+    my ( $declared, $err ) = eduai_alias_roots();
+    return ($err) if $err;
+
+    my @problems;
+    my $scanned = 0;
+
+    for my $dir ( 'wp-content/plugins/eduai-assistant', 'wp-content/plugins/scholaris-library' ) {
+        for my $file ( php_files_under($dir) ) {
+
+            # The templates directory has its own check, which can also see
+            # rules this one cannot.
+            next if $file =~ m{/templates/};
+
+            my $php = slurp($file);
+
+            # Comments stripped first. A comment naming a class it is warning
+            # you NOT to use is prose, not markup — and this check found
+            # exactly that on its first run, in the comment explaining the bug
+            # it was written for. Front-end's rule, arrived at from the other
+            # side: a comment about code that is gone must not carry the
+            # string somebody would search for to find that code.
+            ( my $markup = $php ) =~ s{//[^\n]*}{}g;
+            $markup =~ s{/\*.*?\*/}{}gs;
+
+            my %seen;
+
+            # PER ELEMENT, not per class, and the difference is the whole
+            # correctness of this check. An element carries a list —
+            # `class="eduai-card eduai-login"` — and CSS composition means
+            # only ONE of them has to be the styled root: `.eduai-card`
+            # carries the tokens and `.eduai-login` legitimately has no rules
+            # of its own. Asserting per class reported that perfectly good
+            # login card as broken, twice, on this check's second run.
+            #
+            # So the property is: every element must have at least one class
+            # something styles. The lesson panel's fallback had exactly one
+            # class and nothing styled it, which is the failure this exists
+            # for.
+            for my $attr ( $markup =~ /class="([^"]*eduai-[^"]*)"/g ) {
+                next if $seen{$attr}++;
+
+                # BEM children are out of scope, and not as a concession: a
+                # `__` class is by definition a part of a block declared on an
+                # ancestor, so it inherits that block's tokens and needs no
+                # rules of its own. `eduai-login__actions` is a paragraph
+                # wrapping two buttons and having nothing to say about itself.
+                # The failure this check exists for was a ROOT — one class, no
+                # `__`, nothing styling it.
+                my @eduai = grep { /^eduai-/ && !/__/ } split /\s+/, $attr;
+                next unless @eduai;
+
+                ++$scanned;
+
+                next if grep { styled_anywhere( strip_bem($_) ) } @eduai;
+
+                push @problems,
+                    "$file prints class=\"$attr\" and no stylesheet we ship defines any of those classes — that element renders with no rules";
+            }
+        }
+    }
+
+    return ("no PHP outside the templates directory prints eduai- markup — this check would pass vacuously")
+        unless $scanned;
+
+    return @problems;
+}
+
+# Does any stylesheet we ship define this block?
+#
+# Every plugin stylesheet, not just chat.css: an admin screen is styled from
+# admin.css and a library page from library.css, and asserting against one
+# sheet would report perfectly good markup as dead.
+{
+    my @sheets;
+
+    sub styled_anywhere {
+        my ($block) = @_;
+
+        unless (@sheets) {
+            for my $dir ( 'wp-content/plugins/eduai-assistant/assets/css',
+                          'wp-content/plugins/scholaris-library/assets/css' ) {
+                my $abs = File::Spec->catdir( $root, $dir );
+                opendir( my $dh, $abs ) or next;
+                for my $entry ( sort readdir($dh) ) {
+                    next unless $entry =~ /\.css$/;
+                    push @sheets, slurp("$dir/$entry");
+                }
+                closedir($dh);
+            }
+        }
+
+        for my $sheet (@sheets) {
+            return 1 if $sheet =~ /\.\Q$block\E(?:__|--)?[\s,:.\{\[>+~]/;
+        }
+
+        return 0;
+    }
+}
+
+# `eduai-lesson__bar` and `eduai-btn--primary` both hang off a block that is
+# what a stylesheet actually declares.
+sub strip_bem {
+    my ($class) = @_;
+    $class =~ s/(?:__|--).*$//;
+    return $class;
+}
+
+# Does chat.css style this block with --eduai-* values?
+#
+# Same subject test as check_template_root_tokens: the subject of a selector is
+# its last compound, so a rule for `.eduai-app .thing` is about `.thing`.
+sub chatcss_reads_tokens_for {
+    my ($block) = @_;
+    my $css     = slurp($CHATCSS);
+
+    while ( $css =~ /([^\{\}]+)\{([^\}]*)\}/g ) {
+        my ( $selector, $body ) = ( $1, $2 );
+
+        next unless $body =~ /var\(\s*--eduai-/;
+
+        for my $one ( split /,/, $selector ) {
+            $one =~ s/^\s+|\s+$//g;
+            my ($subject) = $one =~ /([^\s>+~]+)$/;
+            next unless defined $subject;
+            return 1 if $subject =~ /^\.\Q$block\E(?:__|--|[^\w-]|$)/;
+        }
+    }
+
+    return 0;
+}
+
+# Every .php under a directory, recursively.
+sub php_files_under {
+    my ($dir) = @_;
+    my @out;
+    my @queue = ( File::Spec->catdir( $root, $dir ) );
+
+    while ( my $current = shift @queue ) {
+        opendir( my $dh, $current ) or next;
+
+        for my $entry ( sort readdir($dh) ) {
+            next if $entry eq '.' || $entry eq '..';
+
+            my $path = File::Spec->catfile( $current, $entry );
+
+            if ( -d $path ) {
+                push @queue, $path;
+            }
+            elsif ( $entry =~ /\.php$/ ) {
+                my $rel = $path;
+                $rel =~ s/^\Q$root\E[\\\/]//;
+                $rel =~ s/\\/\//g;
+                push @out, $rel;
+            }
+        }
+
+        closedir($dh);
+    }
+
+    return @out;
+}
+
+sub check_template_root_tokens {
+    my $css = slurp($CHATCSS);
+    my @problems;
+
+    my ( $declared_ref, $err ) = eduai_alias_roots();
+    return ($err) if $err;
+
+    my %declared = %{$declared_ref};
 
     opendir( my $dh, File::Spec->catdir( $root, $TEMPLATES ) )
         or return ("cannot read $TEMPLATES");

@@ -256,7 +256,10 @@ class EduAI_Students {
 	 * @param string $search Current search term.
 	 */
 	private static function render_filters( string $role, string $search ): void {
-		echo '<form method="get" class="eduai-students__filters">';
+		// No eduai- class here on purpose: nothing styles one, and a class
+		// that no stylesheet defines is markup pretending to be styled. This
+		// is a wp-admin screen, so it takes wp-admin's own furniture.
+		echo '<form method="get" class="alignleft actions">';
 		printf( '<input type="hidden" name="page" value="%s">', esc_attr( self::SLUG ) );
 
 		printf(
