@@ -136,8 +136,16 @@ final class EduAI_Assistant {
 			return;
 		}
 
+		// `eduai-lesson`, NOT `eduai-lesson-panel`. The token list in chat.css
+		// aliases `--eduai-*` onto each template root by exact class, and
+		// `.eduai-lesson` does not match `class="eduai-lesson-panel"` — so the
+		// name I first used would have rendered this fallback with every
+		// token resolving to nothing, which is the alias-scope bug that list
+		// exists to prevent. Latent, because it only shows when the template
+		// is absent, and invisible to template-root-tokens, which reads the
+		// templates directory and never sees markup printed from PHP.
 		printf(
-			'<p class="eduai-lesson-panel"><a href="%s">%s</a> &middot; <a href="%s">%s</a></p>',
+			'<p class="eduai-lesson"><a href="%s">%s</a> &middot; <a href="%s">%s</a></p>',
 			esc_url( $eduai_summarise_url ),
 			esc_html(
 				sprintf(
