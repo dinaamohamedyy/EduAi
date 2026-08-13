@@ -141,6 +141,62 @@ class EduAI_Lessons {
 	}
 
 	/**
+	 * Did the text come out of the PDF as words, or as run-together characters?
+	 *
+	 * Some decks embed fonts that carry no space glyph, and the extractor then
+	 * produces `DeepLearningforNaturalLanguage` and
+	 * `\Writeajokeaboutdeepneuralnetworks`. It is not truncated and not
+	 * mis-encoded — every character is present and correct, so nothing else in
+	 * this pipeline notices. It is simply not language any more.
+	 *
+	 * That matters more here than anywhere else in the product. Retrieval can
+	 * survive it, because a FULLTEXT match on a mangled passage merely fails to
+	 * fire. A lesson cannot: the model is asked to write prose FROM this, and
+	 * given run-together text it will invent the word boundaries and produce
+	 * fluent, confident, wrong teaching — which is the worst output this
+	 * pipeline can generate, and indistinguishable from good output to anyone
+	 * who has not opened the PDF.
+	 *
+	 * Measured on the two decks in this install:
+	 *
+	 *   linear-regression.pdf     0.5% of words over 20 chars, mean 5.1
+	 *   lec_01_introduction.pdf  16.8% of words over 20 chars, mean 9.0
+	 *
+	 * English averages about five characters a word, so mean length is the
+	 * clearer signal and the long-word share is the corroboration. The
+	 * threshold sits between the two by a wide margin in both measures, which
+	 * is the most a two-sample calibration can honestly claim — it is set to
+	 * catch the failure, not to find the boundary.
+	 *
+	 * @param string[] $slides Result of slides().
+	 * @return bool
+	 */
+	public static function looks_legible( array $slides ): bool {
+		$words = preg_split( '/\s+/', implode( ' ', $slides ), -1, PREG_SPLIT_NO_EMPTY );
+
+		if ( count( $words ) < 50 ) {
+			return false;
+		}
+
+		$long  = 0;
+		$chars = 0;
+
+		foreach ( $words as $word ) {
+			$len    = mb_strlen( $word );
+			$chars += $len;
+
+			if ( $len > 20 ) {
+				++$long;
+			}
+		}
+
+		$mean  = $chars / count( $words );
+		$share = $long / count( $words );
+
+		return $mean < 7.0 && $share < 0.05;
+	}
+
+	/**
 	 * Is this slide about the course rather than the subject?
 	 *
 	 * @param string $slide Slide text.
@@ -168,6 +224,7 @@ class EduAI_Lessons {
 			'slides'    => count( $slides ),
 			'dropped'   => 0,
 			'paginated' => self::looks_paginated( $post_id, $slides ),
+			'legible'   => self::looks_legible( $slides ),
 			'markers'   => 0,
 		);
 
@@ -383,6 +440,16 @@ class EduAI_Lessons {
 			return new WP_Error(
 				'eduai_not_paginated',
 				__( 'The text of that lecture did not come out one block per page, so the section boundaries cannot be trusted. Nothing was created.', 'eduai' )
+			);
+		}
+
+		// Refused before a single token is spent. Writing lessons from
+		// run-together text produces fluent invented teaching, which is worse
+		// than no lesson and cannot be told apart from a good one downstream.
+		if ( ! $segmented['legible'] ) {
+			return new WP_Error(
+				'eduai_illegible',
+				__( 'The words in that PDF ran together when the text was extracted, so lessons written from it would be guesswork. Nothing was created — the file needs re-exporting, or a copy with a text layer.', 'eduai' )
 			);
 		}
 
