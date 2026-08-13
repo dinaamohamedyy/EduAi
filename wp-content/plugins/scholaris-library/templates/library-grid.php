@@ -248,17 +248,27 @@ if ( isset( $query ) && $query instanceof WP_Query ) {
 							?>
 							<?php
 							/*
-							 * Link only if the target can actually be opened. The
-							 * decks these courses are built from are trashed once
-							 * segmentation succeeds, so this anchor was resolving
-							 * to HTTP 404 for every visitor — measured, not
-							 * suspected — on the card the owner singled out as the
-							 * design he wants everywhere.
+							 * Link only if the target can actually be opened.
+							 * Normally it can: the pipeline reads a deck, writes
+							 * lessons and leaves the deck alone — which is why a
+							 * lesson carries _eduai_source_material at all — so
+							 * this anchor is a working route from a lesson back
+							 * to its source and must stay one.
+							 *
+							 * It is a condition, not a constant. A deck that has
+							 * been trashed or restricted 404s for visitors, and
+							 * that is reached by someone deleting it, not by
+							 * segmentation. I first wrote this comment claiming
+							 * segmentation trashed the deck; it does not, and a
+							 * comment asserting a cause is exactly as misleading
+							 * as code doing the wrong thing — it made a working
+							 * conditional read as a feature removal.
 							 *
 							 * Same rule as the locked lesson a few lines up:
-							 * withhold the anchor, not the information. The deck's
-							 * name is what he recognises because he uploaded it,
-							 * and it stays whether or not the post survives.
+							 * withhold the anchor, not the information. Verified
+							 * both ways rather than on the state that happened to
+							 * be present — trashed post: false, name only;
+							 * published post: true, anchor.
 							 */
 							$sl_mlive = is_post_publicly_viewable( (int) $sl_mid )
 								|| current_user_can( 'read_post', (int) $sl_mid );
