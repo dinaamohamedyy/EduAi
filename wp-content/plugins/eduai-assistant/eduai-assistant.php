@@ -128,6 +128,26 @@ final class EduAI_Assistant {
 		$eduai_ask_url      = eduai_ask_url( $scope['id'] );
 		$eduai_summarise_url = eduai_summarise_url( $scope['id'] );
 
+		/*
+		 * Whether the slides can actually be served, so the header does not
+		 * promise what the frame cannot show.
+		 *
+		 * The owner screenshotted a lesson reading "Slides 22–32 of 44" above
+		 * an empty <object> fallback: the source material had been trashed,
+		 * so the stream 404s while the meta still describes a range. Saying
+		 * something true and showing nothing is the shape we keep removing —
+		 * the range is real, the document is not reachable, and only the
+		 * server can tell the difference.
+		 *
+		 * Additive: the template is front-end's and reads the meta directly
+		 * today, so it keeps working untouched and adopts this when they are
+		 * ready. Nothing here decides how to degrade — that is their call.
+		 */
+		$eduai_source_material = (int) get_post_meta( $scope['id'], '_eduai_source_material', true );
+		$eduai_slides_ready    = $eduai_source_material
+			&& 'study_material' === get_post_type( $eduai_source_material )
+			&& 'publish' === get_post_status( $eduai_source_material );
+
 		$template = EDUAI_DIR . 'templates/lesson-panel.php';
 
 		// The markup is front-end's file. If it is ever absent the two links
