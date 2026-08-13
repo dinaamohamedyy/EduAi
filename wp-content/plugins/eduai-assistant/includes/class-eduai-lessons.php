@@ -789,9 +789,44 @@ class EduAI_Lessons {
 			return $result;
 		}
 
-		$html = EduAI_REST::to_html( (string) $result['text'] );
+		$html = EduAI_REST::to_html( self::breakable( (string) $result['text'] ) );
 
 		return $html . self::provenance( $section, $post_id );
+	}
+
+	/**
+	 * Let the browser break lines where it needs to.
+	 *
+	 * The model reaches for typographically "correct" characters that a text
+	 * generator has no way to know the consequences of: NARROW NO-BREAK SPACE
+	 * and NON-BREAKING HYPHEN. Both are invisible in the output and both weld a
+	 * phrase into a single token no browser may ever wrap.
+	 *
+	 * Measured across three lesson bodies: 51 narrow no-break spaces and 35
+	 * non-breaking hyphens, making `Multi‑Variable` and `linear‑regression`
+	 * unbreakable. Nothing overflows today — the widest is 166px in a 317px
+	 * column — but that margin is a typographic accident rather than a
+	 * decision, and a compound like `maximum‑likelihood‑estimation` is twice
+	 * the length of anything currently there.
+	 *
+	 * A substitution, not a judgement, which is why it lives in code rather
+	 * than in the prompt: one character in, one character out, no meaning
+	 * either way. The characters that DO carry meaning are deliberately left
+	 * alone — subscripts, the partial-differential sign, Greek letters, the en
+	 * dash. They render correctly and they say something.
+	 *
+	 * @param string $text Model output.
+	 */
+	private static function breakable( string $text ): string {
+		return strtr(
+			$text,
+			array(
+				"\u{2011}" => '-',  // NON-BREAKING HYPHEN
+				"\u{202F}" => ' ',  // NARROW NO-BREAK SPACE
+				"\u{00A0}" => ' ',  // NO-BREAK SPACE — same class, not yet observed
+				"\u{2060}" => '',   // WORD JOINER — invisible and purely welding
+			)
+		);
 	}
 
 	/**
