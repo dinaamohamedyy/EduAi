@@ -713,6 +713,27 @@ class EduAI_Lessons {
 			// on the first attempt, 9 of the 12 survivors were pointers.
 			. "- Do not narrate the slides. Never write \"the slide explains\", \"the slide indicates\", \"the slide provides\", \"the slides note\" or \"the lecture above\": this text sits beside the slides, so a sentence ABOUT a slide reads as being about whichever one the student is looking at. State the material directly — \"least squares minimises the sum of squared residuals\", never \"the slide explains least squares\".\n"
 			. "- Do keep referring to the slides when sending the reader TO them for something you cannot reproduce — \"the exact expression is on the slide\" is exactly right, because the viewer beside this text is open on it.\n"
+			// Two abstract rounds of this moved the count from 9 to 10, i.e.
+			// nothing. These are real sentences from real output, supplied by
+			// the person who read them beside the viewer. Concrete
+			// before/after is a different instrument from a rule, and the
+			// doubled reference is one neither of us saw as a category until
+			// the sentences were read in context rather than counted.
+			. "\nExamples, from real output on this deck:\n"
+			. "  NO   \"The slide indicates that these equations can be solved by Gaussian elimination.\"\n"
+			. "  YES  \"These equations can be solved by Gaussian elimination.\"\n"
+			. "  NO   \"The slide makes the claim that the solutions obtained this way are minimisers.\"\n"
+			. "  YES  \"The solutions obtained this way are minimisers.\"\n"
+			. "       (\"makes the claim\" is worse than the deixis: it distances you from the\n"
+			. "        mathematics, so a student cannot tell whether the result is established or\n"
+			. "        merely being reported. The lecture states it; state it.)\n"
+			. "  NO   \"The slide indicates that the exact steps and final expression for w are shown\n"
+			. "        on the slide; consult it for the derivation.\"\n"
+			. "  YES  \"The exact steps and final expression for w are on the slide.\"\n"
+			. "       (Never narrate a slide AND point at it in one sentence — that names the same\n"
+			. "        slide twice and says nothing with the first mention.)\n"
+			. "  YES  \"The exact expression is on the slide; copy it verbatim when reviewing.\"\n"
+			. "       (Keep these. Beside the viewer the reader can act on it immediately.)\n"
 			. "- Where the extraction has lost something — a formula that was an image, a symbol that came through as stray letters — say that the original carries a formula at this point and should be consulted, rather than reconstructing it. A guessed formula is the worst thing this can produce.\n"
 			. "- Ignore anything administrative: assignment deadlines, office hours, forum threads, reading links.\n"
 			. "- Open with one short paragraph on what this section is about. Then the substance, under `##` headings that follow the lecture's own order.\n"
