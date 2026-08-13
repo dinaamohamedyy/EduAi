@@ -429,7 +429,23 @@ class EduAI_Lessons {
 				'post_type'    => tutor()->lesson_post_type,
 				'post_status'  => 'publish',
 				'post_title'   => $section['title'],
-				'post_content' => $body,
+				/*
+				 * wp_slash() because wp_insert_post() UNSLASHES what it is
+				 * given — it expects superglobal-shaped input, and content
+				 * assembled in PHP arrives already unslashed. Every backslash
+				 * in the body was therefore being eaten on the way to the
+				 * database.
+				 *
+				 * That is worse than it sounds for this content. Maths the
+				 * renderer could not convert survives as LaTeX, and losing its
+				 * backslash turns `\hat{y}` into `hat{y}` and `\dots` into
+				 * `dots` — un-rendered LaTeX reads as "a formula that failed",
+				 * while the stripped form reads as a typo, or as an English
+				 * word in the middle of an equation. 55 occurrences reached
+				 * students across three lessons before front-end read the page
+				 * and found it.
+				 */
+				'post_content' => wp_slash( $body ),
 				'post_parent'  => $topic_id,
 				'menu_order'   => (int) $section['order'],
 			), true );
