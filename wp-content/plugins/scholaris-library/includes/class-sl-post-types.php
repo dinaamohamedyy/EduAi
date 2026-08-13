@@ -22,6 +22,7 @@ class SL_Post_Types {
 		add_filter( 'manage_study_material_posts_columns', array( __CLASS__, 'columns' ) );
 		add_action( 'manage_study_material_posts_custom_column', array( __CLASS__, 'column_content' ), 10, 2 );
 		add_action( 'pre_get_posts', array( __CLASS__, 'hide_fixtures' ) );
+		add_filter( 'wp_count_posts', array( __CLASS__, 'discount_fixtures' ), 10, 2 );
 	}
 
 	/**
@@ -45,9 +46,81 @@ class SL_Post_Types {
 	 *
 	 * @param WP_Query $query Query about to run.
 	 */
+	/**
+	 * Take the hidden fixtures out of the counts as well as the rows.
+	 *
+	 * `wp_count_posts()` counts by status in SQL and knows nothing about
+	 * meta, so hiding rows alone would print "All (6)" above three lines.
+	 * That is the count-disagrees-with-the-list bug from the console strip,
+	 * and on this screen it would read as the thing he is already angry
+	 * about: material that is there one moment and gone the next.
+	 *
+	 * One subtraction, from one flag, so the number and the list cannot say
+	 * different things.
+	 *
+	 * @param object $counts Counts by status.
+	 * @param string $type   Post type.
+	 */
+	public static function discount_fixtures( $counts, $type ) {
+		if ( 'study_material' !== $type || ! is_admin() ) {
+			return $counts;
+		}
+
+		global $wpdb, $pagenow;
+
+		if ( 'edit.php' !== $pagenow ) {
+			return $counts;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT p.post_status, COUNT(*) AS n
+				 FROM {$wpdb->posts} p
+				 INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = %s
+				 WHERE p.post_type = 'study_material'
+				 GROUP BY p.post_status",
+				self::FIXTURE_META
+			)
+		);
+
+		foreach ( (array) $rows as $row ) {
+			$status = $row->post_status;
+
+			if ( isset( $counts->{$status} ) ) {
+				$counts->{$status} = max( 0, (int) $counts->{$status} - (int) $row->n );
+			}
+		}
+
+		return $counts;
+	}
+
 	public static function hide_fixtures( $query ): void {
-		if ( is_admin() || ! $query instanceof WP_Query ) {
+		if ( ! $query instanceof WP_Query ) {
 			return;
+		}
+
+		/*
+		 * In wp-admin this applies to ONE screen: the study_material list.
+		 *
+		 * The reason is not tidiness. Our own harnesses create these fixtures
+		 * on the owner's live stack — `download-gate.sh` recreated all three
+		 * twenty minutes after he emptied his library — and three "Gate test"
+		 * rows reappearing in his list looks exactly like something undoing
+		 * his work. He has already said as much about his courses.
+		 *
+		 * Scoped by $pagenow rather than get_current_screen(), which is not
+		 * reliably set when pre_get_posts runs, and to the MAIN query only —
+		 * a metabox, an autocomplete or a harness query on this screen must
+		 * still be able to find a fixture by asking for it. Hidden from the
+		 * list he reads, not from the code that needs them.
+		 */
+		if ( is_admin() ) {
+			global $pagenow;
+
+			if ( 'edit.php' !== $pagenow || ! $query->is_main_query() ) {
+				return;
+			}
 		}
 
 		$types = (array) $query->get( 'post_type' );
