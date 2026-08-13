@@ -27,6 +27,7 @@ require_once SL_DIR . 'includes/class-sl-meta.php';
 require_once SL_DIR . 'includes/class-sl-templates.php';
 require_once SL_DIR . 'includes/class-sl-library.php';
 require_once SL_DIR . 'includes/class-sl-private.php';
+require_once SL_DIR . 'includes/class-sl-onboarding.php';
 require_once SL_DIR . 'includes/class-sl-catalog.php';
 require_once SL_DIR . 'includes/class-sl-bank.php';
 require_once SL_DIR . 'includes/class-sl-console.php';
@@ -43,6 +44,7 @@ final class Scholaris_Library {
 		SL_Templates::init();
 		SL_Library::init();
 		SL_Private::init();
+		SL_Onboarding::init();
 		SL_Catalog::init();
 		SL_Bank::init();
 		SL_Console::init();
