@@ -1243,6 +1243,37 @@ class EduAI_REST {
 		// below touches whitespace or line structure, so the alignment a fence
 		// exists to preserve survives the rewrite.
 
+		/*
+		 * Environments are lifted out whole and put back untouched.
+		 *
+		 * `\begin{bmatrix} a & b \\ c & d \end{bmatrix}` has no faithful
+		 * plain-text rendering — a matrix is a two-dimensional thing and this
+		 * function produces a line — so the docblock's rule applies: leave
+		 * what you cannot convert alone.
+		 *
+		 * Except it was NOT leaving it alone. Measured: the row separator
+		 * `\\` was being eaten by the trailing-backslash cleanup, so a matrix
+		 * arrived with its rows silently joined. That is worse than either
+		 * option — the student cannot read it AND cannot copy it into
+		 * anything that could. Intact LaTeX is at least recognisable and
+		 * paste-able; half-eaten LaTeX is neither.
+		 *
+		 * The real fix is upstream — a model told not to emit environments
+		 * will not — but this is the boundary, and the boundary should not
+		 * make things worse than it found them.
+		 */
+		$environments = array();
+
+		$text = preg_replace_callback(
+			'/\\\\begin\{([a-z*]+)\}.*?\\\\end\{\1\}/s',
+			static function ( $m ) use ( &$environments ) {
+				$token                  = 'EDUAIENV' . count( $environments ) . 'ENDENV';
+				$environments[ $token ] = $m[0];
+				return $token;
+			},
+			$text
+		) ?? $text;
+
 		// Innermost-first, repeated: \frac{a^{2}}{b} has nested braces, and a
 		// single pass of a non-nesting pattern would leave the outer command
 		// behind. Three passes covers any nesting depth a student-level
@@ -1324,7 +1355,17 @@ class EduAI_REST {
 			'\\lambda' => 'lambda', '\\mu' => 'mu', '\\pi' => 'pi',
 			'\\omega' => 'omega', '\\Delta' => 'delta', '\\sum' => 'sum',
 			'\\int' => 'integral', '\\partial' => 'd',
+			// Sizing hints carry no meaning once the glyphs are plain, and
+			// \left/\right were already stripped for exactly that reason —
+			// \bigl and \bigr are the same instruction at a fixed size.
+			// Observed: \bigl ×2, \bigr ×2. The rest of the family joins them
+			// because dropping a sizing hint has one honest answer.
+			'\\bigl' => '', '\\bigr' => '', '\\Bigl' => '', '\\Bigr' => '',
+			'\\bigg' => '', '\\Bigg' => '', '\\big' => '', '\\Big' => '',
 			'\\left' => '', '\\right' => '',
+			// Spelled out, matching the Greek letters above rather than
+			// inventing "grad": this map's convention is the symbol's name.
+			'\\nabla' => 'nabla',
 			'\\,' => ' ', '\\;' => ' ', '\\!' => '', '\\quad' => '  ', '\\qquad' => '    ',
 		);
 		$text = strtr( $text, $symbols );
@@ -1340,6 +1381,11 @@ class EduAI_REST {
 		// practice these models emit \(…\), which is handled above and carries
 		// no such ambiguity.
 		$text = preg_replace( '/\$\$([^\n$]+)\$\$/', '$1', $text ) ?? $text;
+
+		// Environments back, byte-for-byte as they arrived.
+		if ( $environments ) {
+			$text = strtr( $text, $environments );
+		}
 
 		return $text;
 	}
