@@ -85,6 +85,10 @@ class SL_Private {
 
 		add_action( 'template_redirect', array( __CLASS__, 'handle_stream' ) );
 
+		// The seam the placement work left open: WordPress kept publishing the
+		// pre-move path for files Apache is configured to refuse.
+		add_filter( 'wp_get_attachment_url', array( __CLASS__, 'filter_attachment_url' ), 10, 2 );
+
 		// The upgrade path. activate() covers a fresh install, but a plugin
 		// that is ALREADY ACTIVE when new code arrives never fires it — which
 		// is the deploy shape for every existing site, including this one.
@@ -521,14 +525,81 @@ class SL_Private {
 	 *
 	 * @param int $material_id Material.
 	 */
-	public static function stream_url( int $material_id ): string {
-		return add_query_arg(
-			array(
-				'sl_stream' => $material_id,
-				'_wpnonce'  => wp_create_nonce( 'sl_stream_' . $material_id ),
-			),
-			home_url( '/' )
-		);
+	public static function stream_url( int $material_id, int $attachment_id = 0 ): string {
+		$args = array( 'sl_stream' => $material_id );
+
+		// Naming the attachment is not optional detail — the material-only
+		// form resolves the VIDEO first, so a material carrying both a deck
+		// and a recording would serve the recording for a request meant for
+		// the PDF. Every caller that knows which file it wants should say so.
+		if ( $attachment_id > 0 ) {
+			$args['sl_att'] = $attachment_id;
+		}
+
+		$args['_wpnonce'] = wp_create_nonce( 'sl_stream_' . $material_id . '_' . $attachment_id );
+
+		return add_query_arg( $args, home_url( '/' ) );
+	}
+
+	/**
+	 * The gated URL for one attachment, or '' if it does not need one.
+	 *
+	 * This is the seam the placement work left open. Files were moved into a
+	 * denied directory and every WordPress surface went on publishing the old
+	 * path: `wp_get_attachment_url()` handed out
+	 * `/wp-content/uploads/scholaris-private/x.mp4`, Apache refused it exactly
+	 * as designed, and the owner's own media library filled up with files he
+	 * could not open. The upload worked; everything after it did not.
+	 *
+	 * Deliberately NOT a rewrite to some other direct path — that would trade
+	 * a broken route for an ungated one, which is the problem the placement
+	 * existed to remove. It returns the streaming route, which carries a nonce
+	 * and re-gates at the endpoint.
+	 *
+	 * Must never call wp_get_attachment_url(): this is filtered onto it.
+	 *
+	 * @param int $attachment_id Attachment.
+	 */
+	public static function attachment_stream_url( int $attachment_id ): string {
+		$attachment_id = (int) $attachment_id;
+
+		if ( ! $attachment_id ) {
+			return '';
+		}
+
+		$path = get_attached_file( $attachment_id );
+
+		// Only files we actually placed. Everything else keeps the ordinary
+		// uploads URL, which works and is cheaper.
+		if ( ! $path || ! self::is_private( (string) $path ) ) {
+			return '';
+		}
+
+		$material_id = (int) wp_get_post_parent_id( $attachment_id );
+
+		if ( ! $material_id || 'study_material' !== get_post_type( $material_id ) ) {
+			return '';
+		}
+
+		return self::stream_url( $material_id, $attachment_id );
+	}
+
+	/**
+	 * Put every published attachment URL on the gated route.
+	 *
+	 * `wp_get_attachment_url` is the base that the others derive from —
+	 * `wp_prepare_attachment_for_js()`, which is what the media modal
+	 * actually consumes, reads it for `url` — so filtering it covers the
+	 * modal, Attachment Details' download link, the block editor's insert and
+	 * anything else that asks WordPress where a file lives.
+	 *
+	 * @param string $url           Resolved URL.
+	 * @param int    $attachment_id Attachment.
+	 */
+	public static function filter_attachment_url( $url, $attachment_id ) {
+		$gated = self::attachment_stream_url( (int) $attachment_id );
+
+		return $gated ?: $url;
 	}
 
 	/**
@@ -549,17 +620,42 @@ class SL_Private {
 
 		$material_id = absint( wp_unslash( $_GET['sl_stream'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$nonce       = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+		$wanted      = isset( $_GET['sl_att'] ) ? absint( wp_unslash( $_GET['sl_att'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-		if ( ! wp_verify_nonce( $nonce, 'sl_stream_' . $material_id ) ) {
+		// The attachment is INSIDE the nonce, so a valid link for the deck
+		// cannot be edited into a link for the recording — the id is signed,
+		// not merely passed.
+		if ( ! wp_verify_nonce( $nonce, 'sl_stream_' . $material_id . '_' . $wanted ) ) {
 			wp_die( esc_html__( 'That link has expired. Reload the page and try again.', 'scholaris-library' ), '', array( 'response' => 403 ) );
 		}
 
-		if ( 'study_material' !== get_post_type( $material_id ) || 'publish' !== get_post_status( $material_id ) ) {
+		/*
+		 * `publish` is not the only legitimate state, and requiring it broke
+		 * the case this route now has to serve.
+		 *
+		 * A material is a DRAFT for the whole time an editor is building it —
+		 * create, upload the video, preview it, then save. The media modal
+		 * asks for that file before publish exists, and demanding published
+		 * status 404s the owner on his own upload seconds after making it.
+		 * Measured: material 174, draft, attachment 175, and the file he
+		 * reported as "cannot play".
+		 *
+		 * So: published for everyone the access level admits, or any state
+		 * for somebody who may edit it. That does not widen anything — a
+		 * person who can edit the material can already read its file through
+		 * the editor, and a draft is not visible to anyone else.
+		 */
+		$may_edit = current_user_can( 'edit_post', $material_id );
+
+		if ( 'study_material' !== get_post_type( $material_id )
+			|| ( 'publish' !== get_post_status( $material_id ) && ! $may_edit ) ) {
 			wp_die( esc_html__( 'Not found.', 'scholaris-library' ), '', array( 'response' => 404 ) );
 		}
 
-		// The same gate as the download handler. One access rule, two ways out.
-		if ( ! SL_Meta::can_download( $material_id ) ) {
+		// The same gate as the download handler. One access rule, two ways
+		// out — and the editor of the material is admitted to it regardless,
+		// which is the same capability that let them attach the file.
+		if ( ! $may_edit && ! SL_Meta::can_download( $material_id ) ) {
 			wp_die( esc_html__( 'This material is available to signed-in students.', 'scholaris-library' ), '', array( 'response' => 403 ) );
 		}
 
@@ -572,10 +668,22 @@ class SL_Private {
 			wp_die( esc_html( $secured->get_error_message() ), '', array( 'response' => 500 ) );
 		}
 
-		$attachment_id = (int) get_post_meta( $material_id, '_scholaris_video_id', true );
+		if ( $wanted ) {
+			// Named explicitly. Verified to belong to THIS material rather
+			// than trusted from the URL: the nonce proves the link was issued
+			// by us, and this proves it was issued for this material — a
+			// signed link is not an access decision on its own.
+			if ( (int) wp_get_post_parent_id( $wanted ) !== $material_id ) {
+				wp_die( esc_html__( 'Not found.', 'scholaris-library' ), '', array( 'response' => 404 ) );
+			}
 
-		if ( ! $attachment_id ) {
-			$attachment_id = (int) get_post_meta( $material_id, '_scholaris_file_id', true );
+			$attachment_id = $wanted;
+		} else {
+			$attachment_id = (int) get_post_meta( $material_id, '_scholaris_video_id', true );
+
+			if ( ! $attachment_id ) {
+				$attachment_id = (int) get_post_meta( $material_id, '_scholaris_file_id', true );
+			}
 		}
 
 		$path = $attachment_id ? get_attached_file( $attachment_id ) : '';

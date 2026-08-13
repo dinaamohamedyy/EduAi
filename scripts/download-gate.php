@@ -199,5 +199,23 @@ printf( "PERMALINK_PUBLIC=%s\n", get_permalink( $public ) );
  * Emitted for BOTH documents. The members URL is the defect; the public one is
  * the control that stops "refuse everything" from scoring full marks.
  */
-printf( "FILE_MEMBERS=%s\n", wp_get_attachment_url( (int) get_post_meta( $members, '_scholaris_file_id', true ) ) );
-printf( "FILE_PUBLIC=%s\n", wp_get_attachment_url( (int) get_post_meta( $public, '_scholaris_file_id', true ) ) );
+/*
+ * The bytes' address on disk, derived from the PATH.
+ *
+ * These two feed the assertions that the file itself is refused — "the bytes
+ * are served directly from wp-content/uploads, so the nonce handler is
+ * decoration". That question is about the direct path, and
+ * wp_get_attachment_url() was only standing in for it: since the media-library
+ * fix it returns the gated streaming route for placed files, so these checks
+ * would have re-tested the gate they already test while the direct path went
+ * unexamined. The harness would have gone green having stopped asking.
+ */
+$sl_uploads  = wp_upload_dir();
+$sl_file_url = static function ( $material_id ) use ( $sl_uploads ) {
+	$path = (string) get_attached_file( (int) get_post_meta( $material_id, '_scholaris_file_id', true ) );
+
+	return $path ? str_replace( $sl_uploads['basedir'], $sl_uploads['baseurl'], $path ) : '';
+};
+
+printf( "FILE_MEMBERS=%s\n", $sl_file_url( $members ) );
+printf( "FILE_PUBLIC=%s\n", $sl_file_url( $public ) );

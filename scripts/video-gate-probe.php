@@ -95,7 +95,27 @@ update_post_meta( $post_id, '_scholaris_video_source', 'file' );
 
 printf( "POST_VIDEO=%d\n", $post_id );
 printf( "VIDEO_ID=%d\n", $video_id );
-printf( "RAW_URL=%s\n", wp_get_attachment_url( $video_id ) );
+/*
+ * Derived from the PATH, not from wp_get_attachment_url().
+ *
+ * This value means "the address the bytes sit at on disk", and the assertion
+ * built on it is that Apache refuses that address. wp_get_attachment_url() was
+ * only ever a proxy for it — and as of the media-library fix it is filtered to
+ * return the gated streaming route for placed files, so the harness would have
+ * been asking whether the gated route refuses anonymous callers, which the
+ * check above already covers, while the direct path went untested.
+ *
+ * The failure was loud (an unset shell variable, because the streaming URL
+ * carries `&` and `?`), and that is luck: a proxy that silently starts
+ * answering a different question is the shape this project keeps finding.
+ */
+$sl_uploads = wp_upload_dir();
+$sl_path    = (string) get_attached_file( $video_id );
+
+printf(
+	"RAW_URL=%s\n",
+	str_replace( $sl_uploads['basedir'], $sl_uploads['baseurl'], $sl_path )
+);
 printf( "ON_DISK=%s\n", (string) get_attached_file( $video_id ) );
 printf( "SIZE=%d\n", (int) @filesize( (string) get_attached_file( $video_id ) ) );
 printf( "MARKER_OFFSET=%d\n", 1500000 );
