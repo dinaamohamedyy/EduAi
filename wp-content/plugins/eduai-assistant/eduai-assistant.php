@@ -20,7 +20,7 @@ defined( 'ABSPATH' ) || exit;
 // Bump on every chat.css change: assets are cache-keyed on ?ver=, and a fix
 // the server has but the browser does not is indistinguishable from no fix.
 // 1.1.1 alias-scope fix · 1.1.2 item-3 token migration.
-define( 'EDUAI_VERSION', '1.1.7' );
+define( 'EDUAI_VERSION', '1.1.8' );
 define( 'EDUAI_FILE', __FILE__ );
 define( 'EDUAI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EDUAI_URL', plugin_dir_url( __FILE__ ) );
@@ -39,6 +39,7 @@ require_once EDUAI_DIR . 'includes/class-eduai-rest.php';
 require_once EDUAI_DIR . 'includes/class-eduai-shortcodes.php';
 require_once EDUAI_DIR . 'includes/class-eduai-admin.php';
 require_once EDUAI_DIR . 'includes/class-eduai-students.php';
+require_once EDUAI_DIR . 'includes/class-eduai-lesson-fields.php';
 
 /**
  * Plugin bootstrap.
@@ -92,6 +93,7 @@ final class EduAI_Assistant {
 		if ( is_admin() ) {
 			EduAI_Admin::init();
 			EduAI_Students::init();
+			EduAI_Lesson_Fields::init();
 		}
 
 		$this->maybe_upgrade();

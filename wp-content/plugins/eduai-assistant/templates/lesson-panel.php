@@ -53,7 +53,25 @@ $eduai_has_range = $eduai_from > 0 && $eduai_to >= $eduai_from;
  * the deck, and conflating them is how a student ends up with a viewer frame
  * that 403s.
  */
-$eduai_can_view = $eduai_src
+/*
+ * can_download() answers "is this visitor allowed to open it", which is not
+ * the same as "is it still there". A deck that has been trashed passes the
+ * permission gate unchanged while the stream route 404s, and the panel then
+ * printed "Slides 22-32 of 44" above a frame showing the cannot-display
+ * fallback: a true claim over an empty box. The owner's screenshot is exactly
+ * that, and nobody had flagged it.
+ *
+ * The header and the frame have to fail together, the same way a locked lesson
+ * withholds its anchor rather than its title. Status is checked here rather
+ * than in can_download() because it is a different question — this asks
+ * whether the thing exists, not who may read it. Only the states where the
+ * stream cannot serve are excluded; private and restricted materials still
+ * render for whoever can_download() admits.
+ */
+$eduai_src_present = $eduai_src
+	&& ! in_array( get_post_status( $eduai_src ), array( false, 'trash', 'auto-draft' ), true );
+
+$eduai_can_view = $eduai_src_present
 	&& class_exists( 'SL_Meta' )
 	&& class_exists( 'SL_Library' )
 	&& SL_Meta::can_download( $eduai_src );
