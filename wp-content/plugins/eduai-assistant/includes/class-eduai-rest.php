@@ -1307,9 +1307,26 @@ class EduAI_REST {
 			 */
 			$text = preg_replace( '/\\\\hat\s*\{([^{}]*)\}/', '$1-hat', $text ) ?? $text;
 
-			// boldsymbol joins the unwrappers: bold is typography, and there
-			// is no bold on the other side to carry it.
-			$text = preg_replace( '/\\\\(?:text|mathrm|mathbf|boldsymbol|operatorname)\s*\{([^{}]*)\}/', '$1', $text ) ?? $text;
+			/*
+			 * The BRACE-LESS form, which is the same command and not a new
+			 * one. LaTeX lets a single-token argument drop its braces, so a
+			 * model emits `\hat{y}` and `\hat y_i` interchangeably — and a
+			 * handler that only consumes braces catches half the instances
+			 * while looking complete, which is the worse failure because the
+			 * map appears finished.
+			 *
+			 * One letter, deliberately: `\hat y_i` accents the `y` and leaves
+			 * `_i` a subscript on the result, so `y-hat_i` is right and
+			 * swallowing the subscript would not be.
+			 */
+			$text = preg_replace( '/\\\\hat\s+([A-Za-z])/', '$1-hat', $text ) ?? $text;
+
+			// boldsymbol and mathsf join the unwrappers: a font is typography,
+			// and there is no font on the other side to carry it. mathsf is
+			// transpose's third spelling after \top and \intercal — `x^\mathsf
+			// T` reduces to `x^T`, which is where the other two already land.
+			$text = preg_replace( '/\\\\(?:text|mathrm|mathbf|mathsf|boldsymbol|operatorname)\s*\{([^{}]*)\}/', '$1', $text ) ?? $text;
+			$text = preg_replace( '/\\\\(?:text|mathrm|mathbf|mathsf|boldsymbol|operatorname)\s+([A-Za-z])/', '$1', $text ) ?? $text;
 
 			if ( $before === $text ) {
 				break;
@@ -1366,6 +1383,15 @@ class EduAI_REST {
 			// Spelled out, matching the Greek letters above rather than
 			// inventing "grad": this map's convention is the symbol's name.
 			'\\nabla' => 'nabla',
+			// The norm's double bar. `||y - Xw||` is how it is written when
+			// nobody has LaTeX, and it is unambiguous.
+			'\\|' => '||',
+			// Operator names, where the whole conversion is dropping the
+			// backslash — one honest answer each. Only \min was observed;
+			// the rest ride along on that basis, and they cannot touch prose
+			// because they only match the escaped form.
+			'\\min' => 'min', '\\max' => 'max', '\\lim' => 'lim',
+			'\\log' => 'log', '\\ln' => 'ln', '\\exp' => 'exp',
 			'\\,' => ' ', '\\;' => ' ', '\\!' => '', '\\quad' => '  ', '\\qquad' => '    ',
 		);
 		$text = strtr( $text, $symbols );
