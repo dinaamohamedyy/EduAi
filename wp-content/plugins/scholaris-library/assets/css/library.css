@@ -158,9 +158,15 @@
   color: hsl(var(--sl-muted));
   font-size: var(--sl-step-0);
 }
+/* 280px is right for a material card but too narrow for a course card, which
+   carries the numbered lesson spine. At 1400px that minimum opened a fourth
+   track and made each card 282px — narrower than the single-column card on a
+   375px phone (327px) — so the widest screen was the only one that truncated
+   a lesson name: "Least Squares in d-Dimensions" wanted 212px in a 199px box.
+   300px holds it to three tracks at 1400 and leaves 1100/900/375 unchanged. */
 .sl-courses__grid {
   display: grid; gap: var(--sl-space-m);
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
 }
 .sl-course {
   display: grid; gap: var(--sl-space-3xs); align-content: start;
