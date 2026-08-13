@@ -575,13 +575,75 @@ class SL_Private {
 			return '';
 		}
 
-		$material_id = (int) wp_get_post_parent_id( $attachment_id );
+		$material_id = self::owning_material( $attachment_id );
 
-		if ( ! $material_id || 'study_material' !== get_post_type( $material_id ) ) {
+		if ( ! $material_id ) {
 			return '';
 		}
 
 		return self::stream_url( $material_id, $attachment_id );
+	}
+
+	/**
+	 * Which material owns this attachment?
+	 *
+	 * THE PARENT IS NOT THE LINK, and resolving by it alone is what shipped
+	 * broken: attachment 83 — the owner's actual lecture PDF — has
+	 * `post_parent = 0` and is joined to material 123 through
+	 * `_scholaris_file_id`. So the URL filter missed exactly the file
+	 * everything else in the product is built on, while working for the
+	 * videos, which happen to carry a parent.
+	 *
+	 * The two meta keys are what the rest of this class already treats as
+	 * authoritative — `is_secured()`, `reconcile()` and `handle_stream()` all
+	 * read them, and none of them consults the parent. The filter was the
+	 * odd one out, which is the tell I should have taken from writing it.
+	 *
+	 * Parent first anyway, because it is free and correct when set; the query
+	 * only runs for a file we placed, which is a small set, and the result is
+	 * memoised because a media grid asks for the same ids repeatedly.
+	 *
+	 * @param int $attachment_id Attachment.
+	 */
+	private static function owning_material( int $attachment_id ): int {
+		static $cache = array();
+
+		if ( isset( $cache[ $attachment_id ] ) ) {
+			return $cache[ $attachment_id ];
+		}
+
+		$parent = (int) wp_get_post_parent_id( $attachment_id );
+
+		if ( $parent && 'study_material' === get_post_type( $parent ) ) {
+			return $cache[ $attachment_id ] = $parent;
+		}
+
+		/*
+		 * Direct, not get_posts(), because this is an internal identity
+		 * question rather than a content listing — and a content listing is
+		 * exactly what `pre_get_posts` filters are entitled to reshape. The
+		 * first version of this used get_posts() and returned nothing: the
+		 * fixture-hiding filter appended its clause into this query's `OR`
+		 * group, turning "which material references 83" into "...or anything
+		 * that is not a fixture". That filter is fixed too, but a resolver
+		 * that answers a question about identity should not be reachable by
+		 * a filter written to shape a list.
+		 */
+		global $wpdb;
+
+		$owner = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare(
+				"SELECT p.ID FROM {$wpdb->posts} p
+				 INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID
+				 WHERE p.post_type = 'study_material'
+				   AND m.meta_key IN ( '_scholaris_file_id', '_scholaris_video_id' )
+				   AND m.meta_value = %d
+				 LIMIT 1",
+				$attachment_id
+			)
+		);
+
+		return $cache[ $attachment_id ] = $owner;
 	}
 
 	/**

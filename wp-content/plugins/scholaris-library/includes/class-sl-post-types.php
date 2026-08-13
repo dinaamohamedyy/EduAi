@@ -62,13 +62,42 @@ class SL_Post_Types {
 			return;
 		}
 
-		$meta   = (array) $query->get( 'meta_query' );
-		$meta[] = array(
-			'key'     => self::FIXTURE_META,
-			'compare' => 'NOT EXISTS',
-		);
+		$existing = (array) $query->get( 'meta_query' );
 
-		$query->set( 'meta_query', $meta );
+		/*
+		 * NESTED, not appended, and the difference is not stylistic.
+		 * Appending pushed this clause into whatever relation the caller had
+		 * already set — so a query written as
+		 *
+		 *   relation OR, ( file_id = 83 ), ( video_id = 83 )
+		 *
+		 * silently became "...OR fixture NOT EXISTS", which is a different
+		 * question and returned the wrong rows. Measured: it broke the
+		 * attachment-to-material lookup on the owner's PDF, and it would
+		 * break any OR meta_query anyone writes against this post type,
+		 * from anywhere, with no error.
+		 *
+		 * Wrapping keeps the caller's group intact and ANDs the exclusion
+		 * beside it, which is what "also, not a fixture" actually means.
+		 */
+		$query->set(
+			'meta_query',
+			$existing
+				? array(
+					'relation' => 'AND',
+					$existing,
+					array(
+						'key'     => self::FIXTURE_META,
+						'compare' => 'NOT EXISTS',
+					),
+				)
+				: array(
+					array(
+						'key'     => self::FIXTURE_META,
+						'compare' => 'NOT EXISTS',
+					),
+				)
+		);
 	}
 
 	public static function register(): void {
