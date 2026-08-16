@@ -26,6 +26,9 @@ define( 'EDUAI_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EDUAI_URL', plugin_dir_url( __FILE__ ) );
 define( 'EDUAI_DB_VERSION', '1.1.0' );
 
+// First: everything below asks this which LMS is installed, so it must exist
+// before any of them run. See docs/14-learndash-conversion.md.
+require_once EDUAI_DIR . 'includes/class-eduai-lms.php';
 require_once EDUAI_DIR . 'includes/class-eduai-agents.php';
 require_once EDUAI_DIR . 'includes/class-eduai-settings.php';
 require_once EDUAI_DIR . 'includes/class-eduai-claude.php';
