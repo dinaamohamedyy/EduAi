@@ -61,6 +61,27 @@ function scholaris_redirect_retired_routes(): void {
 		return;
 	}
 
+	/*
+	 * A LESSON-SCOPED LINK IS NOT A RETIRED ROUTE. Never redirect it.
+	 *
+	 * Opening a lesson and choosing PrepareME, Summarise or Ask sends you to
+	 * ?source=<lesson id> — that is how a tool gets attached to the lesson you
+	 * picked, and it is the whole feature. Redirecting the page redirected
+	 * those links too, so choosing PrepareME on a lesson landed on the Library
+	 * with the lesson thrown away. The feature did not degrade, it disappeared,
+	 * and the redirect that retired the bare page is what did it.
+	 *
+	 * `exam` is here for the same reason: Retake links carry ?exam=<id>.
+	 *
+	 * Only the BARE page is retired — someone arriving with no lesson and no
+	 * exam, which is the case the nav used to serve and no longer does.
+	 */
+	foreach ( array( 'source', 'exam' ) as $keeps_the_page ) {
+		if ( ! empty( $_GET[ $keeps_the_page ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+	}
+
 	$target = $routes[ $slug ];
 
 	if ( 'home' === $target ) {
