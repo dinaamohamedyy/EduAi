@@ -22,6 +22,23 @@ defined( 'ABSPATH' ) || exit;
 
 <a class="skip-link" href="#main"><?php esc_html_e( 'Skip to content', 'scholaris' ); ?></a>
 
+<?php
+/*
+ * The app rail (16 Aug 2026, per the reference the owner sent). It is a
+ * sibling of the header rather than a wrapper around it: body already has
+ * header/main/footer as direct children, so the shell is one element plus the
+ * has-rail body class, and this file keeps the header geometry that was
+ * measured rather than reasoned about.
+ *
+ * Not on the front page: that surface is the marketing hero for signed-out
+ * visitors, and a study-tools rail beside it is furniture for an app the
+ * visitor has not entered yet.
+ */
+if ( ! is_front_page() ) {
+	get_template_part( 'template-parts/app-sidebar' );
+}
+?>
+
 <header class="site-header">
 	<div class="wrap site-header__inner">
 		<?php if ( has_custom_logo() ) : ?>

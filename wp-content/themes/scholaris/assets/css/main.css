@@ -1199,3 +1199,86 @@ body.admin-bar .auth {
 .sc-greet { margin-bottom: var(--space-m); }
 .sc-greet__title { margin: 0; font-size: var(--step-3); font-weight: 750; letter-spacing: -0.02em; text-transform: none; }
 .sc-greet__lede { margin: var(--space-3xs) 0 0; color: hsl(var(--text-muted)); font-size: var(--step-0); }
+
+/* --------------------------------------------------------------------------
+   20. App shell — persistent left rail
+   Per the reference the owner sent (16 Aug 2026). Additive: the rail is a
+   sibling of the existing header, and the header keeps its measured geometry
+   rather than being replaced. Below the breakpoint the rail is not a drawer —
+   it becomes a horizontal scroller under the header, so a phone keeps one
+   scroll context and no overlay to dismiss.
+   -------------------------------------------------------------------------- */
+.rail {
+  display: flex; flex-direction: column; gap: var(--space-s);
+  background: hsl(var(--surface));
+  border-right: 1px solid hsl(var(--border));
+  padding: var(--space-s);
+}
+
+.rail__brand { display: flex; align-items: center; gap: var(--space-2xs); text-decoration: none; color: hsl(var(--text)); }
+.rail__mark {
+  width: 34px; height: 34px; flex: none; border-radius: var(--radius-s);
+  background: hsl(var(--brand)); color: hsl(var(--on-brand));
+  display: grid; place-items: center; font-family: var(--font-display); font-weight: 800;
+}
+.rail__name { font-family: var(--font-display); font-weight: 800; font-size: var(--step-1); letter-spacing: 0.01em; }
+
+.rail__search { position: relative; display: flex; align-items: center; }
+.rail__search svg { position: absolute; left: 10px; color: hsl(var(--text-faint)); pointer-events: none; }
+.rail__search input { padding-left: 34px; font-size: var(--step--1); }
+
+.rail__nav { display: grid; gap: var(--space-2xs); }
+.rail__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rail__group {
+  margin: var(--space-2xs) 0 0; padding: 0 var(--space-2xs);
+  font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: hsl(var(--text-faint));
+}
+
+.rail__link {
+  display: flex; align-items: center; gap: var(--space-2xs);
+  padding: 0.55em 0.7em; border-radius: var(--radius-s);
+  color: hsl(var(--text-muted)); text-decoration: none;
+  font-size: var(--step-0); font-weight: 500;
+  white-space: nowrap;
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+.rail__link svg { flex: none; }
+.rail__link:hover { background: hsl(var(--bg-sunken) / 0.7); color: hsl(var(--text)); }
+.rail__link.is-current { background: hsl(var(--brand) / 0.10); color: hsl(var(--brand-strong)); font-weight: 600; }
+
+.rail__foot { margin-top: auto; }
+.rail__me { display: flex; align-items: center; gap: var(--space-2xs); text-decoration: none; color: inherit; min-width: 0; }
+.rail__me strong { display: block; font-size: var(--step--1); font-weight: 600; }
+.rail__me em { display: block; font-style: normal; font-size: 0.7rem; color: hsl(var(--text-faint)); }
+.rail__avatar { border-radius: 50%; flex: none; }
+
+/*
+ * Desktop: the rail is a real column. The grid goes on BODY rather than a new
+ * wrapper, because header, main and footer are already direct children of it —
+ * so the shell costs one element and one class, and header.php/footer.php keep
+ * the structure (and the measured geometry) they already have. A wrapper would
+ * have meant opening a div in one file and closing it in another.
+ */
+@media (min-width: 1000px) {
+  body.has-rail { display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+  body.has-rail > .rail { grid-column: 1; grid-row: 1 / -1; position: sticky; top: 0; height: 100vh; }
+  body.has-rail > .site-header,
+  body.has-rail > .site-main,
+  body.has-rail > .site-footer { grid-column: 2; min-width: 0; }
+  /* The header pins to the top of its own column, not across the rail. */
+  body.has-rail > .site-header { position: sticky; top: 0; }
+}
+
+/* Below that the rail is a scroller, not a drawer: no overlay, nothing to
+   dismiss, and the page keeps one scroll context. Verified at 375 and 900. */
+@media (max-width: 999px) {
+  .rail { border-right: 0; border-bottom: 1px solid hsl(var(--border)); padding: var(--space-2xs) var(--space-s); }
+  .rail__brand, .rail__search, .rail__group, .rail__foot { display: none; }
+  /* One strip, not two. Stacking the groups as separate rows made the rail
+     104px tall on a 375px phone (measured) — a second bar under the header for
+     six links. Both lists sit on one line and scroll together instead. */
+  .rail__nav { display: flex; gap: var(--space-3xs); overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .rail__nav::-webkit-scrollbar { display: none; }
+  .rail__list { grid-auto-flow: column; grid-auto-columns: max-content; gap: var(--space-3xs); flex: none; }
+}

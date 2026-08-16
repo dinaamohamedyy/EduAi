@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SCHOLARIS_VERSION', '1.1.2' );
+define( 'SCHOLARIS_VERSION', '1.2.1' );
 define( 'SCHOLARIS_DIR', get_template_directory() );
 define( 'SCHOLARIS_URI', get_template_directory_uri() );
 
@@ -184,6 +184,12 @@ function scholaris_body_class( array $classes ): array {
 	}
 	if ( ! is_active_sidebar( 'sidebar-1' ) ) {
 		$classes[] = 'no-sidebar';
+	}
+	// Matches the condition in header.php that prints the rail. Kept as one
+	// expression in one place would be better still; if a third caller ever
+	// needs it, lift it to a helper rather than repeating the test a third time.
+	if ( ! is_front_page() ) {
+		$classes[] = 'has-rail';
 	}
 	return $classes;
 }
