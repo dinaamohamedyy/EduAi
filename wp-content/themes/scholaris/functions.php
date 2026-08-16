@@ -193,3 +193,4 @@ require_once SCHOLARIS_DIR . '/inc/customizer.php';
 require_once SCHOLARIS_DIR . '/inc/template-tags.php';
 require_once SCHOLARIS_DIR . '/inc/auth.php';
 require_once SCHOLARIS_DIR . '/inc/auth-flow.php';
+require_once SCHOLARIS_DIR . '/inc/retired-routes.php';

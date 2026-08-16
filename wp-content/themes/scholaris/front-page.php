@@ -63,7 +63,10 @@ $show_assistant = (bool) get_theme_mod( 'scholaris_show_assistant', true );
 		</div>
 
 		<?php if ( $show_assistant ) : ?>
-			<div class="reveal">
+			<?php // Anchor target for the hero's "Ask the assistant" — the general
+			      // assistant lives on this page now, so the call to action scrolls
+			      // to it rather than navigating to a retired /ask/ page. ?>
+			<div class="reveal" id="assistant">
 				<?php
 				if ( scholaris_has_shortcode( 'eduai_panel' ) ) {
 					echo do_shortcode( '[eduai_panel]' );
@@ -167,8 +170,23 @@ $show_assistant = (bool) get_theme_mod( 'scholaris_show_assistant', true );
 				<?php esc_html_e( 'Open the assistant, ask in your own words, and it will point you to the exact document and page.', 'scholaris' ); ?>
 			</p>
 			<p class="mt-m mb-0">
-				<?php // A link, not a data-eduai-open button: the floating widget it used to open is retired (docs/06 §3), so that attribute is inert on pages with no dock. ?>
-				<a class="btn btn--primary btn--lg" href="<?php echo esc_url( scholaris_ask_url() ); ?>">
+				<?php
+				/*
+				 * Anchors at the assistant on THIS page, not at /ask/.
+				 *
+				 * It pointed at scholaris_ask_url() until the four-tab
+				 * restructure (docs/14 §1), and /ask/ now redirects home — so
+				 * the button sent you to the page you were already on. A
+				 * redirect loop that looks like a dead button, introduced by
+				 * the redirect that retired the page.
+				 *
+				 * The general assistant lives here now. When it is not rendered
+				 * — signed out, or the plugin inactive — $show_assistant is
+				 * false and there is no #assistant to reach, so fall back to
+				 * the page rather than emit an anchor to nothing.
+				 */
+				?>
+				<a class="btn btn--primary btn--lg" href="<?php echo $show_assistant ? '#assistant' : esc_url( scholaris_ask_url() ); ?>">
 					<?php scholaris_the_icon( 'sparkles', 18 ); ?>
 					<?php esc_html_e( 'Ask the assistant', 'scholaris' ); ?>
 				</a>

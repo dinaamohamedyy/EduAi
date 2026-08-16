@@ -267,12 +267,13 @@ retitle_page "summarise" "Summarise"
 retitle_page "calc" "AiCalc"
 retitle_page "ask" "Q&A"
 retitle_page "prepare" "PrepareME"
-retitle_page "progress" "My Progress"
 
-# /profile/ is the one page with no nav tab, so nothing pins its title short the
-# way the seven tabs are pinned by the header geometry — and the header control
-# that reaches it says "Your account", which is what the page should answer to.
-retitle_page "profile" "Your account"
+# Both nav titles changed with the four-tab ruling. "My Progress" becomes
+# "Progress" because the nav no longer has room for a possessive that earns
+# nothing, and "Your account" becomes "Profile" because it is a tab now — it
+# was named for a header control that no longer exists.
+retitle_page "progress" "Progress"
+retitle_page "profile" "Profile"
 
 # The four tool pages' ledes, lifted from the mock's .pagehero copy so the two
 # surfaces say the same sentence.
@@ -345,11 +346,20 @@ add_menu_item() {
 	[ -n "$id" ] && $WP menu item add-post Primary "$id" >/dev/null 2>&1 || true
 }
 
-# Nav per docs/06-eduai-rebuild.md, plus the owner's ruling on open question 1:
-# Home · Library · Summarise · AiCalc · Q&A · PrepareME · My Progress.
-# Material is reached through Library; /assistant/ keeps its page but stays
-# off the menu (the Q&A tab supersedes it).
-for slug in home library summarise calc ask prepare progress; do
+# Nav is exactly four items — the owner's ruling, 12 Aug 2026 (docs/14 §1):
+#
+#     Home · Library · Progress · Profile
+#
+# The four AI features are NOT tabs any more. Summarise, PrepareME and Q&A
+# belong to a lesson and are reached by opening one; AiCalc folds into the
+# home-page assistant, which becomes the general one. Their pages still exist
+# and redirect (inc/retired-routes.php) so old links land somewhere sensible
+# rather than on a 404.
+#
+# Adding a fifth item here is a product decision, not a tidy-up: four is the
+# constraint, and the AI features were tabs precisely because nobody had
+# decided where they belonged.
+for slug in home library progress profile; do
 	add_menu_item "$slug"
 done
 

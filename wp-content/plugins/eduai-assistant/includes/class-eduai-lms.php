@@ -223,7 +223,7 @@ class EduAI_LMS {
 	 * Deliberately NOT falling through to a capability check. `read_post` is
 	 * true for an administrator and false for an enrolled student, which is
 	 * exactly backwards for a gate, and it tests green from every session on
-	 * this project because everyone here is an administrator (docs/09 §2).
+	 * this project because everyone here is an administrator (docs/09-multi-agent-retrospective.md §2).
 	 * Unknown LMS means unknown access, and unknown must not mean "allow".
 	 *
 	 * @param int $post_id Lesson or topic id.

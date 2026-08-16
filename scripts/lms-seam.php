@@ -177,7 +177,7 @@ check( 'can_access() with no post', EduAI_LMS::can_access( 0, 1 ), false );
 if ( 'none' === $provider ) {
 	// With no LMS there is no access check to delegate to, so it must refuse
 	// rather than fall through to a capability — the inversion that admits an
-	// administrator and denies an enrolled student (docs/09 §2).
+	// administrator and denies an enrolled student (docs/09-multi-agent-retrospective.md §2).
 	check( 'can_access() refuses without an LMS', EduAI_LMS::can_access( 1, 1 ), false );
 }
 
