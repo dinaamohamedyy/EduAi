@@ -49,9 +49,22 @@ function scholaris_stat_card( string $tone, string $icon, int $value, string $la
 				<svg width="52" height="52" viewBox="0 0 52 52" role="img"
 					aria-label="<?php echo esc_attr( sprintf( /* translators: %d: percent complete */ __( '%d%% complete', 'scholaris' ), $pct ) ); ?>">
 					<circle class="sc-stat__track" cx="26" cy="26" r="20" fill="none" stroke-width="6"/>
+					<?php
+					/*
+					 * The arc is one dash of the full circumference, positioned by
+					 * dashoffset rather than by a two-value dasharray, so the only
+					 * thing that changes between "empty" and "filled" is a single
+					 * length — which is what makes it tweenable. Both ends are
+					 * published as custom properties so the keyframes can read
+					 * them; the geometry still comes from PHP, so a ring with
+					 * animation disabled renders at exactly its real value.
+					 */
+					?>
 					<circle class="sc-stat__arc" cx="26" cy="26" r="20" fill="none" stroke-width="6"
 						stroke-linecap="round" transform="rotate(-90 26 26)"
-						stroke-dasharray="<?php echo esc_attr( round( $dash, 2 ) . ' ' . round( $circ, 2 ) ); ?>"/>
+						style="--circ:<?php echo esc_attr( (string) round( $circ, 2 ) ); ?>;--arc:<?php echo esc_attr( (string) round( $circ - $dash, 2 ) ); ?>"
+						stroke-dasharray="<?php echo esc_attr( (string) round( $circ, 2 ) ); ?>"
+						stroke-dashoffset="<?php echo esc_attr( (string) round( $circ - $dash, 2 ) ); ?>"/>
 				</svg>
 				<span class="sc-stat__pct"><?php echo (int) $pct; ?>%</span>
 			</span>

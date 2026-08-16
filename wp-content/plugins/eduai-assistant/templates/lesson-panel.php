@@ -142,35 +142,45 @@ $eduai_doc = $eduai_can_view ? SL_Library::download_url( $eduai_src ) : '';
 	 * scoped-link-honesty examines them rather than skipping them.
 	 */
 	?>
-	<p class="eduai-lesson__tools">
-		<a class="eduai-btn eduai-btn--primary" href="<?php echo esc_url( $eduai_summarise_url ); ?>">
-			<?php
-			printf(
-				/* translators: %s: lesson title */
-				esc_html__( 'Summarise this lesson: %s', 'eduai' ),
-				esc_html( $eduai_lesson_title )
-			);
-			?>
-		</a>
-		<a class="eduai-btn" href="<?php echo esc_url( $eduai_ask_url ); ?>">
-			<?php
-			printf(
-				/* translators: %s: lesson title */
-				esc_html__( 'Ask about this lesson: %s', 'eduai' ),
-				esc_html( $eduai_lesson_title )
-			);
-			?>
-		</a>
-		<?php if ( ! empty( $eduai_prepare_url ) ) : ?>
-			<a class="eduai-btn" href="<?php echo esc_url( $eduai_prepare_url ); ?>">
-				<?php
-				printf(
-					/* translators: %s: lesson title */
-					esc_html__( 'Prepare me on this lesson: %s', 'eduai' ),
-					esc_html( $eduai_lesson_title )
-				);
-				?>
+	<?php
+	/*
+	 * The lesson is named ONCE, here, instead of inside all three labels.
+	 *
+	 * The old labels each read "<verb> this lesson: <full title>", which was
+	 * right about the problem and wrong about the fix: the panel header naming
+	 * the lesson is ~700px up, above the viewer, so it has scrolled away by the
+	 * time the eye reaches these controls and the buttons genuinely did need to
+	 * say what they act on. But restating a long title three times made each
+	 * control 26rem wide, so the three stacked into three full-width bars that
+	 * dominated the lesson — which is what the owner has been asking us to fix.
+	 *
+	 * Naming it once, immediately above the row, keeps the context adjacent
+	 * (which was the point) and lets the buttons shrink to their verbs. The
+	 * full sentence survives on aria-label, so a screen reader still hears
+	 * "Summarise this lesson: Supervised Learning Round 2" and loses nothing.
+	 */
+	?>
+	<div class="eduai-lesson__tools">
+		<p class="eduai-lesson__toolsfor">
+			<?php esc_html_e( 'Study tools for', 'eduai' ); ?>
+			<strong><?php echo esc_html( $eduai_lesson_title ); ?></strong>
+		</p>
+
+		<div class="eduai-lesson__toolsrow">
+			<a class="eduai-btn eduai-btn--primary" href="<?php echo esc_url( $eduai_summarise_url ); ?>"
+				aria-label="<?php echo esc_attr( sprintf( /* translators: %s: lesson title */ __( 'Summarise this lesson: %s', 'eduai' ), $eduai_lesson_title ) ); ?>">
+				<?php esc_html_e( 'Summarise', 'eduai' ); ?>
 			</a>
-		<?php endif; ?>
-	</p>
+			<a class="eduai-btn" href="<?php echo esc_url( $eduai_ask_url ); ?>"
+				aria-label="<?php echo esc_attr( sprintf( /* translators: %s: lesson title */ __( 'Ask about this lesson: %s', 'eduai' ), $eduai_lesson_title ) ); ?>">
+				<?php esc_html_e( 'Ask a question', 'eduai' ); ?>
+			</a>
+			<?php if ( ! empty( $eduai_prepare_url ) ) : ?>
+				<a class="eduai-btn" href="<?php echo esc_url( $eduai_prepare_url ); ?>"
+					aria-label="<?php echo esc_attr( sprintf( /* translators: %s: lesson title */ __( 'Prepare me on this lesson: %s', 'eduai' ), $eduai_lesson_title ) ); ?>">
+					<?php esc_html_e( 'Practice questions', 'eduai' ); ?>
+				</a>
+			<?php endif; ?>
+		</div>
+	</div>
 </div>

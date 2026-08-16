@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SCHOLARIS_VERSION', '1.2.1' );
+define( 'SCHOLARIS_VERSION', '1.3.0' );
 define( 'SCHOLARIS_DIR', get_template_directory() );
 define( 'SCHOLARIS_URI', get_template_directory_uri() );
 

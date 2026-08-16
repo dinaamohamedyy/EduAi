@@ -640,17 +640,28 @@
 /* Wrap rather than scroll: two long scoped labels in one row would otherwise
    push the second button off a narrow column. */
 .eduai-lesson__tools {
-  display: flex; flex-wrap: wrap; gap: var(--eduai-space-2xs);
-  margin: var(--eduai-space-2xs) 0 0;
+  display: grid; gap: var(--eduai-space-2xs);
+  margin: var(--eduai-space-s) 0 0;
+  padding: var(--eduai-space-xs);
+  border: 1px solid hsl(var(--eduai-border));
+  border-radius: var(--eduai-radius-m);
+  background: hsl(var(--eduai-bg-subtle));
 }
-/* Both labels repeat the lesson title on purpose: the panel header that names
-   the lesson is ~700px up, above a 720px viewer, so it has scrolled away by
-   the time the eye reaches these. That makes each control ~410px, so the pair
-   stacks on any column under ~840px — measured, that is every width below
-   1400. Make the stack deliberate rather than ragged: each control fills its
-   row instead of sitting at its content width. */
+/* Names the lesson once so the three controls do not have to. */
+.eduai-lesson__toolsfor {
+  margin: 0; font-size: var(--eduai-step--1); color: hsl(var(--eduai-muted));
+}
+.eduai-lesson__toolsfor strong { color: hsl(var(--eduai-text)); font-weight: 600; }
+.eduai-lesson__toolsrow {
+  display: flex; flex-wrap: wrap; gap: var(--eduai-space-2xs);
+}
+/* The 26rem basis is gone with the labels that needed it. Each control is now
+   one verb, so it sits at its content width and the three fit one row on a
+   normal column — which is what the owner was asking for. They still wrap
+   rather than squeeze, and a wrapped row of three verbs is a row of buttons
+   rather than three full-width bars. */
 .eduai-lesson__tools .eduai-btn {
-  flex: 1 1 26rem;
+  flex: 0 1 auto;
   justify-content: center; text-align: center;
 }
 
