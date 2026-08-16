@@ -161,5 +161,16 @@ $eduai_doc = $eduai_can_view ? SL_Library::download_url( $eduai_src ) : '';
 			);
 			?>
 		</a>
+		<?php if ( ! empty( $eduai_prepare_url ) ) : ?>
+			<a class="eduai-btn" href="<?php echo esc_url( $eduai_prepare_url ); ?>">
+				<?php
+				printf(
+					/* translators: %s: lesson title */
+					esc_html__( 'Prepare me on this lesson: %s', 'eduai' ),
+					esc_html( $eduai_lesson_title )
+				);
+				?>
+			</a>
+		<?php endif; ?>
 	</p>
 </div>

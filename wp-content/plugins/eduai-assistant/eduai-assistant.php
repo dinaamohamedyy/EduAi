@@ -131,6 +131,11 @@ final class EduAI_Assistant {
 		$eduai_ask_url      = eduai_ask_url( $scope['id'] );
 		$eduai_summarise_url = eduai_summarise_url( $scope['id'] );
 
+		// "Prepare me" on the lesson just finished — the owner's third
+		// button. Same scope as the other two, so the exam is generated from
+		// this lesson rather than from something the student has to upload.
+		$eduai_prepare_url  = eduai_prepare_url( 0, $scope['id'] );
+
 		/*
 		 * Whether the slides can actually be served, so the header does not
 		 * promise what the frame cannot show.
@@ -512,7 +517,7 @@ function eduai_summarise_url( int $source = 0 ): string {
  *                     GET /exam/{id} still checks ownership, so a guessed id in
  *                     the query string yields a 403, not someone else's paper.
  */
-function eduai_prepare_url( int $exam_id = 0 ): string {
+function eduai_prepare_url( int $exam_id = 0, int $source = 0 ): string {
 	$page = get_page_by_path( 'prepare' );
 
 	$url = ( $page && 'publish' === $page->post_status )
@@ -522,6 +527,10 @@ function eduai_prepare_url( int $exam_id = 0 ): string {
 	if ( $exam_id > 0 ) {
 		$url = add_query_arg( 'exam', $exam_id, $url );
 	}
+
+	// A lesson to be examined on, through the same helper Ask and Summarise
+	// use — one place still owns the parameter name.
+	$url = eduai_with_source( $url, $source );
 
 	/**
 	 * Filter the PrepareME page destination.

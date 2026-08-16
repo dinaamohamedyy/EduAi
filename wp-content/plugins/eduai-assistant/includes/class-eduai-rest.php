@@ -91,6 +91,9 @@ class EduAI_REST {
 			'callback'            => array( __CLASS__, 'exam_create' ),
 			'permission_callback' => array( __CLASS__, 'can_use' ),
 			'args'                => array(
+				// The lesson a student pressed "Prepare me" on. Declared but not
+				// trusted: re-resolved and re-gated in exam_material().
+				'source'     => array( 'type' => 'integer', 'default' => 0 ),
 				'count'      => array( 'type' => 'integer', 'default' => 10 ),
 				'title'      => array( 'type' => 'string', 'default' => '', 'sanitize_callback' => 'sanitize_text_field' ),
 				'regenerate' => array( 'type' => 'boolean', 'default' => false ),
@@ -284,7 +287,52 @@ class EduAI_REST {
 				$hash      = hash( 'sha256', trim( $text ) );
 			}
 		} else {
-			$text = trim( (string) $request->get_param( 'text' ) );
+			$text  = trim( (string) $request->get_param( 'text' ) );
+			$scope = EduAI_Scope::resolve( (int) $request->get_param( 'source' ) );
+
+			/*
+			 * "Prepare me" on a lesson the student has just finished: the
+			 * source is the lesson, and they should not have to upload
+			 * anything they were already reading.
+			 *
+			 * Re-gated here through the same resolver the button used, so a
+			 * quiz cannot be generated from a lesson somebody may not read —
+			 * an exam is a projection of the material, and generating one is
+			 * a read of it.
+			 *
+			 * The pasted text still wins when there is any: someone who typed
+			 * into the box meant that, even on a scoped page.
+			 */
+			if ( strlen( $text ) < 200 && $scope ) {
+				$document = self::scoped_source_text( $scope );
+
+				if ( strlen( trim( $document ) ) < 200 ) {
+					return new WP_Error(
+						'eduai_scope_thin',
+						__( 'There is not enough text in this lesson to build an exam from. Open the lecture it came from, or paste the part you want to be tested on.', 'eduai' ),
+						array( 'status' => 422 )
+					);
+				}
+
+				$label     = $scope['title'];
+				$document  = self::fit( $document );
+				$content[] = array(
+					'type' => 'text',
+					'text' => sprintf( "Lesson: %s\n\n", $scope['title'] ) . $document,
+				);
+
+				// Keyed on the scope rather than the text, so re-opening the
+				// same lesson hands back the same paper instead of spending
+				// the generation budget again.
+				$hash = hash( 'sha256', 'scope:' . $scope['id'] . ':' . md5( $document ) );
+
+				return array(
+					'content' => $content,
+					'label'   => $label,
+					'hash'    => $hash,
+				);
+			}
+
 			// 200 minimum, higher than /summarize's: an exam needs more
 			// source material than a summary (docs/07 §2).
 			if ( strlen( $text ) < 200 ) {

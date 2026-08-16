@@ -144,11 +144,19 @@
 
 		if (this.busy) { return; }
 		if (!CFG.loggedIn) { this.note(this.setupOut, 'eduai-error', esc(T.loginPrompt)); return; }
-		if (!file && pasted.length < 80) { this.note(this.setupOut, 'eduai-error', esc(T.needSource)); return; }
+		// A scoped page already has its source: the lesson the student just
+		// finished. Requiring an upload there would ask them to hand over a
+		// document they were reading a second ago. Unscoped behaviour is
+		// unchanged — without a lesson there is still nothing to examine.
+		var scoped = CFG.scope && CFG.scope.id ? CFG.scope.id : 0;
+		if (!file && pasted.length < 80 && !scoped) { this.note(this.setupOut, 'eduai-error', esc(T.needSource)); return; }
 
 		var body = new FormData();
 		if (file) { body.append('file', file); }
 		if (pasted) { body.append('text', pasted); }
+		// Sent, never trusted: the server re-resolves and re-gates it, so a
+		// student cannot be examined on a lesson they may not read.
+		if (scoped) { body.append('source', String(scoped)); }
 		body.append('count', String(this.length));
 
 		this.busy = true;
