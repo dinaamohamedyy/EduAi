@@ -65,7 +65,7 @@ $show_assistant = (bool) get_theme_mod( 'scholaris_show_assistant', true );
 		<?php if ( $show_assistant ) : ?>
 			<?php // Anchor target for the hero's "Ask the assistant" — the general
 			      // assistant lives on this page now, so the call to action scrolls
-			      // to it rather than navigating to a retired /ask/ page. ?>
+			      // to it rather than making the reader load another page. ?>
 			<div class="reveal" id="assistant">
 				<?php
 				if ( scholaris_has_shortcode( 'eduai_panel' ) ) {
@@ -172,18 +172,21 @@ $show_assistant = (bool) get_theme_mod( 'scholaris_show_assistant', true );
 			<p class="mt-m mb-0">
 				<?php
 				/*
-				 * Anchors at the assistant on THIS page, not at /ask/.
+				 * Anchors at the assistant on THIS page when there is one.
 				 *
-				 * It pointed at scholaris_ask_url() until the four-tab
-				 * restructure (docs/14 §1), and /ask/ now redirects home — so
-				 * the button sent you to the page you were already on. A
-				 * redirect loop that looks like a dead button, introduced by
-				 * the redirect that retired the page.
+				 * NOTE, because the previous version of this comment now reads
+				 * as an argument for retiring /ask/ again: that page is live
+				 * and in the nav. It was redirected here during the four-tab
+				 * restructure, which made this button a loop back to the page
+				 * you were already on; the owner reversed that, and the
+				 * redirect is gone.
 				 *
-				 * The general assistant lives here now. When it is not rendered
-				 * — signed out, or the plugin inactive — $show_assistant is
-				 * false and there is no #assistant to reach, so fall back to
-				 * the page rather than emit an anchor to nothing.
+				 * The anchor stays anyway, on its own merit — the general
+				 * assistant is rendered further down this page, so scrolling
+				 * to it beats a page load. When it is NOT rendered — signed
+				 * out, or the plugin inactive — $show_assistant is false and
+				 * there is no #assistant to reach, so it falls back to /ask/,
+				 * which now genuinely goes somewhere.
 				 */
 				?>
 				<a class="btn btn--primary btn--lg" href="<?php echo $show_assistant ? '#assistant' : esc_url( scholaris_ask_url() ); ?>">
