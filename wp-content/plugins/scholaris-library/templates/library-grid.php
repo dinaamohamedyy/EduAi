@@ -489,12 +489,34 @@ if ( isset( $query ) && $query instanceof WP_Query ) {
 		}
 		?>
 	<?php else : ?>
+		<?php
+		/*
+		 * Three empty states, not one. The single branch this replaces blamed
+		 * filters that were not set: with everything filed into a course and
+		 * nothing typed, the page read "No material matches those filters —
+		 * try a broader search", and its "Show everything" button linked to
+		 * the unfiltered archive, which is the page you are already on. So the
+		 * remedy was a no-op and the message described a failure that had not
+		 * happened — the ordinary outcome, reported as a fault.
+		 *
+		 * Only the first of these is an error. The second is the goal.
+		 */
+		$sl_filtered = ( '' !== $search || '' !== $subject || '' !== $type );
+		?>
 		<div class="sl-notice">
-			<h3><?php esc_html_e( 'No material matches those filters', 'scholaris-library' ); ?></h3>
-			<p><?php esc_html_e( 'Try a broader search, or clear the filters to see everything.', 'scholaris-library' ); ?></p>
-			<a class="sl-btn sl-btn--primary" href="<?php echo esc_url( get_post_type_archive_link( 'study_material' ) ?: home_url( '/library/' ) ); ?>">
-				<?php esc_html_e( 'Show everything', 'scholaris-library' ); ?>
-			</a>
+			<?php if ( $sl_filtered ) : ?>
+				<h3><?php esc_html_e( 'No material matches those filters', 'scholaris-library' ); ?></h3>
+				<p><?php esc_html_e( 'Try a broader search, or clear the filters to see everything.', 'scholaris-library' ); ?></p>
+				<a class="sl-btn sl-btn--primary" href="<?php echo esc_url( get_post_type_archive_link( 'study_material' ) ?: home_url( '/library/' ) ); ?>">
+					<?php esc_html_e( 'Show everything', 'scholaris-library' ); ?>
+				</a>
+			<?php elseif ( $sl_courses ) : ?>
+				<h3><?php esc_html_e( 'Everything is filed into a course', 'scholaris-library' ); ?></h3>
+				<p><?php esc_html_e( 'There is no loose material in the library right now — it is all in one of the courses above.', 'scholaris-library' ); ?></p>
+			<?php else : ?>
+				<h3><?php esc_html_e( 'Nothing in the library yet', 'scholaris-library' ); ?></h3>
+				<p><?php esc_html_e( 'Lecture slides, notes and past papers will appear here once they are added.', 'scholaris-library' ); ?></p>
+			<?php endif; ?>
 		</div>
 	<?php endif; ?>
 </div>
