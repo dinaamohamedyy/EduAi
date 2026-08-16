@@ -193,4 +193,20 @@ require_once SCHOLARIS_DIR . '/inc/customizer.php';
 require_once SCHOLARIS_DIR . '/inc/template-tags.php';
 require_once SCHOLARIS_DIR . '/inc/auth.php';
 require_once SCHOLARIS_DIR . '/inc/auth-flow.php';
-require_once SCHOLARIS_DIR . '/inc/retired-routes.php';
+/*
+ * inc/retired-routes.php is NOT loaded: the owner reversed the decision it
+ * implements.
+ *
+ * It 302'd Summarise, PrepareME, Q&A and AiCalc away on the grounds that those
+ * tools belong to a lesson now. The owner opened the site and could not find
+ * any AI feature anywhere — and he was right: the pages were redirected, the
+ * nav tabs were removed, and the lesson panel's own links point AT those
+ * redirected pages, so the per-lesson replacement was unreachable too. Asking
+ * for a tool to also work inside a lesson is not asking for its page to be
+ * taken away.
+ *
+ * The file stays on disk and its author chose 302 over 301 for exactly this
+ * reason — "these routes are one product decision old" — so nothing is lost
+ * and re-enabling it is one line, if some future version of this ever earns
+ * its way back.
+ */
