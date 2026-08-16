@@ -141,3 +141,22 @@ function scholaris_ask_url(): string {
 	 */
 	return (string) apply_filters( 'scholaris_ask_url', $url );
 }
+
+/**
+ * Does this request get the app shell (left rail)?
+ *
+ * The condition lived in two places — header.php printed the rail, and
+ * body_class added has-rail — with a comment on the second saying that a third
+ * caller should lift it to a helper rather than repeat the test again. This is
+ * that third caller, so here it is.
+ *
+ * The rule changed as well as moving. The rail was excluded from the front page
+ * because that surface is the marketing hero, and study-tools furniture beside
+ * a sales pitch is an app the visitor has not entered yet. That is still true
+ * for a visitor. For a signed-in student the front page IS the dashboard, so
+ * the shell belongs there — and its absence was why the dashboard read as the
+ * old site with panels added rather than as the reference it was built from.
+ */
+function scholaris_has_rail(): bool {
+	return ! is_front_page() || is_user_logged_in();
+}

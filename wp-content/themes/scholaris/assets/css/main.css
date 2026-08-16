@@ -1090,9 +1090,14 @@ body.admin-bar .auth {
 /* -- stat cards ---------------------------------------------------------- */
 .sc-stats {
   display: grid; gap: var(--space-s);
-  /* 15rem holds "Practice papers" plus the ring on one row; below that the
-     three cards stack rather than clipping the label. */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  /*
+   * 13rem, and the number is arithmetic rather than taste. With the rail
+   * taking 260px the main column is 733px at a 1400px viewport, and the panel
+   * padding leaves 685px inside: three cards plus two 16px gaps need each card
+   * at or under 13.6rem. At 15rem only two fitted and the third dropped to a
+   * second row, which is the ragged 2+1 the reference does not have.
+   */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
 }
 .sc-stat {
   border-radius: 14px;
@@ -1261,8 +1266,38 @@ body.admin-bar .auth {
  * have meant opening a div in one file and closing it in another.
  */
 @media (min-width: 1000px) {
-  body.has-rail { display: grid; grid-template-columns: 260px minmax(0, 1fr); }
+  /*
+   * The three explicit rows are load-bearing, not decoration. `grid-row: 1/-1`
+   * spans the EXPLICIT grid only, and with no grid-template-rows that grid is
+   * one row — so the rail claimed row 1 by itself and the header, main and
+   * footer flowed into implicit rows beneath it. The rail rendered as a
+   * full-height block ABOVE the page on every screen that had one, which is
+   * not a side rail at all. Measured: rail y=0 h=1000, header y=1000.
+   */
+  body.has-rail {
+    display: grid;
+    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
   body.has-rail > .rail { grid-column: 1; grid-row: 1 / -1; position: sticky; top: 0; height: 100vh; }
+  /* The header already offsets itself under the admin bar; the rail did not,
+     so its brand sat behind the bar and read as clipped. Same variable, same
+     fallback — core carries 32/46 depending on viewport. */
+  body.admin-bar.has-rail > .rail {
+    top: var(--wp-admin--admin-bar--height, 32px);
+    height: calc(100vh - var(--wp-admin--admin-bar--height, 32px));
+  }
+  /*
+   * One navigation, not two. With the rail present the header was repeating
+   * every destination the rail already lists, plus a second copy of the brand
+   * — which is not what the reference does and is not what the rail is for.
+   * The rail is the navigation; the header keeps the account controls and the
+   * theme toggle. Hidden rather than removed from the markup, because below
+   * 1000px the rail becomes a horizontal strip and the header's own toggle
+   * menu is still how a phone navigates.
+   */
+  body.has-rail > .site-header .nav,
+  body.has-rail > .site-header .brand { display: none; }
   body.has-rail > .site-header,
   body.has-rail > .site-main,
   body.has-rail > .site-footer { grid-column: 2; min-width: 0; }

@@ -30,11 +30,11 @@ defined( 'ABSPATH' ) || exit;
  * has-rail body class, and this file keeps the header geometry that was
  * measured rather than reasoned about.
  *
- * Not on the front page: that surface is the marketing hero for signed-out
- * visitors, and a study-tools rail beside it is furniture for an app the
- * visitor has not entered yet.
+ * The front-page test moved into scholaris_has_rail() — see the note there for
+ * why a signed-in student now gets the rail on home and a visitor still does
+ * not.
  */
-if ( ! is_front_page() ) {
+if ( scholaris_has_rail() ) {
 	get_template_part( 'template-parts/app-sidebar' );
 }
 ?>
