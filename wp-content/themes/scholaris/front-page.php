@@ -10,6 +10,44 @@ defined( 'ABSPATH' ) || exit;
 get_header();
 
 $show_assistant = (bool) get_theme_mod( 'scholaris_show_assistant', true );
+
+/*
+ * A signed-in student gets the dashboard; a visitor gets the landing page.
+ *
+ * Both references the owner sent are signed-in views — a returning student does
+ * not need to be sold the product, they need to know what to open next. The
+ * marketing hero below is still exactly right for someone who has not signed
+ * up, so this branches rather than replaces.
+ */
+if ( is_user_logged_in() ) {
+	$data       = scholaris_dashboard_data();
+	$sc_current = wp_get_current_user();
+	$sc_name    = $sc_current->first_name ? $sc_current->first_name : $sc_current->display_name;
+	?>
+	<section class="section">
+		<div class="wrap">
+			<header class="sc-greet">
+				<h1 class="sc-greet__title">
+					<?php
+					printf(
+						/* translators: %s: the student's first name */
+						esc_html__( 'Welcome back, %s', 'scholaris' ),
+						esc_html( $sc_name )
+					);
+					?>
+				</h1>
+				<p class="sc-greet__lede">
+					<?php esc_html_e( 'Your courses, your marks, and the days you actually put the work in.', 'scholaris' ); ?>
+				</p>
+			</header>
+
+			<?php include get_theme_file_path( 'template-parts/dashboard.php' ); ?>
+		</div>
+	</section>
+	<?php
+	get_footer();
+	return;
+}
 ?>
 
 <section class="hero">

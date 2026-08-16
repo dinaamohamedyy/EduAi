@@ -1021,3 +1021,181 @@ body.admin-bar .auth {
    costs the header nothing at the widths where it used to overflow. */
 .icon-btn--avatar { padding: 0; overflow: hidden; }
 .icon-btn--avatar .header-avatar { display: block; width: 26px; height: 26px; border-radius: 50%; }
+
+/* ==========================================================================
+   DASHBOARD
+   Two reference dashboards, and the note that recolouring is something anyone
+   can do. So this is structure: a two-column shell, stat rings whose arc is
+   real geometry, progress bars driven by real completion, and a calendar of
+   days actually studied.
+
+   The rail collapses under the main column before the stats do, because on a
+   phone the courses are what a student came for and the calendar is context.
+   ========================================================================== */
+.sc-dash {
+  display: grid; gap: var(--space-m);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@media (min-width: 1080px) {
+  /* 320px rail: below that the calendar's seven columns start crushing the
+     two-digit dates. Measured, not chosen for looking round. */
+  .sc-dash { grid-template-columns: minmax(0, 1fr) 320px; }
+}
+.sc-dash__main { display: grid; gap: var(--space-m); min-width: 0; }
+.sc-dash__rail { display: grid; gap: var(--space-m); min-width: 0; }
+
+.sc-panel {
+  background: hsl(var(--surface));
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  padding: var(--space-m);
+  min-width: 0;
+}
+.sc-panel__title {
+  margin: 0 0 var(--space-s);
+  font-size: var(--step-1); font-weight: 700; letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+/* -- resume strip -------------------------------------------------------- */
+.sc-resume {
+  display: flex; align-items: center; gap: var(--space-s); flex-wrap: wrap;
+  background: hsl(var(--surface));
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  padding: var(--space-s) var(--space-m);
+}
+.sc-resume__mark {
+  width: 40px; height: 40px; border-radius: 12px; flex: none;
+  background: linear-gradient(135deg, hsl(var(--brand)), hsl(var(--accent)));
+}
+.sc-resume__body { flex: 1 1 16rem; min-width: 0; }
+.sc-resume__label {
+  margin: 0; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: hsl(var(--text-faint));
+}
+.sc-resume__name {
+  margin: 0 0 var(--space-2xs); font-weight: 650; font-size: var(--step-0);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sc-resume__bar {
+  display: block; height: 5px; border-radius: 999px;
+  background: hsl(var(--bg-subtle)); overflow: hidden;
+}
+.sc-resume__bar > span { display: block; height: 100%; border-radius: 999px; background: hsl(var(--brand)); }
+.sc-resume__count { margin: 0; font-size: var(--step--1); color: hsl(var(--text-muted)); white-space: nowrap; }
+.sc-resume__go { flex: none; }
+
+/* -- stat cards ---------------------------------------------------------- */
+.sc-stats {
+  display: grid; gap: var(--space-s);
+  /* 15rem holds "Practice papers" plus the ring on one row; below that the
+     three cards stack rather than clipping the label. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+.sc-stat {
+  border-radius: 14px;
+  padding: var(--space-s);
+  background: hsl(var(--tone) / 0.10);
+  border: 1px solid hsl(var(--tone) / 0.22);
+  min-width: 0;
+}
+.sc-stat--lessons { --tone: 33 85% 48%; }
+.sc-stat--papers  { --tone: 348 74% 58%; }
+.sc-stat--quizzes { --tone: 152 52% 40%; }
+
+.sc-stat__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2xs); }
+.sc-stat__icon {
+  display: grid; place-items: center; width: 40px; height: 40px; flex: none;
+  border-radius: 50%; background: hsl(var(--tone)); color: hsl(0 0% 100%);
+}
+.sc-stat__ring { position: relative; display: grid; place-items: center; flex: none; }
+.sc-stat__track { stroke: hsl(var(--tone) / 0.20); }
+.sc-stat__arc { stroke: hsl(var(--tone)); }
+.sc-stat__pct {
+  position: absolute; font-size: 0.62rem; font-weight: 700;
+  color: hsl(var(--tone)); font-variant-numeric: tabular-nums;
+}
+.sc-stat__value {
+  margin: var(--space-s) 0 0; font-size: var(--step-3); font-weight: 750; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.sc-stat__label { margin: var(--space-3xs) 0 0; font-weight: 600; }
+.sc-stat__sub { margin: var(--space-3xs) 0 0; font-size: var(--step--1); color: hsl(var(--tone)); }
+
+/* -- course table -------------------------------------------------------- */
+.sc-courses { width: 100%; border-collapse: collapse; font-size: var(--step--1); }
+.sc-courses th {
+  text-align: left; font-weight: 600; color: hsl(var(--text-faint));
+  font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+  padding-bottom: var(--space-2xs); border-bottom: 1px solid hsl(var(--border));
+}
+.sc-courses td { padding: var(--space-xs) var(--space-2xs) var(--space-xs) 0; border-bottom: 1px solid hsl(var(--border) / 0.6); }
+.sc-courses tr:last-child td { border-bottom: 0; }
+.sc-courses__num { width: 2rem; color: hsl(var(--text-faint)); font-variant-numeric: tabular-nums; }
+.sc-courses__name { min-width: 0; max-width: 0; width: 40%; }
+.sc-courses__name a {
+  color: hsl(var(--text)); text-decoration: none; font-weight: 600;
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sc-courses__name a:hover { color: hsl(var(--brand)); text-decoration: underline; }
+.sc-courses__stat { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: hsl(var(--text-muted)); }
+.sc-bar { display: block; height: 6px; border-radius: 999px; background: hsl(var(--bg-subtle)); overflow: hidden; min-width: 4rem; }
+.sc-bar__fill { display: block; height: 100%; border-radius: 999px; background: hsl(var(--brand)); }
+
+/* -- calendar ------------------------------------------------------------ */
+.sc-cal__grid {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 2px; text-align: center;
+}
+.sc-cal__dow {
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.04em;
+  color: hsl(var(--text-faint)); padding-bottom: var(--space-2xs);
+}
+.sc-cal__pad { aspect-ratio: 1; }
+.sc-cal__day {
+  aspect-ratio: 1; display: grid; place-items: center;
+  font-size: 0.76rem; border-radius: 50%;
+  color: hsl(var(--text-muted)); font-variant-numeric: tabular-nums;
+}
+/* A studied day is filled; today is ringed. Both can be true at once, which
+   is why one is a background and the other a shadow rather than two fills. */
+.sc-cal__day.is-studied { background: hsl(var(--brand)); color: hsl(var(--on-brand)); font-weight: 700; }
+.sc-cal__day.is-today { box-shadow: inset 0 0 0 2px hsl(var(--brand)); font-weight: 700; }
+.sc-cal__key {
+  margin: var(--space-s) 0 0; display: flex; align-items: center; gap: var(--space-2xs);
+  font-size: var(--step--1); color: hsl(var(--text-muted));
+}
+.sc-cal__keydot { width: 10px; height: 10px; border-radius: 50%; background: hsl(var(--brand)); flex: none; }
+
+/* -- activity feed ------------------------------------------------------- */
+.sc-feed { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xs); }
+.sc-feed__item { display: flex; gap: var(--space-s); align-items: flex-start; min-width: 0; }
+.sc-feed__when {
+  flex: none; width: 3rem; text-align: center; border-radius: 8px;
+  background: hsl(var(--bg-subtle)); color: hsl(var(--text-muted));
+  font-size: 0.7rem; font-weight: 700; padding: var(--space-3xs) 0; line-height: 1.35;
+}
+.sc-feed__body { min-width: 0; display: grid; gap: 2px; }
+.sc-feed__label {
+  font-weight: 600; font-size: var(--step--1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sc-feed__kind { font-size: 0.72rem; color: hsl(var(--text-muted)); }
+.sc-feed__kind--quiz::before,
+.sc-feed__kind--paper::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  margin-right: 0.35rem; vertical-align: 0.1em;
+}
+.sc-feed__kind--quiz::before { background: hsl(152 52% 40%); }
+.sc-feed__kind--paper::before { background: hsl(348 74% 58%); }
+
+/* -- empty states -------------------------------------------------------- */
+.sc-empty { text-align: center; padding: var(--space-m) var(--space-s); color: hsl(var(--text-muted)); }
+.sc-empty p { margin: 0 0 var(--space-s); font-size: var(--step--1); }
+
+/* -- dashboard greeting -------------------------------------------------- */
+.sc-greet { margin-bottom: var(--space-m); }
+.sc-greet__title { margin: 0; font-size: var(--step-3); font-weight: 750; letter-spacing: -0.02em; text-transform: none; }
+.sc-greet__lede { margin: var(--space-3xs) 0 0; color: hsl(var(--text-muted)); font-size: var(--step-0); }

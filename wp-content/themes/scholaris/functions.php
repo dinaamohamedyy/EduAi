@@ -196,6 +196,7 @@ require_once SCHOLARIS_DIR . '/inc/customizer.php';
 require_once SCHOLARIS_DIR . '/inc/template-tags.php';
 require_once SCHOLARIS_DIR . '/inc/auth.php';
 require_once SCHOLARIS_DIR . '/inc/auth-flow.php';
+require_once SCHOLARIS_DIR . '/inc/dashboard.php';
 /*
  * inc/retired-routes.php is NOT loaded: the owner reversed the decision it
  * implements.

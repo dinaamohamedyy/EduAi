@@ -966,6 +966,12 @@
 .eduai-prog__item {
   display: flex; align-items: center; gap: var(--eduai-space-s);
   flex-wrap: wrap;
+  /* A grid item defaults to min-width:auto, so this row refused to shrink
+     below the min-content width of the paper title inside it and ran 38px past
+     the page at 375. The min-width:0 already on __main only lets that child
+     shrink WITHIN this row; it cannot make the row itself narrower than the
+     track. Measured on /progress/: item 368px inside a 330px column. */
+  min-width: 0;
   padding: var(--eduai-space-s);
   background: hsl(var(--eduai-surface));
   border: 1px solid hsl(var(--eduai-border));
