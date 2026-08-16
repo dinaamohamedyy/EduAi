@@ -7,7 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'SCHOLARIS_VERSION', '1.0.6' );
+define( 'SCHOLARIS_VERSION', '1.1.1' );
 define( 'SCHOLARIS_DIR', get_template_directory() );
 define( 'SCHOLARIS_URI', get_template_directory_uri() );
 
@@ -60,7 +60,10 @@ function scholaris_assets(): void {
 	// Self-hosting the fonts is recommended for production; see docs/03-hosting-deployment.md.
 	wp_enqueue_style(
 		'scholaris-fonts',
-		'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500..700;1,9..144,500..700&family=Inter:wght@400;500;600;700&family=Spline+Sans+Mono:wght@500;600&display=swap',
+		// Archivo replaces Fraunces with the retheme (16 Aug 2026): headings are
+		// a heavy uppercase grotesque now, and 800 is the weight the reference
+		// sets them at — loading only up to 700 would silently synthesise it.
+		'https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700&family=Spline+Sans+Mono:wght@500;600&display=swap',
 		array(),
 		null
 	);

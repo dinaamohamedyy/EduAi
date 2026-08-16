@@ -12,12 +12,26 @@
    -------------------------------------------------------------------------- */
 :root {
   /* Brand ------------------------------------------------------------------ */
-  --brand: 161 45% 25%;          /* laurel green  #234f40 */
-  --brand-strong: 162 50% 18%;
-  --brand-soft: 156 30% 92%;
-  --accent: 33 58% 42%;          /* bronze        #aa722d */
-  --accent-soft: 40 52% 92%;
-  --highlight: 42 88% 52%;       /* amber, meters only */
+  /*
+   * Retheme to the reference the owner supplied (TAITOR, Phenomenon Studio),
+   * 16 Aug 2026. The palette is the change; the token NAMES are unchanged, so
+   * every rule in this file and both plugins re-themes without being touched.
+   * That is the whole reason the tokens exist.
+   *
+   * The reference's structure: a blue primary that carries every real action, a
+   * sage-green field that panels sit on, and a warm yellow that marks the
+   * "continue where you were" action — a third weight between primary and
+   * ghost, which this system did not have and which the lesson lists need.
+   */
+  --brand: 224 90% 62%;          /* action blue   #4a7dff */
+  --brand-strong: 224 76% 52%;
+  --brand-soft: 224 84% 95%;
+  --accent: 96 30% 78%;          /* sage panel    #cfe0b8 */
+  --accent-soft: 96 34% 91%;
+  --highlight: 45 96% 64%;       /* warm yellow — "continue" pills, meters */
+  --highlight-soft: 45 92% 88%;
+  --lilac: 258 60% 82%;          /* badges, role chips */
+  --lilac-soft: 258 62% 94%;
 
   /* Ink — solid dark fills: footer, CTA band, chat header ------------------- */
   --ink: 207 26% 13%;
@@ -31,22 +45,33 @@
   --danger: 8 64% 42%;
   --danger-soft: 8 62% 94%;
 
-  /* Neutrals — warm paper --------------------------------------------------- */
-  --bg: 45 38% 97%;
-  --bg-subtle: 45 30% 94%;
-  --bg-sunken: 44 24% 90%;
-  --surface: 45 50% 99%;
-  --border: 44 18% 85%;
-  --border-strong: 44 13% 72%;
-  --text: 210 26% 14%;
-  --text-muted: 213 12% 38%;
-  --text-faint: 213 9% 52%;
-  --on-brand: 43 38% 96%;
+  /* Neutrals — cool paper ---------------------------------------------------
+   * Was warm cream. The reference sits everything on a near-white with a cool
+   * cast, so the sage panels read as colour rather than as a second beige. */
+  --bg: 210 20% 98%;
+  --bg-subtle: 210 22% 96%;
+  --bg-sunken: 210 18% 93%;
+  --surface: 0 0% 100%;
+  --border: 214 18% 90%;
+  --border-strong: 214 14% 78%;
+  --text: 222 30% 11%;
+  --text-muted: 220 12% 40%;
+  --text-faint: 220 9% 55%;
+  --on-brand: 0 0% 100%;
 
   /* Typography ------------------------------------------------------------- */
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Fraunces", "Iowan Old Style", Georgia, Cambria, "Times New Roman", serif;
+  /*
+   * Display was a serif (Fraunces). The reference sets every heading in a
+   * heavy grotesque, uppercase and letter-spaced — "MY LESSONS", "INDEX LAWS".
+   * That is a different voice, not a different font file, so the stack changes
+   * AND the treatment below: uppercase and tracking are applied at the heading
+   * rules, because a font swap alone would keep the old sentence case and read
+   * as neither design.
+   */
+  --font-display: "Archivo", "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "Spline Sans Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   /* Fluid type scale — clamp(min, preferred, max) */
@@ -69,12 +94,15 @@
   --space-2xl: 4rem;
   --space-3xl: 6rem;
 
-  /* Shape ------------------------------------------------------------------ */
-  --radius-xs: 4px;
-  --radius-s: 8px;
-  --radius-m: 12px;
-  --radius-l: 16px;
-  --radius-xl: 22px;
+  /* Shape ------------------------------------------------------------------
+   * Softened throughout to match the reference, where nothing has a tight
+   * corner: cards sit around 18–20px and every button is a full pill. The
+   * scale keeps its names so nothing has to be re-pointed. */
+  --radius-xs: 8px;
+  --radius-s: 12px;
+  --radius-m: 16px;
+  --radius-l: 20px;
+  --radius-xl: 28px;
   --radius-pill: 999px;
 
   /* Elevation — warm-tinted, tight ------------------------------------------ */
@@ -99,11 +127,27 @@
 }
 
 [data-theme="dark"] {
-  --brand: 158 34% 58%;
-  --brand-strong: 158 40% 68%;
-  --brand-soft: 160 22% 17%;
-  --accent: 38 50% 58%;
-  --accent-soft: 38 28% 16%;
+  /*
+   * Rethemed with :root (16 Aug 2026). Editing only the light palette left
+   * this block on the old laurel-and-bronze, and since the site opens in the
+   * visitor's system preference, the first look at the "new" design was the
+   * OLD one for anyone on dark — which is how I very nearly reported a retheme
+   * that had not visibly happened.
+   *
+   * Not the same hues at lower lightness. On dark, the reference's sage is a
+   * near-white panel colour with nowhere to go, so it becomes a muted slate
+   * that still reads as a tinted field; the blue and yellow lift instead,
+   * because both must stay legible against a near-black surface.
+   */
+  --brand: 224 92% 72%;
+  --brand-strong: 224 96% 80%;
+  --brand-soft: 224 40% 20%;
+  --accent: 150 12% 32%;
+  --accent-soft: 150 12% 18%;
+  --highlight: 45 92% 62%;
+  --highlight-soft: 45 40% 22%;
+  --lilac: 258 46% 74%;
+  --lilac-soft: 258 24% 24%;
 
   --ink: 210 16% 12%;
   --on-ink: 43 30% 92%;
@@ -163,15 +207,60 @@ body {
   transition: background-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
 }
 
+/*
+ * Uppercase and positively tracked, per the reference — "MY LESSONS",
+ * "UNLOCK YOUR AI MATH TUTOR". Weight goes to 800 and the letter-spacing flips
+ * sign: a serif at -0.01em wants to tighten, a heavy grotesque set in capitals
+ * needs air or it reads as a solid block.
+ *
+ * text-transform rather than typing the copy in capitals, deliberately. The
+ * strings stay sentence case in PHP, so they remain translatable, searchable,
+ * and readable to a screen reader — which announces "MY LESSONS" as an
+ * acronym when the capitals are real.
+ */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
   font-optical-sizing: auto;
-  font-weight: 600;
-  line-height: 1.12;
-  letter-spacing: -0.01em;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   margin: 0 0 var(--space-s);
   color: hsl(var(--text));
   text-wrap: balance;
+}
+
+/*
+ * Opt-out for headings that are content rather than furniture. A lesson title
+ * or a student's name is a proper noun and must keep its own casing — the
+ * reference capitalises its OWN labels, not the user's data.
+ *
+ * A class can only opt out a heading WE print. The headings inside a lesson
+ * body, a summary or a marked exam are written by the lecturer or the model and
+ * arrive as generated markup with no class to hang this on, so those have to be
+ * reached by their container instead.
+ *
+ * They must be reached, because capitals corrupt notation rather than merely
+ * restyling it. Live on /courses/machine-learning/lessons/least-squares-in-d-
+ * dimensions/: the deck's own heading "Linear regression in d-dimensions"
+ * rendered as "LINEAR REGRESSION IN D-DIMENSIONS" directly above a paragraph
+ * reading "the d features" — one symbol, two cases, in one section. d is a
+ * variable, and so are w_j, x_i, n, k, and every chemical formula, p-value and
+ * t-test a deck will carry. Lesson headings are split out of the lecturer's
+ * slides on upload, so this recurs with every deck rather than being one string
+ * somebody can fix.
+ */
+h1.is-plain, h2.is-plain, h3.is-plain, h4.is-plain, h5.is-plain, h6.is-plain,
+.entry-title, .profile__name, .eduai-prog__title,
+.entry-content :where(h1, h2, h3, h4, h5, h6),
+.tutor-wrap :where(h1, h2, h3, h4, h5, h6),
+.sl-single :where(h1, h2, h3, h4, h5, h6),
+.eduai-sum :where(h1, h2, h3, h4, h5, h6),
+.eduai-prep :where(h1, h2, h3, h4, h5, h6),
+.eduai-bubble :where(h1, h2, h3, h4, h5, h6) {
+  text-transform: none;
+  letter-spacing: -0.01em;
+  font-weight: 700;
 }
 
 h1 { font-size: var(--step-4); }
@@ -287,8 +376,32 @@ blockquote {
 }
 .btn--primary:hover { background: hsl(var(--brand-strong)); color: hsl(var(--on-brand)); box-shadow: var(--shadow-s); }
 
-.btn--accent { background: hsl(var(--accent)); color: hsl(var(--on-brand)); }
-.btn--accent:hover { filter: brightness(0.94); color: hsl(var(--on-brand)); }
+/* Sage — the panel colour, used as a button only for tertiary actions. */
+.btn--accent { background: hsl(var(--accent)); color: hsl(var(--text)); }
+.btn--accent:hover { filter: brightness(0.96); color: hsl(var(--text)); }
+
+/*
+ * The "continue" weight, which this system did not have.
+ *
+ * The reference gives resuming a lesson a warm yellow pill — louder than a
+ * ghost, quieter than the blue that commits to something. Every lesson row
+ * needs it: "Continue lesson" appears on all of them, so the blue would repeat
+ * down the page and stop meaning "this is the action".
+ *
+ * Dark text on yellow, never white: white on this yellow fails contrast at any
+ * size worth using.
+ */
+.btn--continue {
+  background: hsl(var(--highlight));
+  color: hsl(var(--text));
+  border-color: transparent;
+  font-weight: 700;
+}
+.btn--continue:hover {
+  background: hsl(var(--highlight) / 0.86);
+  color: hsl(var(--text));
+  box-shadow: var(--shadow-s);
+}
 
 .btn--ghost { background: transparent; color: hsl(var(--text)); border-color: hsl(var(--border-strong)); }
 .btn--ghost:hover { background: hsl(var(--surface)); border-color: hsl(var(--text-faint)); color: hsl(var(--text)); }
@@ -565,7 +678,10 @@ body.admin-bar .site-header { top: var(--wp-admin--admin-bar--height, 32px); }
 .hero__grid { display: grid; gap: var(--space-xl); align-items: center; grid-template-columns: 1fr; }
 @media (min-width: 1000px) { .hero__grid { grid-template-columns: 1.05fr 0.95fr; } }
 
-.hero__title { font-size: var(--step-5); font-weight: 560; margin-bottom: var(--space-s); }
+/* 560 was a Fraunces variable-weight setting. Archivo has no such axis stop and
+   the heading rule now sets 800, so leaving it here silently un-bolded the one
+   heading on the site anybody looks at first. */
+.hero__title { font-size: var(--step-5); font-weight: 800; margin-bottom: var(--space-s); }
 .hero__title em {
   font-style: italic; color: hsl(var(--brand));
   background: linear-gradient(hsl(var(--accent) / 0.5), hsl(var(--accent) / 0.5)) 0 90% / 100% 0.07em no-repeat;
