@@ -505,16 +505,16 @@ if ( isset( $query ) && $query instanceof WP_Query ) {
 		?>
 		<div class="sl-notice">
 			<?php if ( $sl_filtered ) : ?>
-				<h3><?php esc_html_e( 'No material matches those filters', 'scholaris-library' ); ?></h3>
+				<h3 class="is-plain"><?php esc_html_e( 'No material matches those filters', 'scholaris-library' ); ?></h3>
 				<p><?php esc_html_e( 'Try a broader search, or clear the filters to see everything.', 'scholaris-library' ); ?></p>
 				<a class="sl-btn sl-btn--primary" href="<?php echo esc_url( get_post_type_archive_link( 'study_material' ) ?: home_url( '/library/' ) ); ?>">
 					<?php esc_html_e( 'Show everything', 'scholaris-library' ); ?>
 				</a>
 			<?php elseif ( $sl_courses ) : ?>
-				<h3><?php esc_html_e( 'Everything is filed into a course', 'scholaris-library' ); ?></h3>
+				<h3 class="is-plain"><?php esc_html_e( 'Everything is filed into a course', 'scholaris-library' ); ?></h3>
 				<p><?php esc_html_e( 'There is no loose material in the library right now — it is all in one of the courses above.', 'scholaris-library' ); ?></p>
 			<?php else : ?>
-				<h3><?php esc_html_e( 'Nothing in the library yet', 'scholaris-library' ); ?></h3>
+				<h3 class="is-plain"><?php esc_html_e( 'Nothing in the library yet', 'scholaris-library' ); ?></h3>
 				<p><?php esc_html_e( 'Lecture slides, notes and past papers will appear here once they are added.', 'scholaris-library' ); ?></p>
 			<?php endif; ?>
 		</div>
