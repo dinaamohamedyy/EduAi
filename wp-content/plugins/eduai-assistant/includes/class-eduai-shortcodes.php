@@ -67,13 +67,19 @@ class EduAI_Shortcodes {
 		wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
 		wp_enqueue_script( 'eduai-prepare', EDUAI_URL . 'assets/js/prepare.js', array(), EDUAI_VERSION, true );
 
+		// One resolution, two consumers: the script that sends the id and the
+		// template that tells the student which lesson this is about. The
+		// script had it and the template did not, so the page knew the answer
+		// and never said it.
+		$eduai_scope = EduAI_Scope::for_script();
+
 		wp_localize_script( 'eduai-prepare', 'EduAIPrepConfig', array(
 			'root'     => esc_url_raw( rest_url( EduAI_REST::NS ) ),
 			'nonce'    => wp_create_nonce( 'wp_rest' ),
 			'loggedIn' => is_user_logged_in(),
 			// See the note on the same key in enqueue_chat_assets(): null, or
 			// a server-resolved { id, title }.
-			'scope'    => EduAI_Scope::for_script(),
+			'scope'    => $eduai_scope,
 			'i18n'     => array(
 				'dropFile'        => __( 'Drop a lecture here, or click to choose', 'eduai' ),
 				'needSource'      => __( 'Attach a lecture, or paste at least a paragraph of it.', 'eduai' ),

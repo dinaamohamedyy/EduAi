@@ -24,10 +24,34 @@ $eduai_prep_id = 'eduai-prep-' . wp_unique_id();
 	<!-- ------------------------------------------------------------ setup -->
 	<div data-eduai-prep-stage="setup">
 
+		<?php
+		/*
+		 * Say which lesson this is about, before anything is pressed.
+		 *
+		 * A student arriving from "Prepare me on this lesson" was landing on
+		 * a page whose first instruction is "Upload a lecture" — with the
+		 * lesson already loaded and nothing on screen saying so. The scope
+		 * was reaching the script and never reaching the reader, which is the
+		 * promise-and-delivery gap the Summarise banner exists to close; same
+		 * markup, same class, so it styles identically.
+		 */
+		if ( ! empty( $eduai_scope['title'] ) ) :
+			?>
+			<p class="eduai-scope">
+				<span class="eduai-scope__label"><?php esc_html_e( 'Exam on', 'eduai' ); ?></span>
+				<strong class="eduai-scope__name"><?php echo esc_html( $eduai_scope['title'] ); ?></strong>
+			</p>
+		<?php endif; ?>
+
 		<ol class="eduai-prep__flow" aria-label="<?php esc_attr_e( 'How PrepareME works', 'eduai' ); ?>">
 			<li>
-				<b><?php esc_html_e( '1 · Upload', 'eduai' ); ?></b>
-				<span><?php esc_html_e( 'A lecture PDF, slide deck, document or pasted text.', 'eduai' ); ?></span>
+				<?php if ( ! empty( $eduai_scope['title'] ) ) : ?>
+					<b><?php esc_html_e( '1 · This lesson', 'eduai' ); ?></b>
+					<span><?php esc_html_e( 'Already loaded — nothing to upload. Attach a file only if you want a different source.', 'eduai' ); ?></span>
+				<?php else : ?>
+					<b><?php esc_html_e( '1 · Upload', 'eduai' ); ?></b>
+					<span><?php esc_html_e( 'A lecture PDF, slide deck, document or pasted text.', 'eduai' ); ?></span>
+				<?php endif; ?>
 			</li>
 			<li>
 				<b><?php esc_html_e( '2 · Sit the exam', 'eduai' ); ?></b>
