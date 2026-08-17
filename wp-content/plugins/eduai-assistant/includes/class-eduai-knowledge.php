@@ -87,9 +87,21 @@ class EduAI_Knowledge {
 	public static function indexed_post_types(): array {
 		$types = array( 'study_material', 'post', 'page' );
 
-		if ( post_type_exists( 'courses' ) ) {
-			$types[] = 'courses';
-			$types[] = 'lesson';
+		/*
+		 * Asked of the seam rather than named here.
+		 *
+		 * These were Tutor's slugs, so the LearnDash conversion made the
+		 * assistant blind to every lesson on the site: `sfwd-lessons` was not
+		 * in the list, nothing indexed it, and Ask answered "no course
+		 * material matched" for content the student was reading on screen.
+		 * Measured before the fix — 0 indexed sfwd-lessons documents against
+		 * 3 left over from Tutor.
+		 *
+		 * Nothing failed to make that visible, which is why it needs the seam
+		 * and not a corrected list: the next migration would do it again.
+		 */
+		if ( class_exists( 'EduAI_LMS' ) && EduAI_LMS::active() ) {
+			$types = array_merge( $types, EduAI_LMS::content_types() );
 		}
 
 		/**

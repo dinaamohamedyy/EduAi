@@ -54,7 +54,17 @@ class SL_Catalog {
 		// Ignore the noise. A comment, a page edit or an attachment does not
 		// change what the library contains, and bumping on every save would
 		// make the cache a rounding error rather than a cache.
-		if ( $type && ! in_array( $type, array( 'courses', 'topics', 'lesson', 'study_material' ), true ) ) {
+		// Asked of the seam, not listed here. These were Tutor's names, so
+		// after the LearnDash conversion a course save stopped bumping the
+		// version and the library served a cached tree of a plugin that was
+		// no longer installed — the cache outliving the thing it caches.
+		$watched = array( 'study_material' );
+
+		if ( class_exists( 'EduAI_LMS' ) && EduAI_LMS::active() ) {
+			$watched = array_merge( $watched, EduAI_LMS::content_types() );
+		}
+
+		if ( $type && ! in_array( $type, $watched, true ) ) {
 			return;
 		}
 
@@ -123,102 +133,93 @@ class SL_Catalog {
 	 * Published courses, each with its topics and lessons.
 	 */
 	public static function courses(): array {
-		if ( ! post_type_exists( 'courses' ) || ! function_exists( 'tutor_utils' ) ) {
+		if ( ! class_exists( 'EduAI_LMS' ) || ! EduAI_LMS::active() ) {
 			return array();
 		}
+
+		$course_type = EduAI_LMS::course_type();
+		$lesson_type = EduAI_LMS::lesson_type();
 
 		$out = array();
 
 		foreach ( get_posts( array(
-			'post_type'      => 'courses',
+			'post_type'      => $course_type,
 			'post_status'    => 'publish',
 			'posts_per_page' => -1,
 			'orderby'        => 'menu_order title',
 			'order'          => 'ASC',
 		) ) as $course ) {
 
-			$topics    = array();
 			$materials = array();
-			$lessons   = 0;
 
-			// One call for the whole course rather than one per topic: this
-			// runs on the library page, which is the most-visited screen in
-			// the product.
-			$contents = (array) tutor_utils()->get_course_contents_by_id( $course->ID );
+			// Lessons belonging to this course, in the order the LMS shows
+			// them. LearnDash joins them by `course_id` meta rather than by
+			// post_parent, which is the same shape of mistake as reading a
+			// study material's attachment off its parent: the link is the
+			// meta, and the parent is incidental.
+			$lesson_posts = get_posts( array(
+				'post_type'      => $lesson_type,
+				'post_status'    => 'publish',
+				'posts_per_page' => -1,
+				'orderby'        => 'menu_order title',
+				'order'          => 'ASC',
+				'no_found_rows'  => true,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				'meta_query'     => array(
+					array(
+						'key'   => 'course_id',
+						'value' => (int) $course->ID,
+					),
+				),
+			) );
+
+			$rows = array();
+
+			foreach ( $lesson_posts as $item ) {
+				$source = (int) get_post_meta( $item->ID, '_eduai_source_material', true );
+
+				if ( $source ) {
+					$materials[ $source ] = $source;
+				}
+
+				// Titles only. Listing what a course teaches is how somebody
+				// decides to take it; the lesson BODY stays behind the LMS's
+				// gate, which is the same split the course page makes.
+				$rows[] = array(
+					'id'     => (int) $item->ID,
+					'title'  => get_the_title( $item->ID ),
+					'url'    => (string) get_permalink( $item->ID ),
+					'source' => $source,
+				);
+			}
 
 			/*
-			 * Prime the caches for every lesson at once, and this is the
-			 * difference between deriving being cheap and deriving being the
-			 * wrong choice.
+			 * One group, named for the course.
 			 *
-			 * Tutor fetches course contents with its own SQL, so the rows
-			 * never enter WordPress's post cache — and then get_the_title(),
-			 * get_permalink() and get_post_meta() each go back to the
-			 * database per lesson. Measured before this: 16 queries for one
-			 * course of three lessons, about five per lesson, which is a
-			 * browse page issuing thousands on a real catalogue.
-			 *
-			 * That per-lesson cost was the whole argument for storing an
-			 * inverse on the material. It is a caching problem rather than a
-			 * modelling one, so it gets a caching answer, and the fact keeps
-			 * one home.
+			 * The shape keeps a `topics` list because that is what the
+			 * template loops over and changing it would break front-end's
+			 * markup for a structural detail. LearnDash does have topics
+			 * (`sfwd-topic`), but a lesson reaches its course through
+			 * `course_id` whether or not a topic sits between them — so
+			 * grouping by course is correct for every install, and a topic
+			 * layer can be added later without moving the lessons.
 			 */
-			$ids = array();
-
-			foreach ( $contents as $item ) {
-				$ids[] = (int) $item->ID;
-			}
-
-			if ( $ids ) {
-				_prime_post_caches( $ids, false, true );
-			}
-
-			foreach ( (array) tutor_utils()->get_topics( $course->ID )->posts as $topic ) {
-				$rows = array();
-
-				foreach ( $contents as $item ) {
-					if ( (int) $item->post_parent !== (int) $topic->ID || 'lesson' !== $item->post_type ) {
-						continue;
-					}
-
-					$source = (int) get_post_meta( $item->ID, '_eduai_source_material', true );
-
-					if ( $source ) {
-						$materials[ $source ] = $source;
-					}
-
-					// Titles only. Listing what a course teaches is how
-					// somebody decides to take it; the lesson BODY stays
-					// behind Tutor's gate, which is the same split the course
-					// page itself makes.
-					$rows[] = array(
-						'id'     => (int) $item->ID,
-						'title'  => get_the_title( $item->ID ),
-						'url'    => (string) get_permalink( $item->ID ),
-						'source' => $source,
-					);
-				}
-
-				$lessons += count( $rows );
-
-				// A topic with nothing in it is scaffolding the lecturer has
-				// not filled yet, and rendering it as an empty heading makes
-				// the course look broken rather than unfinished.
-				if ( $rows ) {
-					$topics[] = array(
-						'id'      => (int) $topic->ID,
-						'title'   => get_the_title( $topic->ID ),
+			$topics = $rows
+				? array(
+					array(
+						'id'      => (int) $course->ID,
+						'title'   => get_the_title( $course->ID ),
 						'lessons' => $rows,
-					);
-				}
-			}
+					),
+				)
+				: array();
 
 			$out[] = array(
 				'id'        => (int) $course->ID,
 				'title'     => get_the_title( $course->ID ),
 				'url'       => (string) get_permalink( $course->ID ),
 				'topics'    => $topics,
-				'lessons'   => $lessons,
+				'lessons'   => count( $rows ),
 				// The decks this course was built from, so a template can
 				// offer the original PDF beside the lessons made from it.
 				'materials' => array_values( $materials ),
@@ -226,6 +227,7 @@ class SL_Catalog {
 		}
 
 		return $out;
+
 	}
 
 	/**

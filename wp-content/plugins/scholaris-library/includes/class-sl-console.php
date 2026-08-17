@@ -282,7 +282,13 @@ class SL_Console {
 			}
 		}
 
-		$courses = post_type_exists( 'courses' ) ? (int) wp_count_posts( 'courses' )->publish : null;
+		// Through the seam: this counted Tutor's `courses`, so after the
+		// LearnDash conversion it reported null while the owner had courses
+		// on screen — a strip saying nothing about the thing he was looking at.
+		$course_type = class_exists( 'EduAI_LMS' ) && EduAI_LMS::active() ? EduAI_LMS::course_type() : '';
+		$courses     = $course_type && post_type_exists( $course_type )
+			? (int) wp_count_posts( $course_type )->publish
+			: null;
 
 		return array(
 			'materials'     => $published,
