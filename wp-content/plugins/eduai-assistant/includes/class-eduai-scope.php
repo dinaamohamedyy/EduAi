@@ -112,10 +112,29 @@ class EduAI_Scope {
 	 * its access rule in may_read() first. That is the intended friction.
 	 */
 	private static function scopable(): array {
-		return (array) apply_filters(
-			'eduai_scopable_post_types',
-			array( 'study_material', 'lesson' )
-		);
+		/*
+		 * The lesson type comes from the LMS seam, not a literal.
+		 *
+		 * This read `array( 'study_material', 'lesson' )` — Tutor's name. The
+		 * hour LearnDash became the LMS, every lesson became `sfwd-lessons`,
+		 * fell outside this list, and resolved to no scope: Summarise, Ask and
+		 * PrepareME disappeared from every lesson page, and the panel that
+		 * carries them never rendered because it asks this first.
+		 *
+		 * Nothing errored. The migration reported success, the lessons were
+		 * present and correct, and the feature the site exists for was gone —
+		 * findable only by rendering a lesson and looking for three links that
+		 * were not there.
+		 */
+		$types = array( 'study_material' );
+
+		$lesson = class_exists( 'EduAI_LMS' ) ? EduAI_LMS::lesson_type() : 'lesson';
+
+		if ( '' !== $lesson ) {
+			$types[] = $lesson;
+		}
+
+		return (array) apply_filters( 'eduai_scopable_post_types', $types );
 	}
 
 	/**

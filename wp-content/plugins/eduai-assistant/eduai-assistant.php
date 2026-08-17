@@ -80,6 +80,25 @@ final class EduAI_Assistant {
 		 * document at all.
 		 */
 		add_action( 'tutor_single_content_lesson', array( $this, 'render_lesson_panel' ) );
+
+		/*
+		 * The same panel on a LearnDash lesson.
+		 *
+		 * `tutor_single_content_lesson` above is Tutor's, and Tutor does not
+		 * fire it for an sfwd-lessons post — so the moment LearnDash became the
+		 * LMS, Summarise / Ask / PrepareME vanished from every lesson page with
+		 * nothing on screen and nothing in the log to say why. The owner's
+		 * instruction for this conversion was that those features keep working,
+		 * and this hook is the whole of what "keep working" means: the links
+		 * carry ?source=<lesson id>, and if the panel does not render there is
+		 * no link to carry it.
+		 *
+		 * `learndash_content` is LearnDash's own content filter and runs after
+		 * its access check, so the panel inherits that gate rather than
+		 * re-deciding it — the same property the Tutor hook was chosen for.
+		 */
+		add_filter( 'learndash_content', array( $this, 'append_lesson_panel' ), 20, 2 );
+
 		add_action( 'admin_notices', array( $this, 'setup_notice' ) );
 	}
 
@@ -113,10 +132,38 @@ final class EduAI_Assistant {
 	 *
 	 * @param WP_Post|null $lesson Post Tutor passes to the hook.
 	 */
+	/**
+	 * The panel for LearnDash, appended to the lesson content it filters.
+	 *
+	 * Returns the content unchanged for anything that is not a lesson — this
+	 * filter also runs for courses, topics and quizzes, and appending three
+	 * lesson-scoped tools to a course page would offer to examine a student on
+	 * something that is not a lesson.
+	 *
+	 * @param string       $content Lesson content LearnDash is rendering.
+	 * @param WP_Post|null $post    Post it belongs to.
+	 */
+	public function append_lesson_panel( $content, $post = null ) {
+		$post = $post instanceof WP_Post ? $post : get_post();
+
+		if ( ! EduAI_LMS::is_lesson( $post ) ) {
+			return $content;
+		}
+
+		ob_start();
+		$this->render_lesson_panel( $post );
+		$panel = (string) ob_get_clean();
+
+		return $content . $panel;
+	}
+
 	public function render_lesson_panel( $lesson = null ): void {
 		$lesson = $lesson instanceof WP_Post ? $lesson : get_post();
 
-		if ( ! $lesson instanceof WP_Post || 'lesson' !== $lesson->post_type ) {
+		// Was `'lesson' !== $lesson->post_type`, which is Tutor's name for it.
+		// Through the seam this accepts sfwd-lessons too, so one renderer
+		// serves both LMSs and neither is named here.
+		if ( ! EduAI_LMS::is_lesson( $lesson ) ) {
 			return;
 		}
 
