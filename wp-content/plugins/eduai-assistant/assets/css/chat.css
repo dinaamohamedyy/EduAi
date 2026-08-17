@@ -583,12 +583,14 @@
    says, which is why this is a line of text and not an icon.
    min-width:0 on the name so a long lecture title ellipsises instead of
    pushing the row wider than the column. */
+/* The sage panel from the reference design, not a tinted brand stripe. This is
+   the banner that answers "which lesson am I being examined on", so it reads as
+   a titled section rather than as a notice attached to something else. */
 .eduai-scope {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem;
-  margin: 0; padding: var(--eduai-space-xs) var(--eduai-space-s);
-  background: hsl(var(--eduai-brand) / 0.06);
-  border-left: 3px solid hsl(var(--eduai-brand));
-  border-radius: var(--eduai-radius-s);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem;
+  margin: 0; padding: var(--eduai-space-s) var(--eduai-space-m);
+  background: hsl(var(--accent, var(--eduai-brand)) / 0.55);
+  border-radius: var(--eduai-radius-l, 20px);
 }
 .eduai-scope__label {
   font-family: var(--eduai-mono); font-size: 0.68rem; letter-spacing: 0.08em;
@@ -817,12 +819,21 @@
 .eduai-prep__len { display: flex; align-items: center; gap: var(--eduai-space-xs); flex-wrap: wrap; font-size: var(--eduai-step--1); }
 .eduai-prep__len-label { font-weight: 600; }
 .eduai-prep__len-hint { color: hsl(var(--eduai-muted)); font-size: var(--eduai-step--1); }
-.eduai-prep__pick { display: inline-flex; border: 1px solid hsl(var(--eduai-border)); border-radius: var(--eduai-radius-pill); overflow: hidden; }
+/* Separate pills rather than a hairline segmented control. The reference has no
+   thin borders anywhere, and at this size the segments were a 24px-high strip
+   that read as one control with three labels instead of three choices. */
+.eduai-prep__pick { display: inline-flex; gap: 0.4rem; border: 0; border-radius: 0; overflow: visible; }
 .eduai-prep__pick button {
-  border: 0; background: transparent; cursor: pointer; font: inherit; font-size: var(--eduai-step--1);
-  padding: var(--eduai-space-3xs) var(--eduai-space-xs); color: hsl(var(--eduai-muted));
+  border: 1px solid hsl(var(--eduai-border)); background: hsl(var(--eduai-surface));
+  cursor: pointer; font: inherit; font-size: var(--eduai-step-0); font-weight: 600;
+  min-width: 3rem; padding: 0.5rem 1rem; border-radius: var(--eduai-radius-pill);
+  color: hsl(var(--eduai-muted)); transition: background-color 120ms, color 120ms, border-color 120ms;
 }
-.eduai-prep__pick button.is-on { background: hsl(var(--eduai-brand)); color: hsl(var(--eduai-on-brand)); }
+.eduai-prep__pick button:hover { border-color: hsl(var(--eduai-brand) / 0.5); color: hsl(var(--eduai-text)); }
+.eduai-prep__pick button.is-on {
+  background: hsl(var(--eduai-brand)); color: hsl(var(--eduai-on-brand));
+  border-color: hsl(var(--eduai-brand));
+}
 .eduai-prep__go { margin: 0; }
 .eduai-prep__working { display: grid; gap: var(--eduai-space-2xs); justify-items: center; padding: var(--eduai-space-s); }
 .eduai-prep__working p { margin: 0; font-size: var(--eduai-step--1); color: hsl(var(--eduai-muted)); }
@@ -1036,4 +1047,110 @@
 @media (max-width: 32rem) {
   .eduai-prog__score { align-items: flex-start; padding-left: 0; border-left: 0; }
   .eduai-prog__retake { width: 100%; justify-content: center; }
+}
+
+/* ------------------------------------------------------ prepare: pick a lesson --
+   A list, not a grid of equal boxes. The page's content is the student's own
+   lessons; the three explanatory panels it replaced said what the page lede
+   already says, and equal-weight boxes explaining a product is the shape that
+   reads as filler rather than as a tool.
+   -------------------------------------------------------------------------- */
+.eduai-pick { display: grid; gap: var(--eduai-space-2xs); }
+.eduai-pick__title { margin: 0; font-size: var(--eduai-step-1); }
+
+.eduai-pick__course {
+  margin: var(--eduai-space-xs) 0 0;
+  font-family: var(--eduai-mono); font-size: 0.66rem; font-weight: 600;
+  letter-spacing: 0.13em; text-transform: uppercase; color: hsl(var(--eduai-muted));
+}
+
+.eduai-pick__list { list-style: none; margin: 0; padding: 0; display: grid; }
+.eduai-pick__list li + li { border-top: 1px solid hsl(var(--eduai-border)); }
+
+.eduai-pick__item {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--eduai-space-s);
+  padding: 0.75rem 0.25rem;
+  color: hsl(var(--eduai-text)); text-decoration: none;
+  transition: color 140ms ease, padding-left 140ms ease;
+}
+.eduai-pick__item:hover,
+.eduai-pick__item:focus-visible { color: hsl(var(--eduai-brand)); padding-left: 0.6rem; }
+
+.eduai-pick__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eduai-pick__go { flex: none; color: hsl(var(--eduai-muted)); transition: transform 140ms ease; }
+.eduai-pick__item:hover .eduai-pick__go { color: inherit; transform: translateX(3px); }
+
+/* Own material: a quiet disclosure, so the fallback does not compete with the
+   list above it for the eye. */
+.eduai-prep__own { margin-top: var(--eduai-space-s); }
+.eduai-prep__own > summary {
+  cursor: pointer; width: max-content;
+  font-size: var(--eduai-step--1); font-weight: 600;
+  color: hsl(var(--eduai-muted));
+  padding: 0.35rem 0;
+}
+.eduai-prep__own > summary:hover { color: hsl(var(--eduai-text)); }
+.eduai-prep__own[open] > summary { margin-bottom: var(--eduai-space-2xs); }
+.eduai-prep__own > *:not(summary) { margin-top: var(--eduai-space-2xs); }
+
+@media (prefers-reduced-motion: reduce) {
+  .eduai-pick__item, .eduai-pick__go { transition: none; }
+}
+
+/* ------------------------------------------------------------- panel ----------
+   One surface for one task: head says what it is, body holds the choices, foot
+   carries the commit behind a divider. The five detached blocks this replaces
+   were each styled and collectively unstructured — which is the difference
+   between a screen that has been designed and one that has been assembled.
+   -------------------------------------------------------------------------- */
+.eduai-panel {
+  background: hsl(var(--eduai-surface));
+  border: 1px solid hsl(var(--eduai-border));
+  border-radius: var(--eduai-radius-l);
+  overflow: hidden;
+  max-width: var(--eduai-measure);
+}
+
+.eduai-panel__head {
+  padding: var(--eduai-space-s) var(--eduai-space-m);
+  border-bottom: 1px solid hsl(var(--eduai-border));
+  background: hsl(var(--eduai-bg-subtle));
+}
+.eduai-panel__title { margin: 0; font-size: var(--eduai-step-1); line-height: 1.2; }
+.eduai-panel__lede {
+  margin: var(--eduai-space-3xs) 0 0;
+  font-size: var(--eduai-step--1); color: hsl(var(--eduai-muted));
+}
+
+.eduai-panel__body { padding: var(--eduai-space-m); display: grid; gap: var(--eduai-space-s); }
+
+.eduai-panel__foot {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--eduai-space-s);
+  padding: var(--eduai-space-s) var(--eduai-space-m);
+  border-top: 1px solid hsl(var(--eduai-border));
+  background: hsl(var(--eduai-bg-subtle));
+}
+.eduai-panel__cta { flex: none; }
+.eduai-panel__out:not(:empty) { padding: 0 var(--eduai-space-m) var(--eduai-space-s); }
+
+/* The length control sits in the footer now, so it lays out as a label + a
+   segmented control + a hint rather than as its own free-standing row. */
+.eduai-panel__foot .eduai-prep__len {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: var(--eduai-space-2xs); margin: 0;
+}
+.eduai-panel__foot .eduai-prep__len-hint {
+  flex-basis: 100%;
+  font-size: 0.72rem; color: hsl(var(--eduai-muted));
+}
+
+/* Inside the panel the picker no longer needs its own outer spacing. */
+.eduai-panel__body > .eduai-pick { gap: var(--eduai-space-3xs); }
+.eduai-panel__body > .eduai-prep__own { margin-top: 0; }
+
+@media (max-width: 560px) {
+  .eduai-panel__head, .eduai-panel__body, .eduai-panel__foot { padding-inline: var(--eduai-space-s); }
+  .eduai-panel__foot { align-items: stretch; }
+  .eduai-panel__cta { width: 100%; }
 }
