@@ -214,7 +214,18 @@ $eduai_doc = $eduai_can_view ? SL_Library::download_url( $eduai_src ) : '';
 			<?php if ( ! empty( $eduai_prepare_url ) ) : ?>
 				<a class="eduai-btn" href="<?php echo esc_url( $eduai_prepare_url ); ?>"
 					aria-label="<?php echo esc_attr( sprintf( /* translators: %s: lesson title */ __( 'Prepare me on this lesson: %s', 'eduai' ), $eduai_lesson_title ) ); ?>">
-					<?php esc_html_e( 'Practice questions', 'eduai' ); ?>
+					<?php
+				/*
+				 * "PrepareME", not "Practice questions". Renaming it to plainer
+				 * English read better in isolation and cost the owner the thing
+				 * he was looking for — he asked where PrepareME had gone from
+				 * the lesson, and the answer was that it was right there under a
+				 * name he had never seen. The rail, the nav and this button now
+				 * say the same word, so a student learns one vocabulary rather
+				 * than three synonyms for the same destination.
+				 */
+				esc_html_e( 'PrepareME', 'eduai' );
+				?>
 				</a>
 			<?php endif; ?>
 		</div>
