@@ -131,14 +131,80 @@ function scholaris_dashboard_data( int $user_id = 0 ): array {
 		);
 
 		$data['lessons'] = array( 'done' => $lessons_done, 'total' => $lessons_total );
+	}
 
-		// Resume: the first unfinished course, and its first incomplete lesson
-		// if Tutor will name one.
-		foreach ( $data['courses'] as $course ) {
-			if ( $course['percent'] < 100 ) {
-				$data['resume'] = $course;
-				break;
+	// ------------------------------------------------------- courses, LearnDash
+	/*
+	 * Built from course STEPS, not from learndash_course_progress().
+	 *
+	 * That function is the obvious one to reach for and it is wrong here: on
+	 * this install it returns {"percentage":0,"completed":0,"total":0} for a
+	 * course whose steps list holds three lessons. A real API returning a real
+	 * structure with a total of zero — so a dashboard built on it would have
+	 * shown "0 of 0 done" beside a course that plainly has lessons, and looked
+	 * fine doing it.
+	 *
+	 * learndash_get_course_steps() reports the three, and completion is asked
+	 * per step. Verified against the running site rather than the docs.
+	 */
+	if ( 'learndash' === $sc_lms
+		&& function_exists( 'learndash_user_get_enrolled_courses' )
+		&& function_exists( 'learndash_get_course_steps' ) ) {
+
+		$ld_courses    = (array) learndash_user_get_enrolled_courses( $user_id );
+		$lessons_done  = 0;
+		$lessons_total = 0;
+
+		foreach ( $ld_courses as $cid ) {
+			$cid   = (int) $cid;
+			$steps = (array) learndash_get_course_steps( $cid );
+			$total = count( $steps );
+			$done  = 0;
+
+			if ( function_exists( 'learndash_is_lesson_complete' ) ) {
+				foreach ( $steps as $step ) {
+					if ( learndash_is_lesson_complete( $user_id, (int) $step, $cid ) ) {
+						$done++;
+					}
+				}
 			}
+
+			$lessons_done  += $done;
+			$lessons_total += $total;
+
+			$data['courses'][] = array(
+				'id'      => $cid,
+				'title'   => get_the_title( $cid ),
+				'url'     => get_permalink( $cid ),
+				'done'    => $done,
+				'total'   => $total,
+				'percent' => scholaris_pct( $done, $total ),
+				'thumb'   => get_the_post_thumbnail_url( $cid, 'medium' ) ?: '',
+			);
+		}
+
+		$data['lessons'] = array( 'done' => $lessons_done, 'total' => $lessons_total );
+	}
+
+	// Sort by "closest to finishing but not finished" — the course a student
+	// can most usefully return to, rather than alphabetical. Applies to both
+	// providers, so it sits outside either branch.
+	usort(
+		$data['courses'],
+		static function ( $a, $b ) {
+			$a_live = $a['percent'] < 100 ? 0 : 1;
+			$b_live = $b['percent'] < 100 ? 0 : 1;
+			if ( $a_live !== $b_live ) {
+				return $a_live <=> $b_live;
+			}
+			return $b['percent'] <=> $a['percent'];
+		}
+	);
+
+	foreach ( $data['courses'] as $course ) {
+		if ( $course['percent'] < 100 ) {
+			$data['resume'] = $course;
+			break;
 		}
 	}
 
