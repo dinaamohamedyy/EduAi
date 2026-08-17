@@ -175,25 +175,7 @@ class SL_Console {
 					array( 'edit-tags.php?taxonomy=material_type&post_type=study_material', __( 'Material types', 'scholaris-library' ), 'manage_categories' ),
 				),
 			),
-			'courses' => array(
-				'title' => __( 'Courses', 'scholaris-library' ),
-				'lead'  => __( 'Courses, lessons and quizzes are built inside Tutor LMS.', 'scholaris-library' ),
-				'links' => array(
-					// Labels match the destination's <title>, not an invented
-					// name: three of the four Tutor screens have no <h1> at
-					// all, so the tab title is what the owner actually sees on
-					// arrival. "All courses" deliberately keeps its wording —
-					// renaming it to "Courses" would put that word as a link
-					// inside a card already titled Courses.
-					array( 'admin.php?page=create-course', __( 'Course Builder', 'scholaris-library' ), 'manage_tutor_instructor' ),
-					array( 'admin.php?page=tutor', __( 'All courses', 'scholaris-library' ), 'manage_tutor_instructor' ),
-					array( 'edit-tags.php?taxonomy=course-category&post_type=courses', __( 'Course categories', 'scholaris-library' ), 'manage_tutor' ),
-					// The escape hatch: `courses` is still registered
-					// show_ui => true, so this list stays reachable by direct
-					// URL if the React builder misbehaves.
-					array( 'edit.php?post_type=courses', __( 'Classic course list', 'scholaris-library' ), 'edit_posts' ),
-				),
-			),
+			'courses' => self::courses_card(),
 			'students' => array(
 				'title' => __( 'Students', 'scholaris-library' ),
 				'lead'  => __( 'Who is registered, and how they are doing.', 'scholaris-library' ),
@@ -206,6 +188,69 @@ class SL_Console {
 		);
 
 		return $cards;
+	}
+
+	/**
+	 * The Courses card, pointed at whichever LMS the site actually renders.
+	 *
+	 * THIS SHIPPED WRONG AND COST THE OWNER REAL WORK. Every link here was a
+	 * Tutor screen, hard-coded. After the LearnDash conversion the site
+	 * rendered `sfwd-courses` while this card still sent him to Tutor's list
+	 * of `courses` — so he opened the console, found "Deep Learning" and
+	 * "Machine Learning" exactly where this told him to look, deleted them,
+	 * and the dashboard went on showing both. He deleted precisely what he
+	 * was shown; it was the wrong copy, and this card is what showed it to
+	 * him.
+	 *
+	 * Two post types with the same course titles, in two active plugins, and
+	 * a console asserting which one to manage: the assertion has to be
+	 * derived, not typed. EduAI_LMS already knows which provider is live, so
+	 * it answers rather than this file repeating a guess that goes stale on
+	 * the next migration.
+	 *
+	 * With the seam absent the card degrades to nothing rather than to Tutor:
+	 * no links beats links into a plugin that may not be the one being used,
+	 * which is the failure this comment exists because of.
+	 */
+	private static function courses_card(): array {
+		$card = array(
+			'title' => __( 'Courses', 'scholaris-library' ),
+			'lead'  => __( 'Courses, lessons and quizzes live in your LMS plugin.', 'scholaris-library' ),
+			'links' => array(),
+		);
+
+		if ( ! class_exists( 'EduAI_LMS' ) || ! EduAI_LMS::active() ) {
+			$card['lead'] = __( 'No LMS plugin is active, so there is nowhere to manage courses yet.', 'scholaris-library' );
+			return $card;
+		}
+
+		$course = EduAI_LMS::course_type();
+		$lesson = EduAI_LMS::lesson_type();
+
+		if ( EduAI_LMS::LEARNDASH === EduAI_LMS::provider() ) {
+			$card['lead']  = __( 'Courses, lessons and quizzes are built inside LearnDash.', 'scholaris-library' );
+			$card['links'] = array(
+				array( 'edit.php?post_type=' . $course, __( 'All courses', 'scholaris-library' ), 'edit_posts' ),
+				array( 'post-new.php?post_type=' . $course, __( 'Add new course', 'scholaris-library' ), 'edit_posts' ),
+				array( 'edit.php?post_type=' . $lesson, __( 'All lessons', 'scholaris-library' ), 'edit_posts' ),
+				array( 'edit-tags.php?taxonomy=ld_course_category&post_type=' . $course, __( 'Course categories', 'scholaris-library' ), 'manage_categories' ),
+			);
+
+			return $card;
+		}
+
+		$card['lead']  = __( 'Courses, lessons and quizzes are built inside Tutor LMS.', 'scholaris-library' );
+		$card['links'] = array(
+			// Labels match the destination's <title>, not an invented name:
+			// three of the four Tutor screens have no <h1> at all, so the tab
+			// title is what the owner actually sees on arrival.
+			array( 'admin.php?page=create-course', __( 'Course Builder', 'scholaris-library' ), 'manage_tutor_instructor' ),
+			array( 'admin.php?page=tutor', __( 'All courses', 'scholaris-library' ), 'manage_tutor_instructor' ),
+			array( 'edit-tags.php?taxonomy=course-category&post_type=' . $course, __( 'Course categories', 'scholaris-library' ), 'manage_tutor' ),
+			array( 'edit.php?post_type=' . $course, __( 'Classic course list', 'scholaris-library' ), 'edit_posts' ),
+		);
+
+		return $card;
 	}
 
 	/**
