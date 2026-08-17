@@ -28,8 +28,48 @@ defined( 'ABSPATH' ) || exit;
 function scholaris_dashboard_data( int $user_id = 0 ): array {
 	$user_id = $user_id ?: get_current_user_id();
 
+	/*
+	 * Tutor is asked for completion only when Tutor is the ACTIVE LMS, not
+	 * merely when its functions are loaded.
+	 *
+	 * During the LearnDash conversion both plugins are installed at once, and
+	 * EduAI_LMS::provider() answers LearnDash first on purpose so a half-migrated
+	 * site reads as its destination. tutor_utils() keeps existing throughout, so
+	 * a bare function_exists() check would have kept this dashboard reporting
+	 * Tutor's enrolments and percentages after the site had moved on — a panel
+	 * confidently showing the old system's numbers, which is the exact failure
+	 * that class was written to prevent.
+	 *
+	 * There is no LMS-agnostic completion API to fall back on, and that is
+	 * deliberate on their side: the seam answers naming and access, not
+	 * progress. So under LearnDash this reports no source and the panel is
+	 * absent, which is the honest state — a dashboard that cannot see your
+	 * lessons should say nothing rather than say zero.
+	 */
+	$sc_lms = class_exists( 'EduAI_LMS' ) ? EduAI_LMS::provider() : ( function_exists( 'tutor_utils' ) ? 'tutor' : '' );
+
+	/*
+	 * Does the active LMS have any courses at all?
+	 *
+	 * "You are not enrolled on a course yet" blames the student for the empty
+	 * panel. That is right when courses exist and they are on none of them, and
+	 * wrong when the site itself has none — which is the state today, with
+	 * LearnDash active and its content not yet migrated. Same rule as the rest
+	 * of this dashboard: say what is actually true, and do not let one message
+	 * cover two different facts.
+	 */
+	$sc_course_type = class_exists( 'EduAI_LMS' ) && EduAI_LMS::active() ? EduAI_LMS::course_type() : '';
+	$sc_any_courses = false;
+
+	if ( $sc_course_type ) {
+		$sc_counts      = wp_count_posts( $sc_course_type );
+		$sc_any_courses = isset( $sc_counts->publish ) && (int) $sc_counts->publish > 0;
+	}
+
 	$data = array(
-		'has_tutor' => function_exists( 'tutor_utils' ),
+		'lms'          => $sc_lms,
+		'any_courses'  => $sc_any_courses,
+		'has_tutor' => 'tutor' === $sc_lms && function_exists( 'tutor_utils' ),
 		'lessons'   => null,
 		'quizzes'   => null,
 		'papers'    => null,

@@ -183,7 +183,34 @@ function scholaris_stat_card( string $tone, string $icon, int $value, string $la
 							<tr>
 								<td class="sc-courses__num"><?php echo (int) ( $i + 1 ); ?></td>
 								<td class="sc-courses__name">
-									<a href="<?php echo esc_url( $course['url'] ); ?>"><?php echo esc_html( $course['title'] ); ?></a>
+									<a href="<?php echo esc_url( $course['url'] ); ?>">
+										<?php
+										/*
+										 * The reference puts a coloured tile beside every course
+										 * name, and it is doing real work: at a glance the rows
+										 * are told apart by shape rather than read one by one.
+										 *
+										 * Most courses here have no featured image, so the
+										 * fallback is not a placeholder graphic — a grey box
+										 * repeated down the column is worse than no column. It
+										 * is the course's initial on a hue derived from its id,
+										 * which is stable across reloads and different per
+										 * course, so it distinguishes without pretending to be
+										 * a picture someone chose.
+										 */
+										if ( $course['thumb'] ) :
+											?>
+											<img class="sc-courses__thumb" src="<?php echo esc_url( $course['thumb'] ); ?>"
+												alt="" width="34" height="34" loading="lazy" decoding="async">
+										<?php else : ?>
+											<span class="sc-courses__thumb sc-courses__thumb--letter"
+												style="--hue:<?php echo (int) ( ( (int) $course['id'] * 47 ) % 360 ); ?>"
+												aria-hidden="true"><?php
+												echo esc_html( mb_strtoupper( mb_substr( (string) $course['title'], 0, 1 ) ) );
+											?></span>
+										<?php endif; ?>
+										<span class="sc-courses__label"><?php echo esc_html( $course['title'] ); ?></span>
+									</a>
 								</td>
 								<td>
 									<span class="sc-bar" aria-hidden="true">
@@ -205,12 +232,24 @@ function scholaris_stat_card( string $tone, string $icon, int $value, string $la
 					</tbody>
 				</table>
 			<?php else : ?>
-				<?php // An empty state that carries the next action, not just the absence. ?>
+				<?php
+				/*
+				 * Two different facts, two different sentences. "You are not
+				 * enrolled" attributes the empty panel to the student, which is
+				 * only fair when there is something to be enrolled on. With no
+				 * courses published on the active LMS the student has done
+				 * nothing wrong and browsing will not help either.
+				 */
+				?>
 				<div class="sc-empty">
-					<p><?php esc_html_e( 'You are not enrolled on a course yet.', 'scholaris' ); ?></p>
-					<a class="btn btn--primary" href="<?php echo esc_url( home_url( '/library/' ) ); ?>">
-						<?php esc_html_e( 'Browse the library', 'scholaris' ); ?>
-					</a>
+					<?php if ( empty( $data['any_courses'] ) ) : ?>
+						<p><?php esc_html_e( 'No courses have been published yet. When one is, it will appear here with your progress.', 'scholaris' ); ?></p>
+					<?php else : ?>
+						<p><?php esc_html_e( 'You are not enrolled on a course yet.', 'scholaris' ); ?></p>
+						<a class="btn btn--primary" href="<?php echo esc_url( home_url( '/library/' ) ); ?>">
+							<?php esc_html_e( 'Browse the library', 'scholaris' ); ?>
+						</a>
+					<?php endif; ?>
 				</div>
 			<?php endif; ?>
 		</section>

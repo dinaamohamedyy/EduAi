@@ -1142,7 +1142,21 @@ body.admin-bar .auth {
 .sc-courses__name { min-width: 0; max-width: 0; width: 40%; }
 .sc-courses__name a {
   color: hsl(var(--text)); text-decoration: none; font-weight: 600;
-  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* The tile is fixed and the label takes the rest; min-width:0 on the label
+     is what lets a long course name ellipsise instead of widening the column
+     and pushing the progress bar off the card. */
+  display: flex; align-items: center; gap: var(--space-2xs); min-width: 0;
+}
+.sc-courses__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-courses__thumb {
+  width: 34px; height: 34px; flex: none;
+  border-radius: 10px; object-fit: cover;
+  background: hsl(var(--bg-subtle));
+}
+.sc-courses__thumb--letter {
+  display: grid; place-items: center;
+  font-weight: 750; font-size: 0.9rem; color: hsl(0 0% 100%);
+  background: linear-gradient(135deg, hsl(var(--hue) 62% 58%), hsl(calc(var(--hue) + 28) 66% 48%));
 }
 .sc-courses__name a:hover { color: hsl(var(--brand)); text-decoration: underline; }
 .sc-courses__stat { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: hsl(var(--text-muted)); }

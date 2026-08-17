@@ -68,8 +68,31 @@ $eduai_has_range = $eduai_from > 0 && $eduai_to >= $eduai_from;
  * stream cannot serve are excluded; private and restricted materials still
  * render for whoever can_download() admits.
  */
-$eduai_src_present = $eduai_src
-	&& ! in_array( get_post_status( $eduai_src ), array( false, 'trash', 'auto-draft' ), true );
+/*
+ * $eduai_slides_ready comes from the caller now — back-end added it and left
+ * this template reading its own meta so nothing broke in between, with the
+ * adoption left as front-end's call. Taking it, and deleting my own version
+ * rather than keeping both.
+ *
+ * Theirs is the better predicate and the reason is not that it is shorter.
+ * Mine excluded the states I had seen fail (trash, auto-draft); theirs asserts
+ * the states that must hold — post type study_material AND status publish — so
+ * it is a bound rather than a list of the defects I happened to find. A deck
+ * that becomes some other post type passes my test and fails theirs, and only
+ * one of us is right about that.
+ *
+ * Keeping both would be two predicates that agree today, which is the failure
+ * this project has spent the most time repairing. The fallback covers the
+ * template being rendered by something that does not set it — the meta read
+ * below still works standalone.
+ */
+$eduai_src_present = isset( $eduai_slides_ready )
+	? (bool) $eduai_slides_ready
+	: (
+		$eduai_src
+		&& 'study_material' === get_post_type( $eduai_src )
+		&& 'publish' === get_post_status( $eduai_src )
+	);
 
 $eduai_can_view = $eduai_src_present
 	&& class_exists( 'SL_Meta' )
