@@ -103,6 +103,19 @@ $eduai_doc = $eduai_can_view ? SL_Library::download_url( $eduai_src ) : '';
 ?>
 <div class="eduai-lesson">
 
+	<?php
+	/*
+	 * Why the slides are not here, for the person who can put them back.
+	 *
+	 * Set by the caller and only ever non-empty for someone who can edit the
+	 * lesson — a student sees nothing, because an absent viewer is not their
+	 * problem and a trashed post is not their business.
+	 */
+	if ( ! empty( $eduai_slides_notice ) ) :
+		?>
+		<p class="eduai-lesson__notice"><?php echo esc_html( $eduai_slides_notice ); ?></p>
+	<?php endif; ?>
+
 	<?php if ( $eduai_doc ) : ?>
 		<div class="eduai-lesson__viewer">
 			<div class="eduai-lesson__bar">

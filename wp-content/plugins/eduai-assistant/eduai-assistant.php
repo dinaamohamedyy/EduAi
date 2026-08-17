@@ -199,9 +199,34 @@ final class EduAI_Assistant {
 		 * ready. Nothing here decides how to degrade — that is their call.
 		 */
 		$eduai_source_material = (int) get_post_meta( $scope['id'], '_eduai_source_material', true );
+
+		/*
+		 * When the slides are missing, tell the person who can fix it why.
+		 *
+		 * A student should see nothing — an absent viewer is not their
+		 * problem and naming a trashed post to them is noise. But the lecturer
+		 * looking at his own lesson watched the slides disappear with no
+		 * explanation anywhere on the page or in the log, which is how a
+		 * recoverable state reads as a broken feature.
+		 *
+		 * Staff only, and it names the actual cause rather than a generic
+		 * failure, because "in the trash" carries its own instruction.
+		 */
 		$eduai_slides_ready    = $eduai_source_material
 			&& 'study_material' === get_post_type( $eduai_source_material )
 			&& 'publish' === get_post_status( $eduai_source_material );
+
+		$eduai_slides_notice = '';
+
+		if ( $eduai_source_material && ! $eduai_slides_ready && current_user_can( 'edit_post', $scope['id'] ) ) {
+			$eduai_slides_notice = 'trash' === get_post_status( $eduai_source_material )
+				? sprintf(
+					/* translators: %s: material title */
+					__( 'The slides for this lesson come from “%s”, which is in the trash. Restore it and they reappear here.', 'eduai' ),
+					get_the_title( $eduai_source_material )
+				)
+				: __( 'The study material these slides came from is no longer available, so the viewer is hidden.', 'eduai' );
+		}
 
 		$template = EDUAI_DIR . 'templates/lesson-panel.php';
 
@@ -300,8 +325,18 @@ final class EduAI_Assistant {
 		 * beats a fourth opinion about who may read a lesson.
 		 *
 		 * Style only, no script: the panel is two links and a viewer.
+		 *
+		 * The post type comes from EduAI_LMS now. It was the literal 'lesson',
+		 * which is TUTOR's — LearnDash's is sfwd-lessons — so after the
+		 * migration this condition never matched and the panel rendered with
+		 * every --eduai-* token computing to nothing. Exactly the bug this
+		 * enqueue was added to fix, returning by the other door: the panel was
+		 * in the page, the tools were in the page, and only a computed style
+		 * read showed --eduai-brand resolving empty.
+		 *
+		 * Measured on a LearnDash lesson: no chat.css on the response at all.
 		 */
-		if ( is_singular( 'lesson' ) && EduAI_Scope::resolve( (int) get_queried_object_id() ) ) {
+		if ( is_singular( EduAI_LMS::lesson_type() ) && EduAI_Scope::resolve( (int) get_queried_object_id() ) ) {
 			wp_enqueue_style( 'eduai-chat', EDUAI_URL . 'assets/css/chat.css', array(), EDUAI_VERSION );
 		}
 
