@@ -225,6 +225,52 @@ if ( $global < 0.12 ) {
 	printf( "        worst window is what refused it: %s\n", $verdict->get_error_code() );
 }
 
+/*
+ * CONTROL 5 - no refusal may assert a check that did not run.
+ *
+ * The truncation code is a claim about two independent durations. If it can
+ * ever be returned when only one of them was available, the code is lying
+ * about its own evidence. Checked as an invariant over every case above rather
+ * than on the one input that happens to exercise it.
+ */
+$liars = array();
+foreach ( $cases as $c ) {
+	$v = EduAI_Transcript_Guard::usable( $c[1], $c[2], $c[3] );
+	if ( is_wp_error( $v ) && 'eduai_transcript_truncated' === $v->get_error_code()
+		&& ! EduAI_Transcript_Guard::completeness_checked( $c[2], $c[3] ) ) {
+		$liars[] = $c[0];
+	}
+}
+
+if ( $liars ) {
+	$fail++;
+	printf( "FAIL  truncation claimed where completeness was never checked: %s\n", implode( ', ', $liars ) );
+} else {
+	$pass++;
+	printf( "ok    the truncation verdict is only ever reached with both durations in hand\n" );
+}
+
+/*
+ * And the wording, because the code being right does not make the sentence
+ * right. A sparse-audio refusal used to read "most of it is missing from the
+ * transcript" - a truncation claim, in a branch that runs on Whisper's own
+ * self-reported span whether or not the truncation check ran at all. The owner
+ * reads the sentence, not the code.
+ */
+$sparse = EduAI_Transcript_Guard::usable( 'One two three four five six seven eight.', 600.0, null );
+
+if ( ! is_wp_error( $sparse ) ) {
+	$fail++;
+	printf( "FAIL  eight words over ten minutes of audio was accepted\n" );
+} elseif ( false !== stripos( $sparse->get_error_message(), 'missing' ) ) {
+	$fail++;
+	printf( "FAIL  a sparse-audio refusal with no file duration says something is MISSING: %s\n", $sparse->get_error_message() );
+} else {
+	$pass++;
+	printf( "ok    sparse audio with no file duration reports quiet audio, not a missing transcript\n" );
+	printf( "        %s\n", $sparse->get_error_message() );
+}
+
 $diverge = 0;
 foreach ( $cases as $c ) {
 	$shipped = ! is_wp_error( EduAI_Transcript_Guard::usable( $c[1], $c[2], $c[3] ) );

@@ -261,6 +261,15 @@ class EduAI_Transcript_Guard {
 		 * decoded, because that is the audio these words are supposed to
 		 * account for. Falls back to the file's length when Groq gave us none,
 		 * which can only make this stricter.
+		 *
+		 * WHEN `$recorded` IS MISSING, THIS DOES NOT STAND IN FOR COMPLETENESS.
+		 * It runs, on `$heard`, and answers its own question honestly - a span
+		 * of audio holding almost no speech is a real finding about that span.
+		 * What it must not do is speak as though the truncation check ran, and
+		 * that is a property of the WORDING above, not of this condition: the
+		 * two are one decision and separating them is how a message ends up
+		 * asserting a check that never executed. Completeness stays unclaimed,
+		 * and completeness_checked() is what says so out loud.
 		 */
 		$span = $heard ?? $recorded;
 
@@ -271,8 +280,19 @@ class EduAI_Transcript_Guard {
 				return new WP_Error(
 					'eduai_transcript_short',
 					sprintf(
-						/* translators: 1: number of words 2: length of the recording, already worded */
-						__( 'That transcript holds %1$d words across %2$s of recording. That is far less speech than a recording that long contains, so most of it is missing from the transcript. Nothing was indexed.', 'eduai' ),
+						/*
+						 * Says the audio was quiet, NOT that the transcript is
+						 * short of it. The old wording - "most of it is missing
+						 * from the transcript" - was a truncation claim, and
+						 * this fires on a span Whisper reported about itself,
+						 * in a branch that runs whether or not the truncation
+						 * check ran at all. Two different failures needing two
+						 * different things from the owner: re-record, or
+						 * transcribe again.
+						 *
+						 * translators: 1: number of words 2: length of the audio, already worded
+						 */
+						__( 'Only %1$d words came back from %2$s of audio. That is far less speech than a recording that long holds, so most of it was silent or too indistinct to transcribe. Nothing was indexed — check the video has usable audio on it.', 'eduai' ),
 						$count,
 						self::spoken_length( $span )
 					),
