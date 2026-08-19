@@ -28,6 +28,10 @@ class EduAI_Knowledge {
 		// Re-index a document whenever it is saved.
 		add_action( 'save_post', array( __CLASS__, 'on_save_post' ), 20, 2 );
 		add_action( 'before_delete_post', array( __CLASS__, 'delete_for_post' ) );
+
+		// save_post does not fire on trash, so without this a trashed lecture
+		// keeps answering queries and citing a page nobody can open.
+		add_action( 'transition_post_status', array( __CLASS__, 'on_status_change' ), 10, 3 );
 		add_action( 'eduai_reindex_event', array( __CLASS__, 'reindex_all' ) );
 
 		// Gated content must not escape through the page's own metadata.
@@ -156,6 +160,12 @@ class EduAI_Knowledge {
 		}
 
 		if ( ! in_array( $post->post_type, self::indexed_post_types(), true ) ) {
+			// Evict rather than return quietly. A type can LEAVE this list — it
+			// did when the LMS changed — and returning 0 without deleting is how
+			// twelve chunks of unreachable Tutor lessons went on answering
+			// queries beside their own replacements.
+			self::delete_for_post( $post_id );
+
 			return 0;
 		}
 
@@ -337,11 +347,102 @@ class EduAI_Knowledge {
 	}
 
 	/**
+	 * Drop chunks the index should no longer be holding.
+	 *
+	 * THE INDEX HAD NO EVICTION, and the shape of the gap is the one that
+	 * keeps catching this project: `reindex_all()` walks the post types we
+	 * DECLARE and tops them up, so it can only ever find what is missing —
+	 * never what is surplus. Nothing walked the other direction.
+	 *
+	 * What that cost, measured: when the LMS moved from Tutor to LearnDash,
+	 * `lesson` left `indexed_post_types()` and `index_post()` returned 0 for
+	 * those posts WITHOUT deleting their rows. Twelve chunks of three real
+	 * lectures stayed in the index, answering queries and citing pages that
+	 * no longer render, while the same three lectures were indexed again
+	 * under their new ids. Every passage was retrieved twice.
+	 *
+	 * Three ways a row becomes surplus, and a top-up pass can see none of
+	 * them: the post is gone, the post is no longer published, or its TYPE is
+	 * no longer indexed. The last is the one a migration causes and the one
+	 * nothing else would ever notice.
+	 *
+	 * @return int Documents evicted.
+	 */
+	public static function reconcile(): int {
+		global $wpdb;
+
+		$table = self::table();
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+
+		if ( $exists !== $table ) {
+			return 0;
+		}
+
+		$indexed_ids = (array) $wpdb->get_col( "SELECT DISTINCT post_id FROM {$table}" );
+		// phpcs:enable
+
+		$types   = self::indexed_post_types();
+		$evicted = 0;
+
+		foreach ( $indexed_ids as $post_id ) {
+			$post = get_post( (int) $post_id );
+
+			$keep = $post
+				&& 'publish' === $post->post_status
+				&& in_array( $post->post_type, $types, true );
+
+			if ( $keep ) {
+				continue;
+			}
+
+			self::delete_for_post( (int) $post_id );
+			++$evicted;
+		}
+
+		return $evicted;
+	}
+
+	/**
+	 * Index or evict when a post changes status.
+	 *
+	 * `save_post` does not fire on trash, so a trashed lecture kept answering
+	 * queries — and the citation it produced pointed at a page the student
+	 * could not open. Restoring one has the mirror problem: it comes back
+	 * without its chunks until something else happens to save it.
+	 *
+	 * @param string  $new_status Status being moved to.
+	 * @param string  $old_status Status being moved from.
+	 * @param WP_Post $post       Post.
+	 */
+	public static function on_status_change( $new_status, $old_status, $post ): void {
+		if ( ! $post instanceof WP_Post || $new_status === $old_status ) {
+			return;
+		}
+
+		if ( ! in_array( $post->post_type, self::indexed_post_types(), true ) ) {
+			return;
+		}
+
+		if ( 'publish' === $new_status ) {
+			self::index_post( (int) $post->ID );
+			return;
+		}
+
+		self::delete_for_post( (int) $post->ID );
+	}
+
+	/**
 	 * Rebuild the whole index. Safe to run repeatedly.
 	 *
 	 * @return array{docs:int,chunks:int}
 	 */
 	public static function reindex_all(): array {
+		// Reconcile BEFORE topping up: this pass walks what we declare, so on
+		// its own it can only ever add. Surplus is invisible from this end.
+		$evicted = self::reconcile();
+
 		$ids = get_posts( array(
 			'post_type'      => self::indexed_post_types(),
 			'post_status'    => 'publish',
@@ -363,7 +464,7 @@ class EduAI_Knowledge {
 
 		update_option( 'eduai_last_index', current_time( 'mysql' ), false );
 
-		return array( 'docs' => $docs, 'chunks' => $chunks );
+		return array( 'docs' => $docs, 'chunks' => $chunks, 'evicted' => $evicted );
 	}
 
 	/**
