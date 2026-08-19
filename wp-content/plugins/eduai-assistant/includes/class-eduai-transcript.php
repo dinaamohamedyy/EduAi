@@ -73,6 +73,15 @@ class EduAI_Transcript {
 	 * @param mixed  $meta_value New value.
 	 */
 	public static function on_meta_change( $meta_id, $post_id, $meta_key, $meta_value ): void {
+		// LearnDash writes the whole settings array under one key, so the
+		// lesson video URL arrives as a change to `_sfwd-lessons` rather than
+		// to a field of its own.
+		if ( '_sfwd-lessons' === (string) $meta_key ) {
+			self::schedule_lesson( (int) $post_id );
+
+			return;
+		}
+
 		if ( '_scholaris_video_id' !== (string) $meta_key ) {
 			return;
 		}
@@ -297,6 +306,128 @@ class EduAI_Transcript {
 		}
 
 		return '';
+	}
+
+	/**
+	 * The attachment a lesson's video URL points at, when it is one of ours.
+	 *
+	 * THIS IS THE INLET THE PRODUCT WAS MISSING. The machinery has worked all
+	 * day and had nowhere to be fed from: the meta box was bound to a post
+	 * type that no longer exists, and the field the owner actually uses takes
+	 * a URL rather than a file. Resolving that URL means he uploads a lecture
+	 * to the media library, pastes its address into the LearnDash video field
+	 * he is already using, and the existing Whisper path takes it from there —
+	 * no new screen, no new concept.
+	 *
+	 * `attachment_url_to_postid()` handles the exact-URL case; the basename
+	 * fallback covers a file that has since been MOVED, which on this install
+	 * is routine — `SL_Private` relocates gated media into a denied directory
+	 * and the URL a lecturer copied last week no longer matches the stored
+	 * path. Same lesson as resolving a material by its meta rather than its
+	 * parent: match on what identifies the thing, not on where it used to be.
+	 *
+	 * @param int $post_id Lesson.
+	 */
+	public static function lesson_video_attachment( int $post_id ): int {
+		$url = self::lesson_video_url( $post_id );
+
+		if ( '' === $url ) {
+			return 0;
+		}
+
+		$attachment_id = (int) attachment_url_to_postid( $url );
+
+		if ( $attachment_id ) {
+			return $attachment_id;
+		}
+
+		// Only look locally: a remote host's basename colliding with one of
+		// ours would otherwise transcribe the wrong file entirely.
+		if ( ! self::is_local_url( $url ) ) {
+			return 0;
+		}
+
+		global $wpdb;
+
+		$basename = basename( wp_parse_url( $url, PHP_URL_PATH ) ?: '' );
+
+		if ( '' === $basename ) {
+			return 0;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$found = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT post_id FROM {$wpdb->postmeta}
+				 WHERE meta_key = '_wp_attached_file' AND meta_value LIKE %s
+				 ORDER BY post_id DESC LIMIT 1",
+				'%' . $wpdb->esc_like( $basename )
+			)
+		);
+
+		return $found;
+	}
+
+	/**
+	 * Is this URL served by this site?
+	 *
+	 * @param string $url Candidate.
+	 */
+	public static function is_local_url( string $url ): bool {
+		$host = wp_parse_url( $url, PHP_URL_HOST );
+
+		if ( ! $host ) {
+			// A relative URL is ours by definition.
+			return true;
+		}
+
+		return strtolower( $host ) === strtolower( (string) wp_parse_url( home_url(), PHP_URL_HOST ) );
+	}
+
+	/**
+	 * Queue whatever this lesson's video needs, and say why if it needs
+	 * something we cannot do.
+	 *
+	 * @param int  $post_id Lesson.
+	 * @param bool $force   Re-transcribe even if one exists.
+	 * @return true|WP_Error
+	 */
+	public static function schedule_lesson( int $post_id, bool $force = false ) {
+		$url = self::lesson_video_url( $post_id );
+
+		if ( '' === $url ) {
+			return new WP_Error( 'eduai_transcript_no_url', __( 'This lesson has no video on it.', 'eduai' ) );
+		}
+
+		$attachment_id = self::lesson_video_attachment( $post_id );
+
+		if ( $attachment_id ) {
+			self::schedule( $attachment_id, $post_id, $force );
+
+			return true;
+		}
+
+		/*
+		 * A remote video, and every route to one is closed from this server:
+		 * captions return 200 with an empty body without a proof-of-origin
+		 * token, and yt-dlp is refused 403 five different ways from a
+		 * datacentre address. Measured against his own lesson video, not
+		 * assumed.
+		 *
+		 * So this says what he can DO rather than reporting a failure. He has
+		 * spent a day discovering the silence; a sentence naming the one route
+		 * that works is worth more than another empty result.
+		 */
+		update_post_meta(
+			$post_id,
+			self::META_STATE,
+			'rejected: ' . __( 'Videos hosted on YouTube cannot be read by the study tools. Upload the recording to the media library and paste its URL into this field instead.', 'eduai' )
+		);
+
+		return new WP_Error(
+			'eduai_transcript_remote',
+			__( 'Videos hosted on YouTube cannot be read by the study tools. Upload the recording to the media library and paste its URL into this field instead.', 'eduai' )
+		);
 	}
 
 	/**

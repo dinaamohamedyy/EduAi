@@ -41,8 +41,23 @@ class EduAI_Lesson_Fields {
 	const NONCE = 'eduai_lesson_source';
 
 	public static function init(): void {
-		add_action( 'add_meta_boxes_lesson', array( __CLASS__, 'add_box' ) );
-		add_action( 'save_post_lesson', array( __CLASS__, 'save' ), 10, 2 );
+		/*
+		 * The LMS's own lesson type, not Tutor's literal `lesson`.
+		 *
+		 * These two hooks were `add_meta_boxes_lesson` and `save_post_lesson`,
+		 * so after the LearnDash conversion this box stopped rendering on every
+		 * lesson on the site — silently, because a meta box that never fires
+		 * looks exactly like one that was never written. It left the product
+		 * with no way at all to put a readable recording on a lesson.
+		 *
+		 * Same defect as indexed_post_types() carrying Tutor's slugs, and the
+		 * reason to ask the seam rather than correct the string: a corrected
+		 * string goes stale at the next migration in exactly this way.
+		 */
+		$type = class_exists( 'EduAI_LMS' ) && EduAI_LMS::active() ? EduAI_LMS::lesson_type() : 'lesson';
+
+		add_action( 'add_meta_boxes_' . $type, array( __CLASS__, 'add_box' ) );
+		add_action( 'save_post_' . $type, array( __CLASS__, 'save' ), 10, 2 );
 	}
 
 	public static function add_box(): void {
@@ -50,7 +65,7 @@ class EduAI_Lesson_Fields {
 			'eduai_lesson_source',
 			__( 'Slides for this lesson', 'eduai' ),
 			array( __CLASS__, 'render' ),
-			'lesson',
+			class_exists( 'EduAI_LMS' ) && EduAI_LMS::active() ? EduAI_LMS::lesson_type() : 'lesson',
 			'normal',
 			'high'
 		);

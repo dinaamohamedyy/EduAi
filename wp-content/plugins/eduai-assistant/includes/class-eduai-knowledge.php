@@ -209,6 +209,13 @@ class EduAI_Knowledge {
 		 */
 		$video_id = (int) get_post_meta( $post_id, '_scholaris_video_id', true );
 
+		// The LMS keeps its own video field, and on this site that is the one
+		// the owner actually fills in. Resolved to an attachment so both routes
+		// converge on the same transcript rather than growing a second store.
+		if ( ! $video_id && class_exists( 'EduAI_Transcript' ) ) {
+			$video_id = EduAI_Transcript::lesson_video_attachment( $post_id );
+		}
+
 		if ( $video_id && class_exists( 'EduAI_Transcript' ) ) {
 			$transcript = EduAI_Transcript::fetch( $video_id );
 
@@ -645,7 +652,7 @@ class EduAI_Knowledge {
 			$allowed = class_exists( 'SL_Meta' ) && method_exists( 'SL_Meta', 'can_download' )
 				? (bool) SL_Meta::can_download( $post_id )
 				: false;
-		} elseif ( 'lesson' === $post->post_type ) {
+		} elseif ( class_exists( 'EduAI_LMS' ) && EduAI_LMS::is_lesson( $post ) ) {
 			/*
 			 * Enrolment, or the capability to edit. `read_post` is NOT the
 			 * enrolment check it looks like — measured on this install against
@@ -662,8 +669,15 @@ class EduAI_Knowledge {
 			 * is the rule on its own: enrolment is what entitles a student,
 			 * and staff are never enrolled in their own course.
 			 */
-			$allowed = ( function_exists( 'tutor_utils' )
-					&& (bool) tutor_utils()->has_enrolled_content_access( 'lesson', $post_id ) )
+			/*
+			 * Through the seam, because the branch above used to test Tutor's
+			 * literal `lesson` and this call used Tutor's own API. After the
+			 * LearnDash conversion an sfwd-lessons post matched NEITHER, so it
+			 * fell to the `read_post` branch below — the exact predicate the
+			 * comment above explains is almost the negation of an access check
+			 * for a lesson.
+			 */
+			$allowed = ( class_exists( 'EduAI_LMS' ) && EduAI_LMS::can_access( $post_id ) )
 				|| current_user_can( 'edit_posts' );
 		} else {
 			// Everything else answers to WordPress, which already knows about
