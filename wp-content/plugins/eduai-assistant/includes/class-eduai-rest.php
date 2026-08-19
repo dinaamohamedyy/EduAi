@@ -1174,31 +1174,24 @@ class EduAI_REST {
 	}
 
 	public static function scoped_source_text( array $scope ): string {
-		$post = get_post( (int) $scope['id'] );
-
-		if ( ! $post ) {
+		/*
+		 * ONE ASSEMBLER, shared with the indexer.
+		 *
+		 * This had its own copy — post body plus the attached PDF — and knew
+		 * nothing about transcripts. So a lesson whose only content was a
+		 * transcribed recording answered Q&A, which reads the index, and was
+		 * refused by Summarise and PrepareME, which read this. Both correct on
+		 * what they could see; only the index had been told about the new
+		 * source.
+		 *
+		 * Same split as transcribe_path(): the moment two callers assemble the
+		 * same thing separately, the next source is added to one of them.
+		 */
+		if ( ! class_exists( 'EduAI_Knowledge' ) ) {
 			return '';
 		}
 
-		$parts = array();
-
-		// A lesson carries its text in the body; a material usually does not.
-		$body = trim( wp_strip_all_tags( strip_shortcodes( (string) $post->post_content ) ) );
-		if ( '' !== $body ) {
-			$parts[] = $body;
-		}
-
-		$file_id = (int) get_post_meta( (int) $post->ID, '_scholaris_file_id', true );
-		$path    = $file_id ? get_attached_file( $file_id ) : '';
-
-		if ( $path ) {
-			$text = EduAI_PDF::extract( $path );
-			if ( strlen( trim( $text ) ) > 40 ) {
-				$parts[] = $text;
-			}
-		}
-
-		return trim( implode( "\n\n", $parts ) );
+		return EduAI_Knowledge::source_text( (int) $scope['id'] );
 	}
 
 	/**

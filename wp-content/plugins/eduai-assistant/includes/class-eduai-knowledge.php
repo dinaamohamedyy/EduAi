@@ -146,27 +146,26 @@ class EduAI_Knowledge {
 	}
 
 	/**
-	 * Index one post. Pulls both the post body and any attached document.
+	 * Everything readable about a post, as one string.
 	 *
-	 * @param int $post_id Post ID.
-	 * @return int Number of chunks written.
+	 * SHARED DELIBERATELY. This lived inside index_post(), and
+	 * EduAI_REST::scoped_source_text() had its own copy that knew about the
+	 * post body and the attached PDF and nothing else. So when transcripts
+	 * were added here, Q&A could read a video lesson while Summarise and
+	 * PrepareME refused it as empty — both behaving correctly on what they
+	 * could see, and only one of them told.
+	 *
+	 * A second copy is a second place for the next source to be added to
+	 * only one of them, which is what happened within the hour of adding
+	 * one. One assembler, three tools.
+	 *
+	 * @param int $post_id Post.
 	 */
-	public static function index_post( int $post_id ): int {
+	public static function source_text( int $post_id ): string {
 		$post = get_post( $post_id );
 
-		if ( ! $post || 'publish' !== $post->post_status ) {
-			self::delete_for_post( $post_id );
-			return 0;
-		}
-
-		if ( ! in_array( $post->post_type, self::indexed_post_types(), true ) ) {
-			// Evict rather than return quietly. A type can LEAVE this list — it
-			// did when the LMS changed — and returning 0 without deleting is how
-			// twelve chunks of unreachable Tutor lessons went on answering
-			// queries beside their own replacements.
-			self::delete_for_post( $post_id );
-
-			return 0;
+		if ( ! $post ) {
+			return '';
 		}
 
 		$parts = array();
@@ -223,7 +222,57 @@ class EduAI_Knowledge {
 				$parts[] = $transcript;
 			}
 		}
-		$text = trim( implode( "\n\n", $parts ) );
+		return trim( implode( "
+
+", $parts ) );
+	}
+
+	/**
+	 * Index one post. Pulls both the post body and any attached document.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return int Number of chunks written.
+	 */
+	public static function index_post( int $post_id ): int {
+		$post = get_post( $post_id );
+
+		if ( ! $post || 'publish' !== $post->post_status ) {
+			self::delete_for_post( $post_id );
+			return 0;
+		}
+
+		if ( ! in_array( $post->post_type, self::indexed_post_types(), true ) ) {
+			// Evict rather than return quietly. A type can LEAVE this list — it
+			// did when the LMS changed — and returning 0 without deleting is how
+			// twelve chunks of unreachable Tutor lessons went on answering
+			// queries beside their own replacements.
+			self::delete_for_post( $post_id );
+
+			return 0;
+		}
+
+		$text = self::source_text( $post_id );
+
+		/*
+		 * The attachment this row is FROM, for provenance on the chunk.
+		 *
+		 * Read again here rather than returned by source_text(), because the
+		 * two are different questions: the assembler answers "what can be read"
+		 * and may draw on several sources, while the row records which single
+		 * attachment it is attributable to. Lost when the assembly moved out of
+		 * this method — the column is NOT NULL, so every insert failed and
+		 * index_post() returned 0 while source_text() was returning 89 perfectly
+		 * good characters.
+		 */
+		$file_id = (int) get_post_meta( $post_id, '_scholaris_file_id', true );
+
+		if ( ! $file_id && class_exists( 'EduAI_Transcript' ) ) {
+			$file_id = (int) get_post_meta( $post_id, '_scholaris_video_id', true );
+
+			if ( ! $file_id ) {
+				$file_id = EduAI_Transcript::lesson_video_attachment( $post_id );
+			}
+		}
 
 		self::delete_for_post( $post_id );
 
