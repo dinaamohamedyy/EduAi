@@ -361,4 +361,79 @@ class EduAI_Transcript_Guard {
 
 		return $kept;
 	}
+
+	/**
+	 * Is this transcript just the decoding prompt coming back?
+	 *
+	 * A prompt cannot be made un-echoable. It is prior context for the decoder,
+	 * which is exactly why it biases decoding at all — so on silence, with
+	 * nothing acoustic to condition on, the likeliest continuation of that
+	 * context is more of that context. There is no formulation that biases and
+	 * cannot echo; asking for one is asking for a prior that is not a prior.
+	 *
+	 * What CAN change is whether the echo is recognisable, and that is where
+	 * the fragility is. Matching a remembered string — "Expected topics and
+	 * terms." — works until Whisper returns a different fragment, and it
+	 * returned " The" on the same file for the Tech Manager. A guard calibrated
+	 * on one observed output goes quiet on the next one and looks identical
+	 * while doing so.
+	 *
+	 * So this does not look for the prompt. It asks what SHARE of the
+	 * transcript's words came from the prompt at all — which is high for every
+	 * fragment of an echo, whichever fragment it happens to be, and cannot be
+	 * calibrated wrong by seeing only one of them.
+	 *
+	 * The control that makes it safe is the obvious objection: a real lecture
+	 * about least squares says "least squares" constantly. It also says a
+	 * hundred words that are not in the prompt — verbs, articles, the sentence
+	 * around the term — so its share sits far below an echo's. That is asserted
+	 * in the tests rather than assumed here.
+	 *
+	 * @param string $text   Candidate transcript.
+	 * @param string $prompt Exact prompt that was sent with it.
+	 */
+	public static function is_prompt_echo( string $text, string $prompt ): bool {
+		if ( '' === trim( $prompt ) ) {
+			return false;
+		}
+
+		$words  = self::words( $text );
+		$vocab  = array_flip( self::words( $prompt ) );
+
+		if ( ! $words ) {
+			return true;
+		}
+
+		$from_prompt = 0;
+		foreach ( $words as $word ) {
+			if ( isset( $vocab[ $word ] ) ) {
+				++$from_prompt;
+			}
+		}
+
+		$share = $from_prompt / count( $words );
+
+		/*
+		 * Two ways to be an echo, because a long one and a short one look
+		 * different. A near-total overlap is an echo at any length; a shorter
+		 * reply that is mostly prompt words is one too, and the length bound
+		 * keeps a genuinely on-topic lecture from tripping it.
+		 */
+		return $share >= 0.9 || ( count( $words ) < 40 && $share >= 0.6 );
+	}
+
+	/**
+	 * Lower-cased word tokens, any script.
+	 *
+	 * @param string $text Input.
+	 * @return string[]
+	 */
+	private static function words( string $text ): array {
+		$clean = preg_replace( '/[^\p{L}\p{N}\s]+/u', ' ', wp_strip_all_tags( $text ) );
+
+		return array_map(
+			'mb_strtolower',
+			preg_split( '/\s+/u', (string) $clean, -1, PREG_SPLIT_NO_EMPTY )
+		);
+	}
 }
