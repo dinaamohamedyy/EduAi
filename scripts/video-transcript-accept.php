@@ -175,5 +175,110 @@ if ( ! $chunks ) {
 	}
 }
 
+
+/* ---- term fidelity: did the technical term survive transcription? --------- */
+
+/*
+ * THE HIGHEST-VALUE CHECK IN THIS FILE, AND THE ONE THAT CANNOT BE STUBBED.
+ *
+ * Whisper mishears technical vocabulary confidently - "Ogg Vorbis" came back as
+ * "org-forbus" on this project. A missing feature announces itself; a WRONG term
+ * is taught to a student as fact, appears in their summary, their exam questions
+ * and their revision notes, and nothing anywhere flags it.
+ *
+ * It takes the expected term as a PARAMETER and refuses to run without one,
+ * because a stub here is worse than an absence: it would report a green for the
+ * one property standing between a mangled term and a student learning it.
+ *
+ * Exit code 2, not 1, when unset. A red that means "the product is broken" and a
+ * red that means "this test could not run" must not be the same red - that is
+ * how a guard becomes furniture people learn to ignore.
+ */
+
+$term = isset( $args[1] ) ? trim( (string) $args[1] ) : '';
+
+if ( '' === $term ) {
+	printf( "\n" );
+	printf( "UNVERIFIED  term fidelity was not checked\n" );
+	printf( "        No expected term was given, so nothing asserts that technical vocabulary\n" );
+	printf( "        survived transcription. Whisper mishears terms CONFIDENTLY - a wrong term\n" );
+	printf( "        reaches the student as fact and nothing else in this system will notice.\n" );
+	printf( "        Run again with a word you know is spoken in the video:\n" );
+	printf( "          wp eval-file /scripts/video-transcript-accept.php %d \"Ogg Vorbis\"\n", $lesson_id );
+	printf( "\n%d passed, %d failed, %d skipped, term fidelity UNVERIFIED\n", $GLOBALS['vt_pass'], $GLOBALS['vt_fail'], $GLOBALS['vt_skip'] );
+	exit( $GLOBALS['vt_fail'] > 0 ? 1 : 2 );
+}
+
+$haystacks = array(
+	'transcript'      => $transcript,
+	'retrieval index' => $indexed,
+);
+
+$missing_from = array();
+
+foreach ( $haystacks as $where => $hay ) {
+	if ( '' === trim( (string) $hay ) ) {
+		continue;
+	}
+	if ( false !== stripos( $hay, $term ) ) {
+		vt_ok( sprintf( '"%s" survived into the %s', $term, $where ) );
+	} else {
+		$missing_from[ $where ] = $hay;
+	}
+}
+
+/*
+ * When the term is absent, say what it BECAME. "not found" sends someone
+ * hunting a missing feature; "closest match: org-forbus" hands them the defect.
+ * Compared on the first word of the term, because a mangled multi-word phrase
+ * rarely keeps its spacing.
+ */
+foreach ( $missing_from as $where => $hay ) {
+	/*
+	 * Compare against the WHOLE term with separators stripped, over sliding
+	 * windows of one to three tokens - not against the term's first word.
+	 *
+	 * The first-word version was wrong in the way that matters: hunting "Ogg"
+	 * it reported the closest word as "of" (distance 2) while the actual
+	 * corruption "org-forbus" sat in the text, excluded by a length filter for
+	 * being seven characters longer than "Ogg". A confident wrong lead is worse
+	 * than none - it sends the reader after a common English word. Normalised:
+	 * "oggvorbis" vs "orgforbus" is distance 3 of 9, and "of" is 7 of 9.
+	 */
+	$norm  = static fn( $s ) => strtolower( preg_replace( '/[^\p{L}\p{N}]+/u', '', (string) $s ) );
+	$want  = $norm( $term );
+	$toks  = preg_split( '/[^\p{L}\p{N}\-]+/u', (string) $hay, -1, PREG_SPLIT_NO_EMPTY );
+
+	$best   = '';
+	$best_d = PHP_INT_MAX;
+
+	for ( $i = 0; $i < count( $toks ); $i++ ) {
+		for ( $n = 1; $n <= 3 && $i + $n <= count( $toks ); $n++ ) {
+			$window = array_slice( $toks, $i, $n );
+			$cand   = $norm( implode( '', $window ) );
+
+			if ( '' === $cand || abs( strlen( $cand ) - strlen( $want ) ) > max( 3, (int) ( strlen( $want ) / 2 ) ) ) {
+				continue;
+			}
+
+			$d = levenshtein( $want, $cand );
+			if ( $d < $best_d ) {
+				$best_d = $d;
+				$best   = implode( ' ', $window );
+			}
+		}
+	}
+
+	/* Only volunteer a suspect if it is genuinely close; otherwise say so. */
+	$close = '' !== $best && $best_d <= (int) floor( strlen( $want ) * 0.5 );
+
+	vt_bad(
+		sprintf( '"%s" survived into the %s', $term, $where ),
+		$close
+			? sprintf( 'absent. Closest text present is "%s" (edit distance %d of %d) - that is most likely what the term became.', $best, $best_d, strlen( $want ) )
+			: 'absent, and nothing in the text resembles it - the term may never have been spoken, or the audio never reached the transcriber.'
+	);
+}
+
 printf( "\n%d passed, %d failed, %d skipped\n", $GLOBALS['vt_pass'], $GLOBALS['vt_fail'], $GLOBALS['vt_skip'] );
 exit( $GLOBALS['vt_fail'] > 0 ? 1 : 0 );
