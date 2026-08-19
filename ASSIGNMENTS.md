@@ -44,7 +44,13 @@ That is a coordination shape, not three individual lapses, and the fix is a plac
    dangling blob and can be fished out with `git fsck`; unstaged content was never written to
    the object database, so no artefact exists anywhere. That is why this beats a bad push, a
    bad merge and a bad rebase — all of which leave something behind.
-8. **Never delete `.git/index.lock`. A stale-looking lock is another session committing.**
+8. **A one-second edit to a shared file is the same act as a one-minute one.** Duration is
+   not the variable — another session's uncommitted work is either in that file or it is not,
+   and you cannot see which. On 12 Aug 2026 a mutation was planted and restored inside a
+   second, in a file that held another session's uncommitted `EDUAI_VERSION` bump; the backup
+   happened to capture and restore it. **It came out clean by luck rather than by process.**
+   Use a scratch path, always.
+9. **Never delete `.git/index.lock`. A stale-looking lock is another session committing.**
    Waiting costs seconds; clearing it corrupts someone else's in-flight commit, and it is the
    same class of act as `reset --hard` — you cannot see whose work you are standing on. Two
    sessions hit a live lock on 12 Aug 2026; both waited, and both were right that a concurrent
@@ -54,7 +60,20 @@ That is a coordination shape, not three individual lapses, and the fix is a plac
    mutation was reverted in the file hours before its `eduai_rl_shared` transient — left at
    the ceiling — made `submit-contract` fail for someone else, as a `429` that looked like a
    refusal. Every mutation against a stateful path has this exposure.
-10. **Commit the moment it lints; verify afterwards.** Two sessions lost verified, working
+10. **`git add` then `git commit` immediately — the index is SHARED.** Anything you stage is
+    fair game for another session's pathspec-less commit in the gap. On 12 Aug 2026 a staged
+    `live-checks.sh` was absorbed into someone else's commit; the author got *"no changes added
+    to commit"* while their content was already on origin. The 24 lines survived — **the commit
+    message explaining why they existed did not**, and on this project the rationale is the
+    expensive half. Staging is not private, and the exposure shrinks only by closing the gap.
+11. **"Hold this, don't publish it yet" is unenforceable on `main`.** Six sessions push on a
+    short cycle, so a commit on `main` is public within seconds whether or not its author types
+    `git push` — one was pushed by another session while its author was writing a message
+    explaining why they were not pushing it. **Declining to type the command is not a control.**
+    If something genuinely must not go public, it needs a branch, or it must not be committed.
+    Corollary: "unpushed" has a shelf life of seconds here, so any decision resting on it must
+    be re-read at the moment of acting, not at the moment of deciding.
+12. **Commit the moment it lints; verify afterwards.** Two sessions lost verified, working
    fixes the same day by holding them uncommitted while checking them. A commit is the only
    durable storage in a tree six sessions write to — fixing forward from a committed mistake
    is always cheaper than re-deriving a lost correct one. Explicit pathspec, as always.
@@ -71,7 +90,9 @@ _Updated 12 Aug 2026 by Tech Manager._
 |---|---|---|
 | `scripts/projection-leak.php` | — free — | Landed `540ab20`, 36/36. Main credited in the commit body. |
 | `wp-content/plugins/eduai-assistant/includes/class-eduai-exams.php` | Back-end | Released 12 Aug. Tester and deployment engineer both finished their mutations and restored byte-identical. |
-| `wp-content/plugins/eduai-assistant/includes/class-eduai-knowledge.php` | AI engineer | Retrieval filter + optional scope (`462692a`). |
+| `wp-content/plugins/eduai-assistant/includes/class-eduai-knowledge.php` | **Back-end** (video transcription, 17 Aug) | Was AI engineer. Retrieval filter, optional scope, and the index-completeness report. |
+| `wp-content/plugins/eduai-assistant/includes/class-eduai-transcript.php` | **Back-end** (new, 17 Aug) | Groq `whisper-large-v3-turbo` behind `EduAI_Settings::api_key(groq)`. Shaped after `EduAI_PDF`: `fetch( $attachment_id )`, cached in post meta, transcribed on `wp_schedule_single_event`, never on a page request. |
+| `wp-content/plugins/eduai-assistant/includes/class-eduai-settings.php` | AI engineer | Surfaces incomplete indexes (`4325c42`). |
 | `wp-content/plugins/eduai-assistant/includes/class-eduai-scope.php` | Back-end | Resolves and **gates** `?source=`. Gate is `has_enrolled_content_access() \|\| current_user_can('edit_posts')`. |
 | `wp-content/plugins/eduai-assistant/includes/class-eduai-rest.php` | Back-end | Incl. the scope→`retrieve()` wiring at `:471`. AI engineer supplies the line; back-end lands it. |
 | `wp-content/themes/scholaris/inc/auth.php` | Front-end + Back-end | Pathspec being agreed; back-end is blocked pending answer |

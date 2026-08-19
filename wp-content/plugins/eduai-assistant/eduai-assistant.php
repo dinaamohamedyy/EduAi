@@ -33,6 +33,20 @@ require_once EDUAI_DIR . 'includes/class-eduai-agents.php';
 require_once EDUAI_DIR . 'includes/class-eduai-settings.php';
 require_once EDUAI_DIR . 'includes/class-eduai-claude.php';
 require_once EDUAI_DIR . 'includes/class-eduai-pdf.php';
+require_once EDUAI_DIR . 'includes/class-eduai-transcript.php';
+
+/*
+ * The transcript quality layer, if it is deployed.
+ *
+ * file_exists rather than a bare require: this file belongs to the AI
+ * engineer and is landing separately, and a require_once for a file that is
+ * not in the checkout is a fatal on every page of the site. Conditional means
+ * it connects itself the moment their file arrives, with nobody having to
+ * remember to come back and add a line here.
+ */
+if ( file_exists( EDUAI_DIR . 'includes/class-eduai-transcript-guard.php' ) ) {
+	require_once EDUAI_DIR . 'includes/class-eduai-transcript-guard.php';
+}
 require_once EDUAI_DIR . 'includes/class-eduai-knowledge.php';
 require_once EDUAI_DIR . 'includes/class-eduai-conversation.php';
 require_once EDUAI_DIR . 'includes/class-eduai-calc.php';
@@ -104,6 +118,16 @@ final class EduAI_Assistant {
 
 	public function boot(): void {
 		EduAI_Settings::init();
+		EduAI_Transcript::init();
+
+		// The AI engineer's quality layer. Guarded because it is a separate
+		// file that may not be deployed yet — and initialised HERE because it
+		// was not initialised anywhere: its glossary hooks
+		// `eduai_transcript_prompt_terms`, so without this the terms it
+		// gathers never reach a transcription request.
+		if ( class_exists( 'EduAI_Transcript_Guard' ) ) {
+			EduAI_Transcript_Guard::init();
+		}
 		EduAI_Knowledge::init();
 		EduAI_Conversation::init();
 		EduAI_Exams::init();

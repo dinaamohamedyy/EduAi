@@ -178,6 +178,34 @@ class EduAI_Knowledge {
 			}
 		}
 
+
+		/*
+		 * Attached video, as a transcript.
+		 *
+		 * This is the whole of the video feature: Summarise, PrepareME and
+		 * Q&A all read this index, so a recording that reaches $parts reaches
+		 * every one of them and none of the three needed touching.
+		 *
+		 * READ, never fetched. EduAI_Transcript::fetch() returns what is
+		 * stored and nothing else — the Groq call happens on cron, because
+		 * indexing runs on save_post and a lecture is minutes of audio.
+		 * Scheduling is what save_post triggers; this only consumes the
+		 * result.
+		 *
+		 * No length floor here on purpose. A punctuation-only transcript from
+		 * a silent video is refused at the source, where it can be told apart
+		 * from a short one; by this point it would be concatenated with the
+		 * post body and would clear any floor on that body's strength.
+		 */
+		$video_id = (int) get_post_meta( $post_id, '_scholaris_video_id', true );
+
+		if ( $video_id && class_exists( 'EduAI_Transcript' ) ) {
+			$transcript = EduAI_Transcript::fetch( $video_id );
+
+			if ( '' !== $transcript ) {
+				$parts[] = $transcript;
+			}
+		}
 		$text = trim( implode( "\n\n", $parts ) );
 
 		self::delete_for_post( $post_id );
