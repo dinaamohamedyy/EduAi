@@ -25,13 +25,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit( 1 );
 }
 
-// The acceptance script's private gate, copied verbatim from
-// scripts/video-transcript-accept.php so the comparison is honest.
-function tb_accept_gate( $t ) {
-	$t     = trim( (string) $t );
-	$words = preg_split( '/\W+/u', strtolower( $t ), -1, PREG_SPLIT_NO_EMPTY );
-	return strlen( $t ) >= 200 && count( $words ) >= 40 && count( array_unique( $words ) ) >= 25;
-}
+/*
+ * There used to be a copy of the acceptance script's private gate here, and a
+ * tally of how often the two disagreed - 5 of 13 at its worst, including a
+ * truncated lecture that it accepted and this refused.
+ *
+ * Back-end pointed that script at the shipped gate in 9163f48, so the tally has
+ * nothing left to measure. Keeping the copy would have been the same defect it
+ * was written to expose: a verbatim duplicate of a function that has since
+ * moved, reporting confidently about a version of it that no longer exists.
+ */
 
 /**
  * Lecture prose long enough to hit a target word count, built from distinct
@@ -111,7 +114,7 @@ $cases = array(
 $pass = 0;
 $fail = 0;
 
-printf( "%-38s %8s %9s %9s  %-7s %-7s %s\n", 'case', 'heard', 'recorded', 'complete', 'guard', 'accept', 'code' );
+printf( "%-38s %8s %9s %9s  %-7s %s\n", 'case', 'heard', 'recorded', 'complete', 'guard', 'code' );
 printf( "%s\n", str_repeat( '-', 110 ) );
 
 foreach ( $cases as $c ) {
@@ -126,13 +129,12 @@ foreach ( $cases as $c ) {
 	$ok ? $pass++ : $fail++;
 
 	printf(
-		"%-38s %8s %9s %9s  %-7s %-7s %s%s\n",
+		"%-38s %8s %9s %9s  %-7s %s%s\n",
 		$label,
 		null === $heard ? '-' : sprintf( '%.1fs', $heard ),
 		null === $recorded ? '-' : sprintf( '%.1fs', $recorded ),
 		$checked,
 		$got,
-		tb_accept_gate( $text ) ? 'pass' : 'refuse',
 		$code,
 		$ok ? '' : sprintf( '   <-- EXPECTED %s', $expect )
 	);
@@ -271,13 +273,5 @@ if ( ! is_wp_error( $sparse ) ) {
 	printf( "        %s\n", $sparse->get_error_message() );
 }
 
-$diverge = 0;
-foreach ( $cases as $c ) {
-	$shipped = ! is_wp_error( EduAI_Transcript_Guard::usable( $c[1], $c[2], $c[3] ) );
-	if ( $shipped !== tb_accept_gate( $c[1] ) ) {
-		$diverge++;
-	}
-}
-printf( "\n%d of %d cases judged differently by the shipped gate and the acceptance script's own.\n", $diverge, count( $cases ) );
 printf( "\n%d passed, %d failed\n", $pass, $fail );
 exit( $fail ? 1 : 0 );
