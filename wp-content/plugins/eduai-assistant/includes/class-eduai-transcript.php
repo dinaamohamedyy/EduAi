@@ -32,6 +32,9 @@ class EduAI_Transcript {
 	const HOOK       = 'eduai_transcribe_attachment';
 	const ENDPOINT   = 'https://api.groq.com/openai/v1/audio/transcriptions';
 	const MODEL      = 'whisper-large-v3-turbo';
+	const META_HEARD    = '_eduai_transcript_heard';
+	const META_ACTUAL   = '_eduai_transcript_actual';
+	const META_LANGUAGE = '_eduai_transcript_language';
 
 	/**
 	 * Free-tier ceiling, in bytes.
@@ -149,7 +152,8 @@ class EduAI_Transcript {
 	 */
 	public static function run( $attachment_id, $post_id = 0 ): void {
 		$attachment_id = (int) $attachment_id;
-		$text          = self::transcribe( $attachment_id, (int) $post_id );
+		$meta          = array();
+		$text          = self::transcribe( $attachment_id, (int) $post_id, $meta );
 
 		if ( is_wp_error( $text ) ) {
 			update_post_meta( $attachment_id, self::META_STATE, 'error: ' . $text->get_error_message() );
@@ -157,16 +161,36 @@ class EduAI_Transcript {
 		}
 
 		/*
-		 * The quality layer gets the last word, if it is deployed.
+		 * TWO DURATIONS, PASSED SEPARATELY, because they answer different
+		 * questions and summing them into one number destroys the only check
+		 * that can catch the failure this feature will actually have.
 		 *
-		 * This class refuses what is not speech; that one judges whether what
-		 * IS speech is usable — Whisper's hallucinated "thanks for watching"
-		 * on silence, a words-per-minute floor, completeness. Different
-		 * questions, so both run, and a refusal from either stores the reason
-		 * rather than the text.
+		 *   heard  — Groq's `duration`: how much audio Whisper processed
+		 *   actual — the file's own duration: how long the recording IS
+		 *
+		 * The rate question — is this speech or is it noise? — wants `heard`,
+		 * because it is the duration of what was decoded. Fourteen words in
+		 * six seconds is 137 words a minute, an ordinary speaking rate, and an
+		 * absolute word floor calls that "almost no words" and refuses a
+		 * perfectly good thirty-second intro clip.
+		 *
+		 * The completeness question — did we get the WHOLE lecture? — cannot
+		 * use `heard` at all. If Whisper stops at minute four of fifty it
+		 * reports a four-minute duration, so words-per-second stays healthy:
+		 * both halves of the fraction shrink together and the check passes on
+		 * precisely the case it exists to catch. Only `actual` disagreeing
+		 * with `heard` reveals it, and it reveals how much is missing rather
+		 * than merely that something is.
+		 *
+		 * That is a contiguity check rather than a volume one — the same shape
+		 * as chunk indices running 0..n-1, and the reason a coverage
+		 * percentage could once read 112% on a half-indexed document.
 		 */
+		$heard  = isset( $meta['duration'] ) ? (float) $meta['duration'] : null;
+		$actual = self::file_duration( $attachment_id );
+
 		if ( class_exists( 'EduAI_Transcript_Guard' ) && method_exists( 'EduAI_Transcript_Guard', 'usable' ) ) {
-			$verdict = EduAI_Transcript_Guard::usable( $text );
+			$verdict = EduAI_Transcript_Guard::usable( $text, null === $heard ? null : (int) round( $heard ), $actual );
 
 			if ( is_wp_error( $verdict ) ) {
 				update_post_meta( $attachment_id, self::META_STATE, 'rejected: ' . $verdict->get_error_message() );
@@ -177,11 +201,65 @@ class EduAI_Transcript {
 		update_post_meta( $attachment_id, self::META, $text );
 		update_post_meta( $attachment_id, self::META_STATE, 'ok' );
 
+		// Kept for the guard, the editor and anyone diagnosing a short
+		// transcript later — the numbers that produced the verdict, not just
+		// the verdict.
+		update_post_meta( $attachment_id, self::META_HEARD, $heard );
+		update_post_meta( $attachment_id, self::META_ACTUAL, $actual );
+
+		if ( '' !== ( $meta['language'] ?? '' ) ) {
+			update_post_meta( $attachment_id, self::META_LANGUAGE, (string) $meta['language'] );
+		}
+
 		// The transcript only reaches a student through the index, so writing
 		// it without reindexing would store a correct answer nobody can read.
 		if ( $post_id && class_exists( 'EduAI_Knowledge' ) ) {
 			EduAI_Knowledge::index_post( (int) $post_id );
 		}
+	}
+
+	/**
+	 * How long the recording actually is, from the file rather than the model.
+	 *
+	 * Null when it cannot be determined — a synthetic fixture, an exotic
+	 * container — and null must mean "no claim", never "zero". The same rule
+	 * as a page range on a deck whose blocks do not match its page count: a
+	 * completeness check that cannot measure says nothing rather than
+	 * guessing.
+	 *
+	 * @param int $attachment_id Attachment.
+	 * @return int|null Seconds.
+	 */
+	public static function file_duration( int $attachment_id ): ?int {
+		$path = get_attached_file( $attachment_id );
+
+		if ( ! $path || ! file_exists( $path ) ) {
+			return null;
+		}
+
+		// Cheapest first: WordPress already stored it at upload time for a
+		// media file it understood.
+		$attached = wp_get_attachment_metadata( $attachment_id );
+
+		if ( isset( $attached['length'] ) && (int) $attached['length'] > 0 ) {
+			return (int) $attached['length'];
+		}
+
+		if ( ! function_exists( 'wp_read_video_metadata' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/media.php';
+		}
+
+		if ( ! function_exists( 'wp_read_video_metadata' ) ) {
+			return null;
+		}
+
+		$probe = wp_read_video_metadata( $path );
+
+		if ( is_array( $probe ) && isset( $probe['length'] ) && (int) $probe['length'] > 0 ) {
+			return (int) $probe['length'];
+		}
+
+		return null;
 	}
 
 	/**
@@ -191,7 +269,9 @@ class EduAI_Transcript {
 	 * @param int $post_id       Post it belongs to, for the decoding prompt.
 	 * @return string|WP_Error
 	 */
-	public static function transcribe( int $attachment_id, int $post_id = 0 ) {
+	public static function transcribe( int $attachment_id, int $post_id = 0, array &$meta = array() ) {
+		$meta = array( 'duration' => null, 'language' => '' );
+
 		$key = class_exists( 'EduAI_Settings' ) ? EduAI_Settings::api_key( 'groq' ) : '';
 
 		if ( '' === $key ) {
@@ -250,6 +330,9 @@ class EduAI_Transcript {
 				)
 			);
 		}
+
+		$meta['duration'] = isset( $decoded['duration'] ) ? (float) $decoded['duration'] : null;
+		$meta['language'] = isset( $decoded['language'] ) ? (string) $decoded['language'] : '';
 
 		$text = isset( $decoded['text'] ) ? trim( (string) $decoded['text'] ) : '';
 
@@ -379,11 +462,20 @@ class EduAI_Transcript {
 			return '';
 		}
 
-		return sprintf(
-			/* translators: %s: comma-separated lecture and course titles */
-			__( 'This is a university lecture recording. Expected topics and terms: %s.', 'eduai' ),
-			implode( ', ', $terms )
-		);
+		/*
+		 * A BARE TERM LIST, not a sentence.
+		 *
+		 * This used to read "This is a university lecture recording. Expected
+		 * topics and terms: …", and that carrier is what made the echo
+		 * dangerous. Given a silent video Whisper hands the prompt back — so a
+		 * fluent English carrier produces a fluent English transcript, which is
+		 * the form most likely to survive any guard, present or future.
+		 *
+		 * A term list biases decoding exactly as well and echoes as a term
+		 * list, which is obviously not a lecture to a reader and to anything
+		 * downstream. Same benefit, safer failure.
+		 */
+		return implode( ', ', $terms );
 	}
 
 	/**
@@ -409,7 +501,14 @@ class EduAI_Transcript {
 			return new WP_Error( 'eduai_transcript_read', __( 'The video file could not be read.', 'eduai' ) );
 		}
 
-		$fields = array( 'model' => self::MODEL );
+		// verbose_json, not the default: it carries `duration` and `language`.
+		// The duration is what makes a words-per-second floor possible at all —
+		// see the note in transcribe() about why it answers only ONE of the two
+		// questions worth asking about it.
+		$fields = array(
+			'model'           => self::MODEL,
+			'response_format' => 'verbose_json',
+		);
 
 		if ( '' !== $prompt ) {
 			$fields['prompt'] = $prompt;
