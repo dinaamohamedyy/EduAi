@@ -31,7 +31,13 @@ services:
       retries: 12
 
   wordpress:
-    image: wordpress:6.8-php8.3-apache
+    # Built rather than pulled: the image adds ffmpeg and yt-dlp, which the
+    # video transcription path needs. See docker/wordpress.Dockerfile for why
+    # they are baked in rather than installed by hand.
+    build:
+      context: .
+      dockerfile: docker/wordpress.Dockerfile
+    image: scholaris-wordpress:local
     container_name: scholaris-wp
     restart: unless-stopped
     depends_on:
@@ -76,7 +82,12 @@ services:
       - ./php/dev-mail.php:/var/www/html/wp-content/mu-plugins/dev-mail.php:ro
 
   cli:
-    image: wordpress:cli-php8.3
+    # Same two binaries as the web container, so a capability probe run through
+    # wp-cli answers for the same environment the feature runs in.
+    build:
+      context: .
+      dockerfile: docker/cli.Dockerfile
+    image: scholaris-cli:local
     container_name: scholaris-cli
     profiles: ["tools"]
     depends_on:
