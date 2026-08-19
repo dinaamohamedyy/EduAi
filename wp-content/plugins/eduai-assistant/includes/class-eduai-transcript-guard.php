@@ -60,6 +60,21 @@ class EduAI_Transcript_Guard {
 	private const MIN_WPM = 25;
 
 	/**
+	 * Shortest recording whose words-per-minute is a rate rather than a rounding
+	 * artefact.
+	 *
+	 * This was 60, on the reasoning that anything shorter was not a lecture. That
+	 * reasoning quietly assumed the word floor above was covering the short end,
+	 * and once that floor dropped to catching degenerate output, nothing was: a
+	 * forty-second clip transcribing to six words would have passed both.
+	 *
+	 * Five seconds against a 25 wpm threshold asks for two words, which any
+	 * fragment of real speech clears. The noise this was raised against lives at
+	 * durations where one word swings the rate, and that is below here.
+	 */
+	private const MIN_MEASURABLE = 5.0;
+
+	/**
 	 * Characters of vocabulary the decoding prompt may carry.
 	 *
 	 * Whisper reads about 224 tokens of prompt and drops the rest without
@@ -72,17 +87,32 @@ class EduAI_Transcript_Guard {
 	 * Is this transcript worth indexing?
 	 *
 	 * @param string   $text    What the transcriber returned.
-	 * @param int|null $seconds Media duration, or null when it is not known.
+	 * @param float|null $seconds Media duration, or null when it is not known.
 	 * @return true|WP_Error
 	 */
-	public static function usable( string $text, ?int $seconds = null ) {
+	public static function usable( string $text, ?float $seconds = null ) {
 		$clean = trim( wp_strip_all_tags( $text ) );
 
 		// Words, not characters. " . " has length; it has no content.
 		$words = preg_split( '/\s+/u', preg_replace( '/[^\p{L}\p{N}\s]+/u', ' ', $clean ) ?? $clean, -1, PREG_SPLIT_NO_EMPTY );
 		$count = count( $words );
 
-		if ( $count < 20 ) {
+		/*
+		 * Degenerate output only. NOT a brevity test.
+		 *
+		 * This was 20, and it refused the Wikimedia clip TM proved the pipeline
+		 * against: 14 words over 6 seconds, which is 140 words per minute —
+		 * ordinary lecture speed and not sparse in the slightest. The floor was
+		 * doing two jobs and only one of them is its own: catching " ." and
+		 * " The", which it still does, and standing in for a completeness check
+		 * it has no information to make.
+		 *
+		 * Completeness is words per minute of MEDIA, below, and that is the only
+		 * measure that can tell a short clip from a truncated lecture. An
+		 * absolute count cannot: 200 words is a healthy minute and a catastrophic
+		 * hour, and nothing in the number says which.
+		 */
+		if ( $count < 5 ) {
 			return new WP_Error(
 				'eduai_transcript_empty',
 				__( 'Nothing audible was transcribed from that recording — it came back with almost no words. Check the video actually has speech on its audio track.', 'eduai' ),
@@ -122,19 +152,19 @@ class EduAI_Transcript_Guard {
 		// answer it — a transcript that stopped at minute four of a fifty
 		// minute lecture is entirely healthy by character count. Duration is
 		// independent of the transcript, which is what makes it evidence.
-		if ( $seconds && $seconds > 60 ) {
+		if ( self::completeness_checked( $seconds ) ) {
 			$wpm = $count / ( $seconds / 60 );
 
 			if ( $wpm < self::MIN_WPM ) {
 				return new WP_Error(
 					'eduai_transcript_short',
 					sprintf(
-						/* translators: 1: words per minute 2: minutes of recording */
-						__( 'That transcript holds only %1$d words per minute across %2$d minutes of recording, so most of the lecture is missing from it. Nothing was indexed.', 'eduai' ),
-						(int) round( $wpm ),
-						(int) round( $seconds / 60 )
+						/* translators: 1: number of words 2: length of the recording, already worded */
+						__( 'That transcript holds %1$d words across %2$s of recording. That is far less speech than a recording that long contains, so most of it is missing from the transcript. Nothing was indexed.', 'eduai' ),
+						$count,
+						self::spoken_length( $seconds )
 					),
-					array( 'wpm' => round( $wpm, 1 ), 'seconds' => $seconds )
+					array( 'wpm' => round( $wpm, 1 ), 'words' => $count, 'seconds' => $seconds )
 				);
 			}
 		}
@@ -150,10 +180,30 @@ class EduAI_Transcript_Guard {
 	 * not match its page count: make the claim you can support and say plainly
 	 * where you cannot make one, rather than implying a check that did not run.
 	 *
-	 * @param int|null $seconds Media duration.
+	 * @param float|null $seconds Media duration.
 	 */
-	public static function completeness_checked( ?int $seconds ): bool {
-		return (bool) $seconds && $seconds > 60;
+	public static function completeness_checked( ?float $seconds ): bool {
+		return null !== $seconds && $seconds >= self::MIN_MEASURABLE;
+	}
+
+	/**
+	 * A duration the owner reads without doing arithmetic.
+	 *
+	 * Rounding seconds to minutes told a forty-second clip it held "0 minutes of
+	 * recording", which is not a sentence anyone can act on.
+	 *
+	 * @param float $seconds Media duration.
+	 */
+	private static function spoken_length( float $seconds ): string {
+		if ( $seconds < 90 ) {
+			/* translators: %d: seconds */
+			return sprintf( _n( '%d second', '%d seconds', (int) round( $seconds ), 'eduai' ), (int) round( $seconds ) );
+		}
+
+		$minutes = (int) round( $seconds / 60 );
+
+		/* translators: %d: minutes */
+		return sprintf( _n( '%d minute', '%d minutes', $minutes, 'eduai' ), $minutes );
 	}
 
 	/**
