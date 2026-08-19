@@ -347,6 +347,43 @@ class EduAI_Knowledge {
 	}
 
 	/**
+	 * Is there anything indexed for this post?
+	 *
+	 * The question every scoped tool actually depends on, asked once. A post
+	 * can have an empty `post_content` and be perfectly full — the owner's
+	 * lessons carry their video as a LearnDash URL — so "is the body empty"
+	 * answers something else entirely, and answering it was how a lesson with
+	 * a video in it got reported as an empty shell.
+	 *
+	 * Counts rows rather than reading them: this runs before retrieval on a
+	 * request that may be refused, and the only thing it needs to know is
+	 * whether refusing is the honest outcome.
+	 *
+	 * @param int $post_id Post.
+	 */
+	public static function has_content( int $post_id ): bool {
+		if ( $post_id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		$table = self::table();
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+
+		if ( $exists !== $table ) {
+			return false;
+		}
+
+		return (bool) (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE post_id = %d", $post_id )
+		);
+		// phpcs:enable
+	}
+
+	/**
 	 * Drop chunks the index should no longer be holding.
 	 *
 	 * THE INDEX HAD NO EVICTION, and the shape of the gap is the one that

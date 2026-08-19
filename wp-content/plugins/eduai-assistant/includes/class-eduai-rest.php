@@ -525,6 +525,45 @@ class EduAI_REST {
 		// and must not be allowed to become a scope by accident.
 		$scope = EduAI_Scope::resolve( (int) $request->get_param( 'source' ) );
 
+		/*
+		 * A scoped lesson we have no material for must SAY SO, not be quietly
+		 * answered from somewhere else.
+		 *
+		 * This is what the owner hit: he opened Logistic Regression, asked for
+		 * practice questions, and got "Practice Questions — Linear Regression
+		 * (Matrix Form)". Both his live lessons carry their video as a
+		 * LearnDash URL that nothing indexes yet, so scoped retrieval returned
+		 * nothing, the unscoped boost supplied the only material on the site —
+		 * three linear-regression lectures — and the answer arrived under the
+		 * heading of a lesson it had never read.
+		 *
+		 * Prefer-then-fall-back is right when a lesson is THIN. It is wrong
+		 * when a lesson is EMPTY, because the banner has already told the
+		 * student which lecture they are focused on, and a confident answer
+		 * about a different one is this project's signature failure wearing a
+		 * new hat.
+		 *
+		 * Checked against the index rather than the post body: a lesson can
+		 * have an empty `post_content` and be perfectly full — his are — so
+		 * "has this been indexed" is the only question that means anything
+		 * here, and it is the question the tools actually depend on.
+		 */
+		if ( $scope && ! EduAI_Knowledge::has_content( $scope['id'] ) ) {
+			return new WP_REST_Response( array(
+				'answer'    => '',
+				'html'      => self::to_html(
+					sprintf(
+						/* translators: %s: lesson title */
+						__( 'I have not read “%s” yet, so I cannot answer about it. Its video has not been processed into text — nothing has been indexed for this lesson. Ask again once it has, or open a lesson that has material.', 'eduai' ),
+						$scope['title']
+					)
+				),
+				'sources'   => array(),
+				'thread_id' => $thread_id,
+				'scope'     => array( 'id' => $scope['id'], 'title' => $scope['title'], 'indexed' => false ),
+			), 200 );
+		}
+
 		// ------------------------------------------------------------- context
 		$passages = array();
 		if ( EduAI_Settings::get( 'enable_rag', true ) ) {

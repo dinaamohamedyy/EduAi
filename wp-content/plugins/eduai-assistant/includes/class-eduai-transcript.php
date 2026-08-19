@@ -191,7 +191,7 @@ class EduAI_Transcript {
 		$actual = self::file_duration( $attachment_id );
 
 		if ( class_exists( 'EduAI_Transcript_Guard' ) && method_exists( 'EduAI_Transcript_Guard', 'usable' ) ) {
-			$verdict = EduAI_Transcript_Guard::usable( $text, null === $heard ? null : (int) round( $heard ), $actual );
+			$verdict = EduAI_Transcript_Guard::usable( $text, $heard, $actual );
 
 			if ( is_wp_error( $verdict ) ) {
 				update_post_meta( $attachment_id, self::META_STATE, 'rejected: ' . $verdict->get_error_message() );
