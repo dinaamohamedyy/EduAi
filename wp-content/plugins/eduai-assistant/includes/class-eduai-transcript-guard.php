@@ -75,6 +75,48 @@ class EduAI_Transcript_Guard {
 	private const MIN_MEASURABLE = 5.0;
 
 	/**
+	 * Share of the recording the transcriber must have got through.
+	 *
+	 * A complete run reports the file's own length, so anything materially
+	 * below 1.0 is a transcriber that stopped early rather than a quiet
+	 * lecture. Set loose because the two durations are read off different
+	 * things and are allowed to disagree slightly; it is set to catch a
+	 * transcript that covers a fraction of its recording, which is what
+	 * truncation looks like.
+	 */
+	/**
+	 * Words per window when looking for a repeated phrase, and how far the
+	 * window moves between looks.
+	 *
+	 * Two hundred words is long enough that ordinary speech is varied within it
+	 * and short enough that a loop filling a couple of minutes cannot be
+	 * averaged away by the good speech either side. The step is half the window
+	 * so nothing hides across a boundary.
+	 */
+	private const LOOP_WINDOW = 200;
+	private const LOOP_STEP   = 100;
+
+	/**
+	 * Share of distinct words below which a stretch reads as padding.
+	 *
+	 * Ordinary speech runs above 0.5 in a window this size. This sits four
+	 * times below that, because the job is catching " the the the", not
+	 * arbitrating between a repetitive lecturer and a varied one.
+	 */
+	private const MIN_VARIETY = 0.12;
+
+	private const MIN_COVERAGE = 0.9;
+
+	/**
+	 * Seconds of shortfall to forgive before the ratio is believed.
+	 *
+	 * A container's declared length and its audio stream's differ by a second
+	 * or two often enough, and on a six second clip that is a third of the
+	 * ratio. Truncation does not hide inside thirty seconds.
+	 */
+	private const COVERAGE_SLACK = 30.0;
+
+	/**
 	 * Characters of vocabulary the decoding prompt may carry.
 	 *
 	 * Whisper reads about 224 tokens of prompt and drops the rest without
@@ -87,10 +129,11 @@ class EduAI_Transcript_Guard {
 	 * Is this transcript worth indexing?
 	 *
 	 * @param string   $text    What the transcriber returned.
-	 * @param float|null $seconds Media duration, or null when it is not known.
+	 * @param float|null $heard    Seconds of audio the transcriber processed (Groq's own figure).
+	 * @param float|null $recorded Seconds the recording actually runs, read off the file.
 	 * @return true|WP_Error
 	 */
-	public static function usable( string $text, ?float $seconds = null ) {
+	public static function usable( string $text, ?float $heard = null, ?float $recorded = null ) {
 		$clean = trim( wp_strip_all_tags( $text ) );
 
 		// Words, not characters. " . " has length; it has no content.
@@ -135,11 +178,25 @@ class EduAI_Transcript_Guard {
 			);
 		}
 
-		// Whisper loops on low signal, repeating one phrase to fill the
-		// duration. Unique-word ratio catches it where length cannot.
-		$unique = count( array_unique( array_map( 'mb_strtolower', $words ) ) );
-
-		if ( $count >= 60 && ( $unique / $count ) < 0.12 ) {
+		/*
+		 * Whisper loops on low signal, repeating one phrase to fill the
+		 * duration, and a unique-word ratio catches that where length cannot.
+		 *
+		 * Measured over a WINDOW rather than the whole transcript, for two
+		 * reasons that turned out to be one reason. A global ratio falls as a
+		 * transcript grows - vocabulary does not keep up with length, so a
+		 * three hour lecture scores lower than a three minute one purely for
+		 * being long, and a fixed threshold refuses it for being thorough. And
+		 * a loop that fills five minutes of a fifty minute recording is diluted
+		 * to nothing by the forty-five good minutes around it, so the global
+		 * ratio misses the very failure it is here for.
+		 *
+		 * The window makes the measure independent of length, which is the same
+		 * correction the word floor needed: a threshold that means one thing at
+		 * one size and another at another is not a threshold.
+		 */
+		if ( self::looping( $words ) ) {
+			$unique = count( array_unique( array_map( 'mb_strtolower', $words ) ) );
 			return new WP_Error(
 				'eduai_transcript_repetitive',
 				__( 'That transcript repeats the same few words for its whole length, which is what a transcriber produces from unintelligible audio. Nothing was indexed.', 'eduai' ),
@@ -147,13 +204,68 @@ class EduAI_Transcript_Guard {
 			);
 		}
 
-		// The completeness question, and the ONLY honest anchor a transcript
-		// has. There are no page numbers to count against, and length cannot
-		// answer it — a transcript that stopped at minute four of a fifty
-		// minute lecture is entirely healthy by character count. Duration is
-		// independent of the transcript, which is what makes it evidence.
-		if ( self::completeness_checked( $seconds ) ) {
-			$wpm = $count / ( $seconds / 60 );
+		/*
+		 * COMPLETENESS. Did the transcriber hear the whole recording?
+		 *
+		 * This compares two durations that come from two different places, and
+		 * that is the entire point of it. `$heard` is Groq's own `duration` -
+		 * how much audio Whisper processed. `$recorded` is the file's, read off
+		 * the media itself.
+		 *
+		 * The rate below CANNOT answer this question, however good a rate it
+		 * is. If Whisper stops at minute four of a fifty minute lecture it
+		 * reports a four minute duration: numerator and denominator shrink
+		 * together, words per minute stays perfect, and the check passes on
+		 * exactly the failure it was built to catch. A denominator produced by
+		 * the same process as the numerator is not evidence about that process.
+		 * That is the shape that once let a coverage figure read 112% on a
+		 * half-indexed document.
+		 *
+		 * Two independent durations disagreeing is contiguity, not volume - the
+		 * audio form of chunk indices running 0..n-1. And it says how much is
+		 * missing, not merely that something is.
+		 */
+		if ( self::completeness_checked( $heard, $recorded ) ) {
+			$missing = $recorded - $heard;
+
+			/*
+			 * Both conditions, because either alone misfires. A container's
+			 * declared length and its audio stream's can differ by a second or
+			 * two with nothing wrong, which the ratio alone would call
+			 * truncation on a short clip; and a proportionally small shortfall
+			 * on a long recording is still minutes of lost lecture, which the
+			 * absolute gap alone would let through on a ratio that looks fine.
+			 */
+			if ( $heard < ( self::MIN_COVERAGE * $recorded ) && $missing > self::COVERAGE_SLACK ) {
+				return new WP_Error(
+					'eduai_transcript_truncated',
+					sprintf(
+						/* translators: 1: length transcribed, worded 2: length of the recording, worded */
+						__( 'The transcriber only got through %1$s of a recording that runs %2$s, so the rest of the lecture is missing from the transcript. Nothing was indexed. This is a transcription failure rather than a problem with your video - it is worth trying again.', 'eduai' ),
+						self::spoken_length( $heard ),
+						self::spoken_length( $recorded )
+					),
+					array(
+						'heard'    => round( $heard, 1 ),
+						'recorded' => round( $recorded, 1 ),
+						'coverage' => round( $heard / $recorded, 3 ),
+					)
+				);
+			}
+		}
+
+		/*
+		 * RATE. Is what it heard speech, or is it noise?
+		 *
+		 * A different question with a different denominator: the span actually
+		 * decoded, because that is the audio these words are supposed to
+		 * account for. Falls back to the file's length when Groq gave us none,
+		 * which can only make this stricter.
+		 */
+		$span = $heard ?? $recorded;
+
+		if ( null !== $span && $span >= self::MIN_MEASURABLE ) {
+			$wpm = $count / ( $span / 60 );
 
 			if ( $wpm < self::MIN_WPM ) {
 				return new WP_Error(
@@ -162,14 +274,55 @@ class EduAI_Transcript_Guard {
 						/* translators: 1: number of words 2: length of the recording, already worded */
 						__( 'That transcript holds %1$d words across %2$s of recording. That is far less speech than a recording that long contains, so most of it is missing from the transcript. Nothing was indexed.', 'eduai' ),
 						$count,
-						self::spoken_length( $seconds )
+						self::spoken_length( $span )
 					),
-					array( 'wpm' => round( $wpm, 1 ), 'words' => $count, 'seconds' => $seconds )
+					array( 'wpm' => round( $wpm, 1 ), 'words' => $count, 'seconds' => $span )
 				);
 			}
 		}
 
 		return true;
+	}
+
+	/**
+	 * Does any stretch of this transcript repeat one phrase to fill time?
+	 *
+	 * Windowed, and overlapping, so a loop cannot hide by straddling a
+	 * boundary. Short transcripts are judged whole - there is nothing to slide
+	 * across and a genuinely short clip has no room to loop in.
+	 *
+	 * @param string[] $words Transcript words.
+	 */
+	private static function looping( array $words ): bool {
+		$count = count( $words );
+
+		if ( $count < self::LOOP_WINDOW ) {
+			// Too short for a window, and too short to be padding, below 60.
+			return $count >= 60 && self::variety( $words ) < self::MIN_VARIETY;
+		}
+
+		for ( $at = 0; $at + self::LOOP_WINDOW <= $count; $at += self::LOOP_STEP ) {
+			if ( self::variety( array_slice( $words, $at, self::LOOP_WINDOW ) ) < self::MIN_VARIETY ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Share of a run of words that are distinct from one another.
+	 *
+	 * @param string[] $words Words.
+	 */
+	private static function variety( array $words ): float {
+		$count = count( $words );
+
+		if ( 0 === $count ) {
+			return 1.0;
+		}
+
+		return count( array_unique( array_map( 'mb_strtolower', $words ) ) ) / $count;
 	}
 
 	/**
@@ -180,10 +333,11 @@ class EduAI_Transcript_Guard {
 	 * not match its page count: make the claim you can support and say plainly
 	 * where you cannot make one, rather than implying a check that did not run.
 	 *
-	 * @param float|null $seconds Media duration.
+	 * @param float|null $heard    Seconds the transcriber processed.
+	 * @param float|null $recorded Seconds the recording actually runs.
 	 */
-	public static function completeness_checked( ?float $seconds ): bool {
-		return null !== $seconds && $seconds >= self::MIN_MEASURABLE;
+	public static function completeness_checked( ?float $heard, ?float $recorded ): bool {
+		return null !== $heard && null !== $recorded && $recorded >= self::MIN_MEASURABLE;
 	}
 
 	/**
