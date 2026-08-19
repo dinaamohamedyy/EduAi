@@ -67,7 +67,7 @@ function vt_skip( $rule, $why ) {
  * @param float|null $seconds Media duration, so the rate path is exercised
  *                            rather than skipped.
  */
-function vt_is_real_transcript( $t, $seconds = null ) {
+function vt_is_real_transcript( $t, $heard = null, $recorded = null ) {
 	$t     = trim( (string) $t );
 	$words = preg_split( '/\W+/u', strtolower( $t ), -1, PREG_SPLIT_NO_EMPTY );
 	$uniq  = array_unique( $words );
@@ -87,9 +87,19 @@ function vt_is_real_transcript( $t, $seconds = null ) {
 		return $stat;
 	}
 
-	$verdict = EduAI_Transcript_Guard::usable( $t, $seconds );
+	/*
+	 * BOTH durations. Passing one meant `recorded` was null for every call
+	 * this file makes, so `eduai_transcript_truncated` was unreachable in the
+	 * whole run — and the control printed green claiming truncation was
+	 * caught while the fixture was actually being refused as `_short`.
+	 * Delete the truncation check from the plugin and that control still
+	 * passed. Fourth time today this feature has failed by an argument not
+	 * arriving, and the first time a check can see it.
+	 */
+	$verdict = EduAI_Transcript_Guard::usable( $t, $heard, $recorded );
 
 	$stat['real']   = ! is_wp_error( $verdict );
+	$stat['code']   = is_wp_error( $verdict ) ? $verdict->get_error_code() : '';
 	$stat['reason'] = is_wp_error( $verdict ) ? $verdict->get_error_message() : '';
 
 	return $stat;
@@ -127,26 +137,49 @@ if ( ! $good['real'] ) {
 }
 
 /*
- * The row that carries the whole ruling: the SAME text, judged twice.
+ * The row that carries the whole ruling: the SAME text, judged three ways.
  *
- * Accepted as a short clip, refused as four minutes of a fifty-minute
- * lecture. Without this the table only shows that a threshold was lowered —
- * this is what shows the gate still catches a truncated recording, which is
- * the failure this feature will actually have in production.
+ * Asserting the CODE, not merely that it was refused. With only one duration
+ * passed this fixture is refused as `eduai_transcript_short` — a green tick
+ * on a control claiming truncation is caught, while the truncation check is
+ * unreachable and could be deleted from the plugin without this run noticing.
+ *
+ * So the invariant is stated in both directions: truncated WITH both
+ * durations, and NOT truncated without the recorded one. The second half is
+ * what catches a dropped argument, and a dropped argument is how this feature
+ * has failed four times today.
  */
-$truncated = vt_is_real_transcript(
-	'Today we look at least squares regression. Given a design matrix X and a response vector y, '
+$vt_lecture = 'Today we look at least squares regression. Given a design matrix X and a response vector y, '
 	. 'the residual is defined as r equals y minus X w. Setting the gradient of the squared error '
 	. 'to zero yields the normal equations, X transpose X w equals X transpose y. We then discuss '
-	. 'why the Gram matrix must be invertible and what happens when features are collinear.',
-	3000.0
-);
+	. 'why the Gram matrix must be invertible and what happens when features are collinear.';
+
+$truncated = vt_is_real_transcript( $vt_lecture, 240.0, 3000.0 );
 
 if ( $truncated['real'] ) {
 	$control_ok = false;
 	vt_bad(
 		'control: the gate refuses a lecture truncated at minute four of fifty',
 		'it ACCEPTED it - the acceptance test would greenlight the exact production failure it exists to catch'
+	);
+} elseif ( 'eduai_transcript_truncated' !== $truncated['code'] ) {
+	$control_ok = false;
+	vt_bad(
+		'control: truncation is refused AS truncation',
+		sprintf(
+			'refused as "%s" instead - the truncation check is unreachable, and this control is green for the wrong reason',
+			$truncated['code']
+		)
+	);
+}
+
+$vt_no_recorded = vt_is_real_transcript( $vt_lecture, 240.0 );
+
+if ( 'eduai_transcript_truncated' === $vt_no_recorded['code'] ) {
+	$control_ok = false;
+	vt_bad(
+		'control: truncation cannot be judged without the recorded duration',
+		'it claimed truncation from the heard duration alone - that measure cannot see truncation, because both halves of it shrink together'
 	);
 }
 
