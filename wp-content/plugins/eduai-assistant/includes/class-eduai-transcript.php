@@ -142,10 +142,23 @@ class EduAI_Transcript {
 			return;
 		}
 
-		// Already queued: wp_schedule_single_event dedupes identical args, but
-		// only while the event is pending, so the state flag covers the window
-		// where cron has picked it up and not yet finished.
-		if ( ! $force && 'queued' === self::state( $attachment_id ) ) {
+		/*
+		 * Already queued — but only if it actually still is.
+		 *
+		 * The flag covers the window where cron has picked the job up and not
+		 * yet finished, which wp_schedule_single_event's own dedupe cannot see.
+		 * On its own though it is a latch with no release: if the event is ever
+		 * lost — cron disabled, a crash mid-run, a probe that scheduled and
+		 * exited — the attachment reads `queued` for ever and NOTHING will
+		 * schedule it again without $force. Found exactly that way: an
+		 * attachment stuck from an earlier run silently refused every later
+		 * attempt, and the refusal looked identical to correct de-duplication.
+		 *
+		 * So the flag defers to the queue. No pending event means the claim is
+		 * stale, whatever the meta says.
+		 */
+		if ( ! $force && 'queued' === self::state( $attachment_id )
+			&& wp_next_scheduled( self::HOOK, array( $attachment_id, $post_id ) ) ) {
 			return;
 		}
 
@@ -346,6 +359,42 @@ class EduAI_Transcript {
 		if ( ! self::is_local_url( $url ) ) {
 			return 0;
 		}
+		/*
+		 * A GATED attachment's URL is not a file URL.
+		 *
+		 * SL_Private hands back `?sl_stream=<material>&sl_att=<attachment>
+		 * &_wpnonce=…` — a handler route, not media. attachment_url_to_postid()
+		 * returns 0 for it and the basename fallback has nothing to match,
+		 * because the path is `/`. So a lecturer who copies the URL from a
+		 * gated recording lands on the remote branch, and yt-dlp is handed a
+		 * webpage.
+		 *
+		 * Worse, it would fail even without the gate: `localhost:8080` is the
+		 * HOST's port, and from inside the container that is a connection
+		 * refused. Making an HTTP round trip to fetch a file this same process
+		 * can open from disk is the bug underneath both symptoms — so the id
+		 * is read straight out of the query string and the round trip never
+		 * happens.
+		 *
+		 * The nonce is deliberately not checked: it is per-user and this runs
+		 * on cron, so validating it would refuse every legitimate case. It is
+		 * not a security shortcut either — nothing here is served to anyone,
+		 * the id is verified to be an attachment, and access is decided by
+		 * may_read() when the indexed text is retrieved.
+		 */
+		$query = (string) wp_parse_url( $url, PHP_URL_QUERY );
+
+		if ( '' !== $query ) {
+			$args = array();
+			wp_parse_str( $query, $args );
+
+			$named = isset( $args['sl_att'] ) ? (int) $args['sl_att'] : 0;
+
+			if ( $named && 'attachment' === get_post_type( $named ) ) {
+				return $named;
+			}
+		}
+
 
 		global $wpdb;
 
