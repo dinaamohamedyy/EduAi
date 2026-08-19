@@ -44,22 +44,55 @@ function vt_skip( $rule, $why ) {
 }
 
 /**
- * Is this string a real transcript, or the noise a silent clip produces?
+ * Ask the SHIPPED gate whether this is a real transcript.
  *
- * Whisper on silence emits " .", " you", "Thanks for watching." and similar -
- * short, punctuation-heavy, low-vocabulary. Judged on DISTINCT WORDS rather than
- * length, because a padded or repeated phrase passes a length check.
+ * This used to be `vt_is_real_transcript()` — a private reimplementation of
+ * the judgement, `chars >= 200 && words >= 40 && distinct >= 25`. It never
+ * called EduAI_Transcript_Guard, and it disagreed with what ships on 4 of 11
+ * cases in both directions. One of those disagreements is fatal to the point
+ * of this file:
+ *
+ *   lecture truncated, 4 minutes of 50   shipped: refuse   private copy: ACCEPT
+ *
+ * The acceptance test greenlit the exact production failure it exists to
+ * catch. Worse, its control block proved the gate rejects silence — about the
+ * private copy. EduAI_Transcript_Guard could have been deleted from the plugin
+ * outright and every control here would still have passed.
+ *
+ * A test that reimplements the logic it tests always passes, and the cheap
+ * tell is that the probe never names the thing under test. This one did not
+ * contain `EduAI_Transcript_Guard` anywhere.
+ *
+ * @param string     $t       Candidate transcript.
+ * @param float|null $seconds Media duration, so the rate path is exercised
+ *                            rather than skipped.
  */
-function vt_is_real_transcript( $t ) {
+function vt_is_real_transcript( $t, $seconds = null ) {
 	$t     = trim( (string) $t );
 	$words = preg_split( '/\W+/u', strtolower( $t ), -1, PREG_SPLIT_NO_EMPTY );
 	$uniq  = array_unique( $words );
-	return array(
+
+	$stat = array(
 		'chars'    => strlen( $t ),
 		'words'    => count( $words ),
 		'distinct' => count( $uniq ),
-		'real'     => strlen( $t ) >= 200 && count( $words ) >= 40 && count( $uniq ) >= 25,
 	);
+
+	if ( ! class_exists( 'EduAI_Transcript_Guard' ) ) {
+		// No silent fallback to a private threshold: that is how this file
+		// came to be testing itself. If the gate is absent, say so.
+		$stat['real']   = false;
+		$stat['reason'] = 'EduAI_Transcript_Guard is not loaded - there is no gate to test';
+
+		return $stat;
+	}
+
+	$verdict = EduAI_Transcript_Guard::usable( $t, $seconds );
+
+	$stat['real']   = ! is_wp_error( $verdict );
+	$stat['reason'] = is_wp_error( $verdict ) ? $verdict->get_error_message() : '';
+
+	return $stat;
 }
 
 /* ---- control: the transcript detector must reject known-bad input --------- */
@@ -73,7 +106,9 @@ $known_bad = array(
 
 $control_ok = true;
 foreach ( $known_bad as $label => $sample ) {
-	$r = vt_is_real_transcript( $sample );
+	// 6.0s, so the duration-keyed path is exercised rather than skipped —
+	// a control that never reaches the rate check proves only half the gate.
+	$r = vt_is_real_transcript( $sample, 6.0 );
 	if ( $r['real'] ) {
 		$control_ok = false;
 		vt_bad( "control: transcript gate rejects $label", 'it ACCEPTED it - the gate cannot protect anything' );
@@ -91,8 +126,32 @@ if ( ! $good['real'] ) {
 	vt_bad( 'control: transcript gate ACCEPTS a genuine transcript', 'it rejected real lecture text - the gate is too strict to be usable' );
 }
 
+/*
+ * The row that carries the whole ruling: the SAME text, judged twice.
+ *
+ * Accepted as a short clip, refused as four minutes of a fifty-minute
+ * lecture. Without this the table only shows that a threshold was lowered —
+ * this is what shows the gate still catches a truncated recording, which is
+ * the failure this feature will actually have in production.
+ */
+$truncated = vt_is_real_transcript(
+	'Today we look at least squares regression. Given a design matrix X and a response vector y, '
+	. 'the residual is defined as r equals y minus X w. Setting the gradient of the squared error '
+	. 'to zero yields the normal equations, X transpose X w equals X transpose y. We then discuss '
+	. 'why the Gram matrix must be invertible and what happens when features are collinear.',
+	3000.0
+);
+
+if ( $truncated['real'] ) {
+	$control_ok = false;
+	vt_bad(
+		'control: the gate refuses a lecture truncated at minute four of fifty',
+		'it ACCEPTED it - the acceptance test would greenlight the exact production failure it exists to catch'
+	);
+}
+
 if ( $control_ok ) {
-	vt_ok( 'control: the transcript gate rejects silence and accepts real speech' );
+	vt_ok( 'control: the transcript gate rejects silence, accepts real speech, and catches truncation' );
 } else {
 	printf( "\nthe gate itself is wrong; every result below would be meaningless. stopping.\n" );
 	printf( "\n%d passed, %d failed\n", $GLOBALS['vt_pass'], $GLOBALS['vt_fail'] );
@@ -120,22 +179,76 @@ printf( "\nlesson #%d  %s  (%s, %s)\n", $lesson_id, $lesson->post_title, $lesson
 /* ---- is there a transcript at all, and is it real? ------------------------ */
 
 $transcript = '';
-foreach ( array( '_eduai_transcript', '_scholaris_transcript', 'eduai_transcript', '_transcript' ) as $key ) {
-	$v = get_post_meta( $lesson_id, $key, true );
-	if ( is_string( $v ) && '' !== trim( $v ) ) {
-		$transcript = $v;
-		printf( "transcript meta key: %s\n", $key );
-		break;
+/*
+ * THE TRANSCRIPT LIVES ON THE ATTACHMENT, NOT THE LESSON.
+ *
+ * EduAI_Transcript::fetch() reads `_eduai_transcript` from the ATTACHMENT id,
+ * and the job is scheduled by a change to `_scholaris_video_id` on the post. My
+ * first version of this file read the meta off the lesson, which would have
+ * found nothing however well the feature worked - a harness that cannot see the
+ * thing it certifies. Caught by reading the implementation rather than by
+ * running the test, because the failure message ("the feature has not landed")
+ * was indistinguishable from the truth at the time I wrote it.
+ */
+$attachment_id = (int) get_post_meta( $lesson_id, '_scholaris_video_id', true );
+
+if ( ! $attachment_id ) {
+	foreach ( get_posts( array( 'post_type' => 'attachment', 'post_parent' => $lesson_id, 'posts_per_page' => 5 ) ) as $a ) {
+		if ( 0 === strpos( (string) $a->post_mime_type, 'video/' ) || 0 === strpos( (string) $a->post_mime_type, 'audio/' ) ) {
+			$attachment_id = (int) $a->ID;
+			break;
+		}
 	}
 }
 
-if ( '' === $transcript ) {
-	vt_bad( 'the lesson has a transcript stored', 'no transcript found under any known meta key - the feature has not landed, or it did not run for this lesson' );
+$state = '';
+
+if ( $attachment_id ) {
+	printf( "media attachment: #%d (%s)\n", $attachment_id, get_post_mime_type( $attachment_id ) );
+	$transcript = (string) get_post_meta( $attachment_id, '_eduai_transcript', true );
+	$state      = (string) get_post_meta( $attachment_id, '_eduai_transcript_state', true );
+	if ( '' !== $state ) {
+		printf( "transcript state: %s\n", $state );
+	}
+} else {
+	printf( "media attachment: none found on this post\n" );
+}
+
+/* Fall back to the lesson itself, in case a future version stores it there. */
+if ( '' === trim( $transcript ) ) {
+	$v = get_post_meta( $lesson_id, '_eduai_transcript', true );
+	if ( is_string( $v ) && '' !== trim( $v ) ) {
+		$transcript = $v;
+		printf( "transcript found on the LESSON rather than the attachment\n" );
+	}
+}
+
+if ( '' === trim( $transcript ) ) {
+	vt_bad(
+		'the lesson has a transcript stored',
+		$state
+			? sprintf( 'no transcript; transcriber state is "%s" - read that before assuming the feature is broken', $state )
+			: 'no transcript on the attachment or the lesson, and no transcriber state recorded'
+	);
 	printf( "\n%d passed, %d failed, %d skipped\n", $GLOBALS['vt_pass'], $GLOBALS['vt_fail'], $GLOBALS['vt_skip'] );
 	exit( 1 );
 }
 
-$stat = vt_is_real_transcript( $transcript );
+/*
+ * The live check runs on the MEDIA duration, not on what Whisper says it
+ * heard. A transcript truncated at minute four of fifty reports four
+ * minutes, so a rate computed from the model's own number stays healthy and
+ * the truncation is invisible — numerator and denominator shrink together.
+ * The file's duration is the only one that can disagree with the text.
+ */
+$vt_actual = class_exists( 'EduAI_Transcript' ) && $attachment_id
+	? EduAI_Transcript::file_duration( (int) $attachment_id )
+	: null;
+
+$stat = vt_is_real_transcript( $transcript, null === $vt_actual ? null : (float) $vt_actual );
+
+printf( "media duration: %s
+", null === $vt_actual ? 'unknown - completeness cannot be judged, and no claim is made' : $vt_actual . 's' );
 printf( "transcript: %d chars, %d words, %d distinct\n", $stat['chars'], $stat['words'], $stat['distinct'] );
 printf( "  opening: %s\n", substr( preg_replace( '/\s+/', ' ', $transcript ), 0, 140 ) );
 

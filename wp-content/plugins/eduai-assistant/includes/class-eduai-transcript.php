@@ -35,6 +35,7 @@ class EduAI_Transcript {
 	const META_HEARD    = '_eduai_transcript_heard';
 	const META_ACTUAL   = '_eduai_transcript_actual';
 	const META_LANGUAGE = '_eduai_transcript_language';
+	const META_SEGMENTS = '_eduai_transcript_segments';
 
 	/**
 	 * Free-tier ceiling, in bytes.
@@ -207,6 +208,10 @@ class EduAI_Transcript {
 		update_post_meta( $attachment_id, self::META_HEARD, $heard );
 		update_post_meta( $attachment_id, self::META_ACTUAL, $actual );
 
+		if ( ! empty( $meta['segments'] ) ) {
+			update_post_meta( $attachment_id, self::META_SEGMENTS, wp_json_encode( $meta['segments'] ) );
+		}
+
 		if ( '' !== ( $meta['language'] ?? '' ) ) {
 			update_post_meta( $attachment_id, self::META_LANGUAGE, (string) $meta['language'] );
 		}
@@ -270,7 +275,7 @@ class EduAI_Transcript {
 	 * @return string|WP_Error
 	 */
 	public static function transcribe( int $attachment_id, int $post_id = 0, array &$meta = array() ) {
-		$meta = array( 'duration' => null, 'language' => '' );
+		$meta = array( 'duration' => null, 'language' => '', 'segments' => array() );
 
 		$key = class_exists( 'EduAI_Settings' ) ? EduAI_Settings::api_key( 'groq' ) : '';
 
@@ -333,6 +338,34 @@ class EduAI_Transcript {
 
 		$meta['duration'] = isset( $decoded['duration'] ) ? (float) $decoded['duration'] : null;
 		$meta['language'] = isset( $decoded['language'] ) ? (string) $decoded['language'] : '';
+
+		/*
+		 * Segment timings, kept because a RATE cannot see a HOLE.
+		 *
+		 * Twenty-five minutes of speech spread across a fifty-minute recording
+		 * reads about sixty words a minute and passes every check we have — the
+		 * words are all there, they are just not everywhere. The gaps between
+		 * consecutive segments ARE the missing stretches, which makes this the
+		 * contiguity check for audio, the analogue of chunk indices running
+		 * 0..n-1.
+		 *
+		 * Stored now rather than when someone builds that check: it arrives free
+		 * in this response and would otherwise cost a re-transcription of every
+		 * lecture on the site to recover. Only start and end are kept — the
+		 * per-segment text is already in $text and would double the row.
+		 */
+		if ( ! empty( $decoded['segments'] ) && is_array( $decoded['segments'] ) ) {
+			foreach ( $decoded['segments'] as $segment ) {
+				if ( ! isset( $segment['start'], $segment['end'] ) ) {
+					continue;
+				}
+
+				$meta['segments'][] = array(
+					'start' => round( (float) $segment['start'], 2 ),
+					'end'   => round( (float) $segment['end'], 2 ),
+				);
+			}
+		}
 
 		$text = isset( $decoded['text'] ) ? trim( (string) $decoded['text'] ) : '';
 
