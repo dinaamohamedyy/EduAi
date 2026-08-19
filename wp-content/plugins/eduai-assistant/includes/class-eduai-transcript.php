@@ -8,9 +8,18 @@
  * one of them at once. This class only produces the text.
  *
  * GROQ `whisper-large-v3-turbo`, on the key the chat already uses. No new
- * signup, no new secret, no new container, and no audio-extraction step —
- * Groq accepts an mp4 directly, which is what makes this shippable without
- * ffmpeg (there is none in the container, and none is being added today).
+ * signup and no new secret.
+ *
+ * AUDIO IS EXTRACTED FIRST where ffmpeg is available. This said the
+ * opposite for most of a day — that Groq takes an mp4 directly, so no
+ * extraction was needed — and it was true and useless: the owner's
+ * five-minute lecture is 26.7 MB of video against a 25 MB ceiling, and
+ * 1.3 MB as mono 16 kHz audio. Sending the video spends the whole size
+ * budget on the track the model throws away.
+ *
+ * Without ffmpeg the original file is sent and the size check still
+ * refuses what genuinely will not fit, so the feature degrades rather
+ * than breaking.
  *
  * TRANSCRIBED ONCE, NEVER ON A PAGE REQUEST. `fetch()` returns the cached
  * transcript or nothing; `schedule()` puts the actual call on cron. A lecture
@@ -535,9 +544,9 @@ class EduAI_Transcript {
 			);
 		}
 
-		$dir = get_temp_dir() . 'eduai-' . wp_generate_password( 12, false );
+		$dir = self::scratch_dir( 'eduai-dl-' );
 
-		if ( ! wp_mkdir_p( $dir ) ) {
+		if ( '' === $dir ) {
 			return new WP_Error( 'eduai_transcript_tmp', __( 'A temporary directory for the audio could not be created.', 'eduai' ) );
 		}
 
@@ -606,6 +615,85 @@ class EduAI_Transcript {
 	}
 
 	/**
+	 * Strip a media file down to the audio Whisper actually needs.
+	 *
+	 * THE VIDEO TRACK IS THE PART WE THROW AWAY, and it was the part being
+	 * measured. The owner uploaded a five-minute lecture and the pipeline
+	 * refused it: 26.7 MB against a 25 MB ceiling. The same file as mono
+	 * 16 kHz audio is 1.3 MB — twenty times smaller — and transcribes
+	 * perfectly. Refusing a five-minute recording because its *picture* is
+	 * large is a true measurement of the wrong thing.
+	 *
+	 * 16 kHz mono because that is what Whisper resamples to anyway: sending
+	 * anything richer spends the size budget on detail the model discards.
+	 *
+	 * Returns '' when there is nothing to do — no ffmpeg, or the extraction
+	 * failed — and the caller keeps the original file. Falling back rather
+	 * than failing matters because the size check after this is still the
+	 * honest refusal for a genuinely enormous recording; this step only
+	 * removes a reason to refuse that was never about the audio.
+	 *
+	 * @param string $path Absolute path to the source media.
+	 * @return string Absolute path to extracted audio, or ''.
+	 */
+	private static function extract_audio( string $path ): string {
+		$ffmpeg = self::binary( 'ffmpeg' );
+
+		if ( '' === $ffmpeg || ! file_exists( $path ) ) {
+			return '';
+		}
+
+		$dir = self::scratch_dir( 'eduai-audio-' );
+
+		if ( '' === $dir ) {
+			return '';
+		}
+
+		$out = $dir . '/audio.mp3';
+
+		$command = sprintf(
+			'%s -loglevel error -y -i %s -vn -ac 1 -ar 16000 %s 2>&1',
+			escapeshellcmd( $ffmpeg ),
+			escapeshellarg( $path ),
+			escapeshellarg( $out )
+		);
+
+		shell_exec( $command );
+
+		if ( ! file_exists( $out ) || filesize( $out ) < 1 ) {
+			self::rmdir_r( $dir );
+
+			return '';
+		}
+
+		return $out;
+	}
+
+	/**
+	 * A scratch directory inside the uploads tree.
+	 *
+	 * Not get_temp_dir(), which is /tmp — outside the document root. WordPress
+	 * logged "Path is outside resolved document root" for every extraction,
+	 * and on a host with open_basedir set that is not a notice, it is a
+	 * refusal. Uploads is writable by definition on any install that can
+	 * accept the video in the first place.
+	 *
+	 * @param string $prefix Directory name prefix.
+	 * @return string Absolute path, or '' when it could not be created.
+	 */
+	private static function scratch_dir( string $prefix ): string {
+		$uploads = wp_upload_dir();
+
+		if ( ! empty( $uploads['error'] ) || empty( $uploads['basedir'] ) ) {
+			return '';
+		}
+
+		$dir = trailingslashit( $uploads['basedir'] ) . $prefix . wp_generate_password( 12, false );
+
+		return wp_mkdir_p( $dir ) ? $dir : '';
+	}
+
+	/**
 	 * Remove a temporary directory and its contents.
 	 *
 	 * @param string $dir Directory.
@@ -647,9 +735,26 @@ class EduAI_Transcript {
 			return new WP_Error( 'eduai_transcript_missing', __( 'The video file is missing from the media library.', 'eduai' ) );
 		}
 
-		$size = (int) filesize( $path );
+		/*
+		 * Audio first, THEN the size check.
+		 *
+		 * The URL path has always extracted audio — yt-dlp is invoked with
+		 * --extract-audio — and this path never learned to, so an uploaded
+		 * lecture was weighed as video and refused. Same split-brain shape as
+		 * two assemblers: one route taught something the other was not.
+		 *
+		 * The check stays after it, because a two-hour recording still exceeds
+		 * the cap as audio and that refusal is honest.
+		 */
+		$audio = self::extract_audio( $path );
+		$upload = '' !== $audio ? $audio : $path;
+		$size   = (int) filesize( $upload );
 
 		if ( $size > self::MAX_BYTES ) {
+			if ( '' !== $audio ) {
+				self::rmdir_r( dirname( $audio ) );
+			}
+
 			return new WP_Error(
 				'eduai_transcript_big',
 				sprintf(
@@ -661,7 +766,14 @@ class EduAI_Transcript {
 			);
 		}
 
-		return self::transcribe_path( $path, self::prompt_for( $attachment_id, $post_id ), $meta );
+		$text = self::transcribe_path( $upload, self::prompt_for( $attachment_id, $post_id ), $meta );
+
+		// The extracted audio is a means, not an artefact.
+		if ( '' !== $audio ) {
+			self::rmdir_r( dirname( $audio ) );
+		}
+
+		return $text;
 	}
 
 	/**
