@@ -161,7 +161,21 @@ class EduAI_Knowledge {
 	 *
 	 * @param int $post_id Post.
 	 */
-	public static function source_text( int $post_id ): string {
+	/**
+	 * Everything readable about a post, each piece with the attachment it
+	 * came from.
+	 *
+	 * The attachment travels WITH THE PART rather than with the post, because
+	 * a lesson can carry both a deck and a recording. Tagging every chunk
+	 * with the post's document id would make a passage from the transcript
+	 * cite the PDF — a citation that is confident, well-formed and about the
+	 * wrong source, which is the failure this project keeps finding in new
+	 * clothes.
+	 *
+	 * @param int $post_id Post.
+	 * @return array<int,array{text:string,attachment_id:int}>
+	 */
+	public static function source_parts( int $post_id ): array {
 		$post = get_post( $post_id );
 
 		if ( ! $post ) {
@@ -172,7 +186,7 @@ class EduAI_Knowledge {
 
 		$body = wp_strip_all_tags( strip_shortcodes( (string) $post->post_content ) );
 		if ( '' !== trim( $body ) ) {
-			$parts[] = $body;
+			$parts[] = array( 'text' => $body, 'attachment_id' => 0 );
 		}
 
 		// Attached study document, if the library plugin recorded one.
@@ -182,7 +196,7 @@ class EduAI_Knowledge {
 			if ( $path ) {
 				$extracted = EduAI_PDF::extract( $path );
 				if ( strlen( $extracted ) > 40 ) {
-					$parts[] = $extracted;
+					$parts[] = array( 'text' => $extracted, 'attachment_id' => $file_id );
 				}
 			}
 		}
@@ -219,12 +233,25 @@ class EduAI_Knowledge {
 			$transcript = EduAI_Transcript::fetch( $video_id );
 
 			if ( '' !== $transcript ) {
-				$parts[] = $transcript;
+				$parts[] = array( 'text' => $transcript, 'attachment_id' => $video_id );
 			}
 		}
-		return trim( implode( "
+		return $parts;
+	}
 
-", $parts ) );
+	/**
+	 * The same sources as one string, for callers that only want the text.
+	 *
+	 * @param int $post_id Post.
+	 */
+	public static function source_text( int $post_id ): string {
+		$texts = array();
+
+		foreach ( self::source_parts( $post_id ) as $part ) {
+			$texts[] = $part['text'];
+		}
+
+		return trim( implode( "\n\n", $texts ) );
 	}
 
 	/**
@@ -280,7 +307,27 @@ class EduAI_Knowledge {
 			return 0;
 		}
 
-		$chunks = EduAI_PDF::chunk( $text );
+		/*
+		 * Chunked PER PART, so the attachment on each row is the source that
+		 * row's words actually came from.
+		 *
+		 * Chunking the concatenated text and stamping every row with the
+		 * post's document id meant a passage from the recording cited the
+		 * deck — a citation that is confident, well formed and about the
+		 * wrong source. A lesson can carry both.
+		 *
+		 * chunk_index stays a single 0..n-1 sequence across the whole post,
+		 * because that contiguity is what reveals rows lost to a rejected
+		 * insert; per-part numbering would make a gap indistinguishable from
+		 * a part boundary.
+		 */
+		$chunks = array();
+
+		foreach ( self::source_parts( $post_id ) as $part ) {
+			foreach ( EduAI_PDF::chunk( $part['text'] ) as $piece ) {
+				$chunks[] = array( 'text' => $piece, 'attachment_id' => (int) $part['attachment_id'] );
+			}
+		}
 		if ( ! $chunks ) {
 			return 0;
 		}
@@ -294,7 +341,9 @@ class EduAI_Knowledge {
 		$written = 0;
 		$lost    = 0;
 
-		foreach ( $chunks as $i => $chunk ) {
+		foreach ( $chunks as $i => $row ) {
+			$chunk   = $row['text'];
+			$file_id = $row['attachment_id'];
 			/*
 			 * PDF extraction produces byte sequences that are not valid UTF-8 —
 			 * ligatures, embedded font subsets, maths glyphs that did not map.
