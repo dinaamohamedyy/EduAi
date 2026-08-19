@@ -268,6 +268,184 @@ class EduAI_Transcript {
 	}
 
 	/**
+	 * The video URL LearnDash keeps on a lesson.
+	 *
+	 * The owner's content model, and the one nothing here could read: his
+	 * lessons have an EMPTY post_content and a YouTube URL in LearnDash's own
+	 * settings array. Measuring the body reported both his live lessons as
+	 * empty shells; they are full, and we were looking in the wrong place.
+	 *
+	 * Through `learndash_get_setting()` where it exists, because the meta is a
+	 * serialised array whose key names are LearnDash's to change, and falling
+	 * back to reading it directly only when the helper is absent.
+	 *
+	 * @param int $post_id Lesson.
+	 */
+	public static function lesson_video_url( int $post_id ): string {
+		if ( function_exists( 'learndash_get_setting' ) ) {
+			$url = (string) learndash_get_setting( $post_id, 'lesson_video_url' );
+
+			if ( '' !== trim( $url ) ) {
+				return trim( $url );
+			}
+		}
+
+		$settings = get_post_meta( $post_id, '_sfwd-lessons', true );
+
+		if ( is_array( $settings ) && ! empty( $settings['sfwd-lessons_lesson_video_url'] ) ) {
+			return trim( (string) $settings['sfwd-lessons_lesson_video_url'] );
+		}
+
+		return '';
+	}
+
+	/**
+	 * Can this install pull audio from a video URL at all?
+	 *
+	 * A capability check rather than an assumption, because the answer is a
+	 * property of the CONTAINER and not of this code. Shelling out to a binary
+	 * that may not be there is a fatal on a lesson page; asking first turns it
+	 * into a refusal that names what is missing.
+	 */
+	public static function can_fetch_remote(): bool {
+		return '' !== self::binary( 'yt-dlp' );
+	}
+
+	/**
+	 * Absolute path to a binary, or '' when it is not installed.
+	 *
+	 * @param string $name Binary name.
+	 */
+	private static function binary( string $name ): string {
+		if ( ! function_exists( 'shell_exec' ) ) {
+			return '';
+		}
+
+		$found = shell_exec( 'command -v ' . escapeshellarg( $name ) . ' 2>/dev/null' );
+
+		return is_string( $found ) ? trim( $found ) : '';
+	}
+
+	/**
+	 * Pull the audio from a video URL and transcribe it.
+	 *
+	 * Audio only, never the video: a fifty-minute lecture is hundreds of
+	 * megabytes as mp4 and a few as m4a, and Groq's ceiling is 25 MB. The
+	 * extraction is also the reason this can never run on a page request —
+	 * it is a download plus a transcode plus a network call.
+	 *
+	 * @param int   $post_id Lesson.
+	 * @param array $meta    Filled with duration, language and segments.
+	 * @return string|WP_Error
+	 */
+	public static function transcribe_url( int $post_id, array &$meta = array() ) {
+		$meta = array( 'duration' => null, 'language' => '', 'segments' => array() );
+		$url  = self::lesson_video_url( $post_id );
+
+		if ( '' === $url ) {
+			return new WP_Error( 'eduai_transcript_no_url', __( 'This lesson has no video URL on it.', 'eduai' ) );
+		}
+
+		$binary = self::binary( 'yt-dlp' );
+
+		if ( '' === $binary ) {
+			return new WP_Error(
+				'eduai_transcript_no_tool',
+				__( 'Video URLs cannot be processed on this server: yt-dlp is not installed. An uploaded file still works.', 'eduai' )
+			);
+		}
+
+		$dir = get_temp_dir() . 'eduai-' . wp_generate_password( 12, false );
+
+		if ( ! wp_mkdir_p( $dir ) ) {
+			return new WP_Error( 'eduai_transcript_tmp', __( 'A temporary directory for the audio could not be created.', 'eduai' ) );
+		}
+
+		/*
+		 * `--max-filesize` is a guard on the DOWNLOAD, not a substitute for
+		 * the check after it: yt-dlp applies it to the media it fetches, and
+		 * the extracted audio is a different file. Both are needed — this one
+		 * stops a two-hour recording being pulled at all, the other stops an
+		 * oversize payload reaching Groq.
+		 */
+		$command = sprintf(
+			'%s --no-warnings --no-playlist --extract-audio --audio-format m4a --audio-quality 5 ' .
+			'--max-filesize 400M --output %s %s 2>&1',
+			escapeshellcmd( $binary ),
+			escapeshellarg( $dir . '/audio.%(ext)s' ),
+			escapeshellarg( $url )
+		);
+
+		$output = shell_exec( $command );
+		$files  = glob( $dir . '/audio.*' );
+		$audio  = $files ? $files[0] : '';
+
+		if ( ! $audio || ! file_exists( $audio ) ) {
+			self::rmdir_r( $dir );
+
+			/*
+			 * Private, region-locked, removed, or simply refused — all of them
+			 * arrive here, and the message names the video rather than
+			 * reporting a generic failure, because the owner can only act on
+			 * the first kind of message.
+			 */
+			return new WP_Error(
+				'eduai_transcript_fetch',
+				sprintf(
+					/* translators: 1: video URL 2: tool output */
+					__( 'The audio for %1$s could not be downloaded from this server. YouTube refuses media downloads from datacentre addresses even when the video is public, and it may also be private, region-locked or removed. Upload the recording as a file instead. The tool said: %2$s', 'eduai' ),
+					$url,
+					trim( mb_substr( (string) $output, -300 ) )
+				)
+			);
+		}
+
+		$size = (int) filesize( $audio );
+
+		if ( $size > self::MAX_BYTES ) {
+			self::rmdir_r( $dir );
+
+			return new WP_Error(
+				'eduai_transcript_big',
+				sprintf(
+					/* translators: 1: audio size 2: limit */
+					__( 'The audio for this lesson is %1$s, over the %2$s transcription limit. A shorter recording, or one split into parts, will work.', 'eduai' ),
+					size_format( $size ),
+					size_format( self::MAX_BYTES )
+				)
+			);
+		}
+
+		$text = self::transcribe_path( $audio, self::prompt_for( 0, $post_id ), $meta );
+
+		// The audio is a means, not an artefact. Keeping it would put a copy
+		// of somebody else's video in the uploads directory.
+		self::rmdir_r( $dir );
+
+		return $text;
+	}
+
+	/**
+	 * Remove a temporary directory and its contents.
+	 *
+	 * @param string $dir Directory.
+	 */
+	private static function rmdir_r( string $dir ): void {
+		if ( ! is_dir( $dir ) ) {
+			return;
+		}
+
+		foreach ( (array) glob( $dir . '/*' ) as $file ) {
+			if ( is_file( $file ) ) {
+				wp_delete_file( $file );
+			}
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.directory_rmdir
+		@rmdir( $dir );
+	}
+
+	/**
 	 * Post the file to Groq and return the text.
 	 *
 	 * @param int $attachment_id Attachment.
@@ -303,7 +481,31 @@ class EduAI_Transcript {
 			);
 		}
 
-		$prompt   = self::prompt_for( $attachment_id, $post_id );
+		return self::transcribe_path( $path, self::prompt_for( $attachment_id, $post_id ), $meta );
+	}
+
+	/**
+	 * Transcribe a file already on disk, whatever put it there.
+	 *
+	 * Split out so the uploaded-attachment path and the LearnDash video-URL
+	 * path share ONE response handler. A second copy would be a second place
+	 * for the 200-carrying-an-error-body case to be forgotten, and that is the
+	 * case that indexes a failure as a lecture.
+	 *
+	 *  string $path   Absolute path to audio or video.
+	 *  string $prompt Decoding hint.
+	 *  array  $meta   Filled with duration, language and segments.
+	 *  string|WP_Error
+	 */
+	private static function transcribe_path( string $path, string $prompt, array &$meta ) {
+		$meta = array( 'duration' => null, 'language' => '', 'segments' => array() );
+
+		$key = class_exists( 'EduAI_Settings' ) ? EduAI_Settings::api_key( 'groq' ) : '';
+
+		if ( '' === $key ) {
+			return new WP_Error( 'eduai_transcript_key', __( 'No Groq API key is configured, so video cannot be transcribed.', 'eduai' ) );
+		}
+
 		$response = self::post_file( $path, $key, $prompt );
 
 		if ( is_wp_error( $response ) ) {
