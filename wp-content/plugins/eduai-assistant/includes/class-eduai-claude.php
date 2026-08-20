@@ -56,10 +56,29 @@ class EduAI_Claude {
 				'constant' => 'EDUAI_GROQ_API_KEY',
 				'prefix'   => 'gsk_',
 				'console'  => 'https://console.groq.com/keys',
+				/*
+				 * BOTH LLAMA ENTRIES WERE 404 ON THE LIVE KEY. Groq retired the
+				 * whole Llama line; `GET /openai/v1/models` no longer lists
+				 * llama-3.3-70b-versatile or llama-3.1-8b-instant. Nothing in
+				 * this repo changed - the provider's catalogue did, and the
+				 * chat tab had been asking for a model that no longer exists.
+				 *
+				 * gpt-oss-20b for both lower tiers, measured rather than
+				 * assumed: it returns its thinking in a separate `reasoning`
+				 * field and its answer in `content`, so a student sees the
+				 * answer. qwen/qwen3.6-27b is the other survivor of that size
+				 * and it is NOT usable here - it emits a <think> block inside
+				 * `content`, so its internal monologue would be printed to the
+				 * student as the reply.
+				 *
+				 * A pinned model id is a dependency on someone else's
+				 * catalogue. This one deserves a health check rather than the
+				 * next silent outage.
+				 */
 				'models'   => array(
 					'strongest' => 'openai/gpt-oss-120b',
-					'balanced'  => 'llama-3.3-70b-versatile',
-					'fast'      => 'llama-3.1-8b-instant',
+					'balanced'  => 'openai/gpt-oss-20b',
+					'fast'      => 'openai/gpt-oss-20b',
 				),
 			),
 			'zai'       => array(
