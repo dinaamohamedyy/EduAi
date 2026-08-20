@@ -1102,32 +1102,37 @@ body.admin-bar .auth {
 .sc-stat {
   border-radius: 14px;
   padding: var(--space-s);
-  background: hsl(var(--tone) / 0.10);
-  border: 1px solid hsl(var(--tone) / 0.22);
+  background: hsl(var(--surface));
+  border: 1px solid hsl(var(--border));
   min-width: 0;
+  display: grid;
+  gap: var(--space-2xs);
+  align-content: start;
 }
-.sc-stat--lessons { --tone: 33 85% 48%; }
-.sc-stat--papers  { --tone: 348 74% 58%; }
-.sc-stat--quizzes { --tone: 152 52% 40%; }
-
-.sc-stat__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2xs); }
-.sc-stat__icon {
-  display: grid; place-items: center; width: 40px; height: 40px; flex: none;
-  border-radius: 50%; background: hsl(var(--tone)); color: hsl(0 0% 100%);
-}
-.sc-stat__ring { position: relative; display: grid; place-items: center; flex: none; }
-.sc-stat__track { stroke: hsl(var(--tone) / 0.20); }
-.sc-stat__arc { stroke: hsl(var(--tone)); }
-.sc-stat__pct {
-  position: absolute; font-size: 0.62rem; font-weight: 700;
-  color: hsl(var(--tone)); font-variant-numeric: tabular-nums;
+/*
+ * One surface, not three pastels. The tinted tiles gave each card its own hue
+ * for no reason the data supports — pink for a 12% average reads as an error
+ * state, and three candy fills is the shape that says "dashboard template"
+ * rather than "this product". Colour now appears in exactly one place, the
+ * meter, where it means how far through something you are.
+ */
+.sc-stat__label {
+  margin: 0; order: -1;
+  font-family: var(--font-mono); font-size: 0.66rem; font-weight: 600;
+  letter-spacing: 0.13em; text-transform: uppercase; color: hsl(var(--text-faint));
 }
 .sc-stat__value {
-  margin: var(--space-s) 0 0; font-size: var(--step-3); font-weight: 750; line-height: 1;
-  font-variant-numeric: tabular-nums;
+  margin: 0; font-size: var(--step-3); font-weight: 750; line-height: 1;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
 }
-.sc-stat__label { margin: var(--space-3xs) 0 0; font-weight: 600; }
-.sc-stat__sub { margin: var(--space-3xs) 0 0; font-size: var(--step--1); color: hsl(var(--tone)); }
+.sc-stat--empty .sc-stat__value { color: hsl(var(--text-faint)); font-weight: 600; }
+.sc-stat__meter { display: flex; align-items: center; gap: var(--space-2xs); }
+.sc-stat__meter .meter { flex: 1; min-width: 0; }
+.sc-stat__pct {
+  flex: none; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
+  color: hsl(var(--text-muted)); font-variant-numeric: tabular-nums;
+}
+.sc-stat__sub { margin: 0; font-size: var(--step--1); color: hsl(var(--text-muted)); }
 
 /* -- course table -------------------------------------------------------- */
 .sc-courses { width: 100%; border-collapse: collapse; font-size: var(--step--1); }
@@ -1340,30 +1345,37 @@ body.admin-bar .auth {
    section is opt-out under prefers-reduced-motion, where every element simply
    starts at its final state.
    -------------------------------------------------------------------------- */
-@keyframes sc-draw {
-  from { stroke-dashoffset: var(--circ); }
-  to   { stroke-dashoffset: var(--arc); }
+@keyframes sc-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
 }
 @keyframes sc-rise {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: none; }
 }
 
-.sc-stat__arc {
-  animation: sc-draw 1100ms var(--ease-out) both;
+/* The meter fills rather than an arc drawing — same intent, following the
+   shape that replaced the ring. End state is the PHP-rendered width, so a
+   meter that never animates is still correct rather than empty. */
+.sc-stat__meter .meter > span {
+  /* Width is static and correct with no animation running; the keyframes only
+     scale it in. Animating width TO var(--fill) measured 0 at rest — the bar
+     never arrived — so the value the student reads no longer depends on an
+     animation completing. */
+  width: var(--fill);
+  transform-origin: left center;
+  animation: sc-fill 900ms var(--ease-out) both;
 }
 .sc-stat {
   animation: sc-rise 520ms var(--ease-out) both;
 }
-/* Staggered so the three read left to right rather than arriving as one block.
-   The ring waits for its own tile to land before drawing. */
 .sc-stats > .sc-stat:nth-child(1) { animation-delay: 0ms; }
 .sc-stats > .sc-stat:nth-child(2) { animation-delay: 90ms; }
 .sc-stats > .sc-stat:nth-child(3) { animation-delay: 180ms; }
-.sc-stats > .sc-stat:nth-child(1) .sc-stat__arc { animation-delay: 200ms; }
-.sc-stats > .sc-stat:nth-child(2) .sc-stat__arc { animation-delay: 290ms; }
-.sc-stats > .sc-stat:nth-child(3) .sc-stat__arc { animation-delay: 380ms; }
+.sc-stats > .sc-stat:nth-child(1) .meter > span { animation-delay: 200ms; }
+.sc-stats > .sc-stat:nth-child(2) .meter > span { animation-delay: 290ms; }
+.sc-stats > .sc-stat:nth-child(3) .meter > span { animation-delay: 380ms; }
 
 @media (prefers-reduced-motion: reduce) {
-  .sc-stat, .sc-stat__arc { animation: none; }
+  .sc-stat, .sc-stat__meter .meter > span { animation: none; }
 }

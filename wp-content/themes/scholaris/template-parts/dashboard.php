@@ -33,44 +33,42 @@ $sc_user    = wp_get_current_user();
  * @param string $sub   Small line under the label.
  * @param int    $pct   0-100 for the ring.
  */
-function scholaris_stat_card( string $tone, string $icon, int $value, string $label, string $sub, int $pct ): void {
-	$circ = 2 * M_PI * 20; // r=20
-	$dash = $circ * max( 0, min( 100, $pct ) ) / 100;
+function scholaris_stat_card( string $kind, string $label, string $figure, string $sub, int $pct = -1 ): void {
+	/*
+	 * THREE CARDS, THREE DIFFERENT QUANTITIES — and the ring that used to sit
+	 * on all of them said they were the same one.
+	 *
+	 * Lessons is a ratio: 2 of 46, and 4% is progress through a course.
+	 * Practice papers is a MARK: 12% is the average score over five papers,
+	 * not 12% of anything completed. Quizzes is neither — nothing has been
+	 * attempted. Drawing one arc for all three invited the student to compare
+	 * them, and "I am doing better at papers (12%) than lessons (4%)" is a
+	 * sentence the data cannot support.
+	 *
+	 * So the shape now follows the quantity. Only a ratio gets a meter,
+	 * because only a ratio has a full. A mark is shown as the figure it is. An
+	 * empty state says so in words and shows an em dash rather than 00 above a
+	 * 0% ring, which was three ways of announcing that nothing had happened.
+	 *
+	 * The figure also leads with what matters: "2 / 46" rather than "02". The
+	 * zero-padding was decoration — it made a small number look like a code,
+	 * and it hid the total that gives it meaning.
+	 */
 	?>
-	<article class="sc-stat sc-stat--<?php echo esc_attr( $tone ); ?>">
-		<div class="sc-stat__top">
-			<span class="sc-stat__icon" aria-hidden="true">
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-					stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<?php echo $icon; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- literal path data from this file. ?>
-				</svg>
-			</span>
-			<span class="sc-stat__ring">
-				<svg width="52" height="52" viewBox="0 0 52 52" role="img"
-					aria-label="<?php echo esc_attr( sprintf( /* translators: %d: percent complete */ __( '%d%% complete', 'scholaris' ), $pct ) ); ?>">
-					<circle class="sc-stat__track" cx="26" cy="26" r="20" fill="none" stroke-width="6"/>
-					<?php
-					/*
-					 * The arc is one dash of the full circumference, positioned by
-					 * dashoffset rather than by a two-value dasharray, so the only
-					 * thing that changes between "empty" and "filled" is a single
-					 * length — which is what makes it tweenable. Both ends are
-					 * published as custom properties so the keyframes can read
-					 * them; the geometry still comes from PHP, so a ring with
-					 * animation disabled renders at exactly its real value.
-					 */
-					?>
-					<circle class="sc-stat__arc" cx="26" cy="26" r="20" fill="none" stroke-width="6"
-						stroke-linecap="round" transform="rotate(-90 26 26)"
-						style="--circ:<?php echo esc_attr( (string) round( $circ, 2 ) ); ?>;--arc:<?php echo esc_attr( (string) round( $circ - $dash, 2 ) ); ?>"
-						stroke-dasharray="<?php echo esc_attr( (string) round( $circ, 2 ) ); ?>"
-						stroke-dashoffset="<?php echo esc_attr( (string) round( $circ - $dash, 2 ) ); ?>"/>
-				</svg>
-				<span class="sc-stat__pct"><?php echo (int) $pct; ?>%</span>
-			</span>
-		</div>
-		<p class="sc-stat__value"><?php echo esc_html( str_pad( (string) $value, 2, '0', STR_PAD_LEFT ) ); ?></p>
+	<article class="sc-stat sc-stat--<?php echo esc_attr( $kind ); ?>">
 		<p class="sc-stat__label"><?php echo esc_html( $label ); ?></p>
+		<p class="sc-stat__value"><?php echo esc_html( $figure ); ?></p>
+
+		<?php if ( 'ratio' === $kind && $pct >= 0 ) : ?>
+			<div class="sc-stat__meter">
+				<span class="meter" data-tone="<?php echo esc_attr( $pct >= 67 ? 'pass' : ( $pct >= 34 ? 'mid' : '' ) ); ?>"
+					role="img" aria-label="<?php echo esc_attr( sprintf( /* translators: %d: percent complete */ __( '%d%% complete', 'scholaris' ), $pct ) ); ?>">
+					<span style="--fill:<?php echo esc_attr( (string) max( 0, min( 100, $pct ) ) ); ?>%"></span>
+				</span>
+				<span class="sc-stat__pct"><?php echo (int) $pct; ?>%</span>
+			</div>
+		<?php endif; ?>
+
 		<p class="sc-stat__sub"><?php echo esc_html( $sub ); ?></p>
 	</article>
 	<?php
@@ -114,51 +112,50 @@ function scholaris_stat_card( string $tone, string $icon, int $value, string $la
 			<div class="sc-stats">
 				<?php
 				if ( null !== $sc_lessons ) {
+					// A ratio: done of total. The only one of the three with a
+					// full, so the only one that gets a meter.
 					scholaris_stat_card(
-						'lessons',
-						'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
-						(int) $sc_lessons['done'],
+						'ratio',
 						__( 'Lessons', 'scholaris' ),
-						sprintf(
-							/* translators: %d: total lessons */
-							__( 'of %d in your courses', 'scholaris' ),
-							(int) $sc_lessons['total']
-						),
+						sprintf( '%d / %d', (int) $sc_lessons['done'], (int) $sc_lessons['total'] ),
+						__( 'completed in your courses', 'scholaris' ),
 						scholaris_pct( (int) $sc_lessons['done'], (int) $sc_lessons['total'] )
 					);
 				}
 
 				if ( null !== $sc_papers ) {
+					// A MARK, not progress. The average is the headline figure;
+					// how many were sat is the supporting line. Nothing here is
+					// a proportion of a whole, so nothing here gets a meter.
+					$sc_sat = sprintf(
+						/* translators: %d: how many papers were sat */
+						_n( 'from %d paper sat', 'from %d papers sat', (int) $sc_papers['done'], 'scholaris' ),
+						(int) $sc_papers['done']
+					);
+
 					scholaris_stat_card(
-						'papers',
-						'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/>',
-						(int) $sc_papers['done'],
+						null === $sc_papers['average'] ? 'empty' : 'score',
 						__( 'Practice papers', 'scholaris' ),
-						null === $sc_papers['average']
-							? __( 'not marked yet', 'scholaris' )
-							: sprintf(
-								/* translators: %d: average percentage */
-								__( '%d%% average', 'scholaris' ),
-								(int) $sc_papers['average']
-							),
-						null === $sc_papers['average'] ? 0 : (int) $sc_papers['average']
+						null === $sc_papers['average'] ? '—' : (int) $sc_papers['average'] . '%',
+						null === $sc_papers['average'] ? __( 'sat, but not marked yet', 'scholaris' ) : $sc_sat
 					);
 				}
 
 				if ( null !== $sc_quizzes ) {
+					// Nothing attempted is a state, not a zero. An em dash says
+					// "no value" where 00 above a 0% ring said it three times.
 					scholaris_stat_card(
-						'quizzes',
-						'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
-						(int) $sc_quizzes['done'],
+						$sc_quizzes['done'] > 0 ? 'score' : 'empty',
 						__( 'Quizzes', 'scholaris' ),
+						$sc_quizzes['done'] > 0 ? (int) round( $sc_quizzes['average'] ) . '%' : '—',
 						$sc_quizzes['done'] > 0
 							? sprintf(
-								/* translators: %d: how many were passed */
-								__( '%d passed', 'scholaris' ),
-								(int) $sc_quizzes['passed']
+								/* translators: 1: how many passed 2: how many taken */
+								__( '%1$d of %2$d passed', 'scholaris' ),
+								(int) $sc_quizzes['passed'],
+								(int) $sc_quizzes['done']
 							)
-							: __( 'none attempted', 'scholaris' ),
-						$sc_quizzes['done'] > 0 ? (int) round( $sc_quizzes['average'] ) : 0
+							: __( 'none attempted yet', 'scholaris' )
 					);
 				}
 				?>
