@@ -158,5 +158,32 @@ function scholaris_ask_url(): string {
  * old site with panels added rather than as the reference it was built from.
  */
 function scholaris_has_rail(): bool {
+	/*
+	 * A lesson page belongs to the LMS, not to us.
+	 *
+	 * LearnDash Focus Mode ships its own full-height shell with the course
+	 * outline, and two persistent shells on one screen is the likeliest cause
+	 * of the content column collapsing to about one character: our body grid
+	 * places .rail, .site-header, .site-main and .site-footer into named
+	 * columns, and any OTHER top-level child auto-places into the 260px one.
+	 * Focus Mode wraps the page in such a child, and its own sidebar then
+	 * takes most of those 260px, leaving the lesson a sliver.
+	 *
+	 * Standing down rather than tuning a width is the decision. Focus Mode
+	 * exists to strip distractions while studying; the navigation that matters
+	 * inside a lesson is the course outline it already renders; and removing
+	 * one of the two shells ends the class of conflict instead of balancing it.
+	 * The study tools are unaffected — they render inside the lesson CONTENT,
+	 * so they travel with whichever shell wins.
+	 *
+	 * Matched on post type rather than a LearnDash function: the plugin is not
+	 * in this repository, so a helper name here would be a guess. Both LMSs'
+	 * step types are listed because this site has been through one migration
+	 * already, and a page answering to neither name is how that one broke.
+	 */
+	if ( is_singular( array( 'sfwd-lessons', 'sfwd-topic', 'sfwd-quiz', 'lesson', 'topics' ) ) ) {
+		return false;
+	}
+
 	return ! is_front_page() || is_user_logged_in();
 }
