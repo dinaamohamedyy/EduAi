@@ -65,6 +65,12 @@ services:
         define( 'WP_DEBUG_LOG', true );
         define( 'WP_DEBUG_DISPLAY', false );
         define( 'DISALLOW_FILE_EDIT', true );
+        // WP-Cron fires by making an HTTP request to siteurl, which here is the
+        // HOST's mapped port and unreachable from inside this container. Left
+        // undefined, WordPress retries that doomed loopback on EVERY request:
+        // latency on every page load, and a queue nothing drains. The cron
+        // service in docker-compose.yml runs the queue instead.
+        define( 'DISABLE_WP_CRON', true );
       ZAI_API_KEY: ${ZAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
@@ -114,6 +120,73 @@ services:
       # process no upload ever goes through. It has already misled one survey.
       - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
 
+
+  # The thing that actually runs scheduled work.
+  #
+  # WP-Cron had never executed on this install — not once, for anything. It
+  # fires by having WordPress make an HTTP request to ITSELF, and siteurl here
+  # is http://localhost:8080, which is the HOST's mapped port. Inside the
+  # container Apache listens on 80, so that loopback resolves to nothing and
+  # every attempt failed with cURL error 7. Nothing said so: DISABLE_WP_CRON
+  # was undefined, so WordPress kept trying on every request, and a queue that
+  # nothing drained looked exactly like a queue with nothing in it. 27 events
+  # were due when this was written, the oldest overdue by 21 hours.
+  #
+  # The owner's experience of that: upload a lecture, paste the URL, and
+  # nothing happens, for ever. The lessons that worked worked because a human
+  # ran the job by hand — which is not a feature.
+  #
+  # A service rather than host cron, deliberately: it has to survive a rebuild
+  # and a from-zero setup.sh on someone else's machine, and a host crontab
+  # survives neither.
+  cron:
+    build:
+      context: .
+      dockerfile: docker/cli.Dockerfile
+    image: scholaris-cli:local
+    container_name: scholaris-cron
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      wordpress:
+        condition: service_started
+    user: "33:33"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${DB_NAME:-scholaris}
+      WORDPRESS_DB_USER: ${DB_USER:-scholaris}
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-scholaris}
+      # The transcription and indexing jobs are the point of this service, and
+      # they call a model. Without these the events run and fail as "no API key
+      # configured" — a missing env var wearing the costume of a broken feature.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+    volumes:
+      - wp_core:/var/www/html
+      - ./wp-content/themes/scholaris:/var/www/html/wp-content/themes/scholaris
+      - ./wp-content/plugins/eduai-assistant:/var/www/html/wp-content/plugins/eduai-assistant
+      - ./wp-content/plugins/scholaris-library:/var/www/html/wp-content/plugins/scholaris-library
+      - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
+    # 60s: a transcript appearing a minute after upload reads as working; an
+    # hour reads as broken, which is the standard this is held to.
+    #
+    # `core is-installed` first so a fresh stack, where the database exists
+    # before WordPress does, waits quietly instead of logging a failure a
+    # minute for the length of the bootstrap. Output is NOT silenced — the
+    # whole failure being fixed here was work disappearing without a trace, so
+    # `docker compose logs cron` shows what ran.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "cron runner: starting, 60s interval"
+        while :; do
+          if wp core is-installed 2>/dev/null; then
+            wp cron event run --due-now 2>&1 || echo "cron runner: pass failed, continuing"
+          fi
+          sleep 60
+        done
   # Catches all outgoing e-mail: web UI at http://localhost:8025.
   # Password resets and the "check your e-mail" registration fallback are
   # untestable without it — wp_mail() fails silently in a bare container.
