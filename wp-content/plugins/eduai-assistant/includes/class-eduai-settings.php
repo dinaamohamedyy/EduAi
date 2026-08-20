@@ -318,6 +318,57 @@ class EduAI_Settings {
 				<?php esc_html_e( 'The assistant answers from your own study material. The model key is supplied by the server, so once the library is indexed the chat widget is live on the front end with nothing for anyone to configure.', 'eduai' ); ?>
 			</p>
 
+			<?php
+			/*
+			 * FIRST, ABOVE EVERYTHING, because it means the assistant is down.
+			 *
+			 * Groq retired the Llama line and two tiers began returning 404 to
+			 * students. The nightly catalogue check now catches that, but it
+			 * runs once a day on a machine that holds a key — so the failure
+			 * that reached the owner reached him through a person, and nothing
+			 * on this screen said a word about it.
+			 *
+			 * EduAI_Claude records the refusal on the request that hit it and
+			 * clears it on the next success, so this is present exactly while
+			 * the assistant is actually broken and gone the moment it is not.
+			 */
+			$eduai_outage = EduAI_Claude::outage();
+
+			if ( $eduai_outage ) :
+				$eduai_since = human_time_diff( (int) ( $eduai_outage['at'] ?? time() ) );
+				?>
+				<div class="notice notice-error inline" style="margin:16px 0;padding:10px 12px">
+					<p style="margin:0 0 6px">
+						<strong><?php esc_html_e( 'The assistant is failing for everyone right now.', 'eduai' ); ?></strong>
+					</p>
+					<p style="margin:0 0 6px">
+						<?php
+						printf(
+							/* translators: 1: provider name 2: model id 3: HTTP status 4: human time difference */
+							esc_html__( '%1$s refused the model %2$s with HTTP %3$s, first seen %4$s ago. Students asking questions are getting an error.', 'eduai' ),
+							'<strong>' . esc_html( $eduai_outage['provider'] ?? '' ) . '</strong>',
+							'<code>' . esc_html( $eduai_outage['model'] ?? '' ) . '</code>',
+							'<code>' . esc_html( (string) ( $eduai_outage['code'] ?? '' ) ) . '</code>',
+							esc_html( $eduai_since )
+						);
+						?>
+					</p>
+					<?php if ( 404 === (int) ( $eduai_outage['code'] ?? 0 ) ) : ?>
+						<p style="margin:0 0 6px">
+							<?php esc_html_e( 'A 404 almost always means the provider retired that model. They do this without notice and nothing here changed. Run this to see which of the pinned models still exist:', 'eduai' ); ?>
+						</p>
+						<p style="margin:0 0 6px">
+							<code>wp eval-file scripts/model-catalogue.php</code>
+						</p>
+					<?php endif; ?>
+					<?php if ( ! empty( $eduai_outage['detail'] ) ) : ?>
+						<p style="margin:0;color:#646970">
+							<?php echo esc_html( $eduai_outage['detail'] ); ?>
+						</p>
+					<?php endif; ?>
+				</div>
+			<?php endif; ?>
+
 			<div class="notice notice-info inline" style="margin:16px 0;padding:10px 12px">
 				<p style="margin:0">
 					<strong><?php esc_html_e( 'Knowledge base:', 'eduai' ); ?></strong>

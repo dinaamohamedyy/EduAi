@@ -20,6 +20,13 @@ defined( 'ABSPATH' ) || exit;
  */
 class EduAI_Claude {
 
+	/**
+	 * Where the last provider refusal is remembered.
+	 *
+	 * Autoload off: read on one admin screen, never on a front-end request.
+	 */
+	private const OUTAGE_OPTION = 'eduai_provider_outage';
+
 	private const API_VER = '2023-06-01';
 
 	// Opus thinking through a long derivation, or summarising a whole lecture,
@@ -242,8 +249,14 @@ class EduAI_Claude {
 		$json = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		if ( 200 !== $code ) {
-			return new WP_Error( 'eduai_api_' . $code, self::friendly_error( $code, $json ), array( 'status' => $code >= 500 ? 502 : 400 ) );
+			self::note_outage( $code, $model, $json );
+
+			return new WP_Error( 'eduai_api_' . $code, self::friendly_error( $code, $json, $model ), array( 'status' => $code >= 500 ? 502 : 400 ) );
 		}
+
+		// A success is the only honest thing that can clear the record. Clearing
+		// on a page load, or on a timer, would hide a tier that is still dead.
+		self::clear_outage();
 
 		$result = 'openai' === $provider['format']
 			? self::parse_openai( $json, $model )
@@ -517,12 +530,80 @@ class EduAI_Claude {
 	}
 
 	/**
+	 * Remember that the provider refused, so someone with power finds out.
+	 *
+	 * THE WINDOW THIS CLOSES. Groq retired the Llama line and two tiers began
+	 * returning 404. `scripts/model-catalogue.php` now catches that, but it
+	 * runs nightly on a machine that holds a key, so a model retired at 09:00
+	 * is invisible until 01:17 the next morning — or until a student reports
+	 * it, which is how the first one was found.
+	 *
+	 * The first failed request already knows everything worth knowing: which
+	 * model, which provider, what the provider said. It simply told nobody who
+	 * could act. This records it, and the settings screen reads it back. No
+	 * key, no schedule, no second copy of anything — the fastest detector was
+	 * always the person the failure happened to.
+	 *
+	 * Only outages that need a HUMAN DECISION are kept. A 429 is a rate limit
+	 * that clears itself and a 5xx is the provider having a bad minute; making
+	 * those shout would train everyone to ignore the notice, which is the same
+	 * as not having one.
+	 *
+	 * @param int    $code  HTTP status from the provider.
+	 * @param string $model Model id that was asked for.
+	 * @param mixed  $json  Decoded response body.
+	 */
+	private static function note_outage( int $code, string $model, $json ): void {
+		if ( ! in_array( $code, array( 401, 403, 404 ), true ) ) {
+			return;
+		}
+
+		update_option(
+			self::OUTAGE_OPTION,
+			array(
+				'code'     => $code,
+				'model'    => $model,
+				'provider' => self::provider_id(),
+				'detail'   => is_array( $json ) ? wp_strip_all_tags( (string) ( $json['error']['message'] ?? '' ) ) : '',
+				'at'       => time(),
+			),
+			false
+		);
+	}
+
+	/**
+	 * Forget a recorded outage, because the provider just answered.
+	 */
+	private static function clear_outage(): void {
+		if ( get_option( self::OUTAGE_OPTION ) ) {
+			delete_option( self::OUTAGE_OPTION );
+		}
+	}
+
+	/**
+	 * The recorded outage, if the provider is still refusing.
+	 *
+	 * @return array Empty when the last request succeeded.
+	 */
+	public static function outage(): array {
+		$o = get_option( self::OUTAGE_OPTION );
+
+		return is_array( $o ) ? $o : array();
+	}
+
+	/**
 	 * Map API failures to messages a site admin can act on.
 	 *
-	 * @param int   $code HTTP status.
-	 * @param mixed $json Decoded body.
+	 * @param int    $code  HTTP status.
+	 * @param mixed  $json  Decoded body.
+	 * @param string $model The model actually asked for. Passed in rather than
+	 *                      re-resolved: resolve_model() with no argument answers
+	 *                      "what is the default tier", which is a different
+	 *                      question and named gpt-oss-120b in a message about a
+	 *                      failure on the balanced tier. A true model id
+	 *                      attached to the wrong request.
 	 */
-	private static function friendly_error( int $code, $json ): string {
+	private static function friendly_error( int $code, $json, string $model = '' ): string {
 		$detail = '';
 
 		// Anthropic nests the message under error.message; so does Groq.
@@ -542,7 +623,20 @@ class EduAI_Claude {
 			case 403:
 				return __( 'This API key is not allowed to use the selected model.', 'eduai' ) . $detail;
 			case 404:
-				return __( 'That model ID does not exist for this provider. Pick another tier in the settings.', 'eduai' ) . $detail;
+				/*
+				 * Two audiences, and the old wording served only one. A student
+				 * hitting a retired model was told to "pick another tier in the
+				 * settings" - a page they cannot open, about a decision that is
+				 * not theirs. Groq deleting the Llama line put that sentence in
+				 * front of learners.
+				 */
+				return current_user_can( 'manage_options' )
+					? sprintf(
+						/* translators: %s: model id */
+						__( 'The model %s no longer exists at this provider — providers retire models without notice. Run scripts/model-catalogue.php to see which pinned models are still offered, then update the tier.', 'eduai' ),
+						'' !== $model ? $model : self::resolve_model()
+					) . $detail
+					: __( 'The assistant is unavailable right now. This is a problem with the site rather than your question, and it has been flagged for whoever runs the course.', 'eduai' );
 			case 413:
 				return __( 'That request was too large for this model\'s context window. Try a shorter document.', 'eduai' ) . $detail;
 			case 429:
