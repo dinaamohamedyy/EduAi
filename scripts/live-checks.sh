@@ -279,6 +279,28 @@ run_wp "render-safety      model output cannot reach the page as live markup" re
 # Collapsing that to a green tick would claim a coverage this does not have,
 # which is the failure this whole file exists to prevent. If you shorten
 # anything here, do not shorten that.
+#
+# WHY IT IS HERE AND NOT IN THE PER-PUSH LINT JOB, because the obvious answer
+# is wrong and the obvious fix is worse than the problem.
+#
+# "It needs WordPress" is true of this script but is not the blocker:
+# contract-tests.pl already pulls the same ids straight out of
+# class-eduai-claude.php with a regex, no WordPress, and runs on every push.
+# A stackless version is cheap.
+#
+# THE BLOCKER IS THE KEY. .github/workflows/ carries SSH_HOST, SSH_USER,
+# REMOTE_PATH and SSH_PRIVATE_KEY — no provider key at all. Without one, a
+# lint-job version would report SKIPPED for every id and go green having
+# checked nothing: a check that runs on every push and verifies zero models,
+# which is strictly worse than a nightly that verifies four. Adding
+# GROQ_API_KEY as a repository secret is the owner's call and puts the key in
+# a fourth place, so it has not been proposed.
+#
+# So the window — a model can die at 09:00 and this notices at 01:17 UTC — is
+# ACCEPTED, deliberately, not overlooked. Most of it is closed elsewhere:
+# EduAI_Claude records a 401/403/404 from the provider and the settings screen
+# says so within seconds, cleared by the next success. This stays the backstop
+# for a retirement nobody happens to trip over.
 mc_out="/tmp/lc.mc.$$"
 if MSYS_NO_PATHCONV=1 docker compose --profile tools run --rm cli \
      wp eval-file /scripts/model-catalogue.php --allow-root >"$mc_out" 2>&1; then
