@@ -114,6 +114,7 @@ declare -a MANIFEST=(
   rate-limit
   page-drift
   render-safety
+  model-catalogue
   download-gate
   roundtrip
   ui-geometry
@@ -260,6 +261,39 @@ run_wp "page-drift         the running site has the pages setup.sh declares" pag
 # "What it protects" and "what it needs to run" are independent questions, and
 # only the second one picks the home.
 run_wp "render-safety      model output cannot reach the page as live markup" render-safety.php
+
+# --- model-catalogue: the only check here that asks somebody else ------------
+#
+# Every other harness in this file asks whether we agree with ourselves — the
+# evidence and the thing under test come from this repository, so all of them
+# are structurally blind to a provider changing under us. Groq retired the
+# entire Llama line and two of three chat tiers stopped existing with nothing
+# in this repo changing; it arrived as a 404 in front of the owner.
+#
+# Costs nothing: GET /models is a catalogue listing, not inference, so this is
+# outside the --spend rule rather than an exception to it.
+#
+# ITS SUMMARY LINE IS REPRODUCED VERBATIM, and the skip count with it. The
+# script says "all 4 CHECKED pinned model(s) still exist" — deliberately not
+# "all" — because six ids go unchecked when a provider has no key configured.
+# Collapsing that to a green tick would claim a coverage this does not have,
+# which is the failure this whole file exists to prevent. If you shorten
+# anything here, do not shorten that.
+mc_out="/tmp/lc.mc.$$"
+if MSYS_NO_PATHCONV=1 docker compose --profile tools run --rm cli \
+     wp eval-file /scripts/model-catalogue.php --allow-root >"$mc_out" 2>&1; then
+  ok "model-catalogue    $(grep -E 'pinned model\(s\) still exist' "$mc_out" | tail -1)"
+  mc_skipped="$(grep -oE '^[0-9]+ pinned model\(s\) NOT checked' "$mc_out" | grep -oE '^[0-9]+' | head -1)"
+  if [ -n "${mc_skipped:-}" ] && [ "$mc_skipped" -gt 0 ]; then
+    printf '          %s pinned model(s) NOT checked — that provider has no key here\n' "$mc_skipped"
+  fi
+else
+  # A red here is not a lint failure. It means a tab is returning 404 to
+  # students right now, so it is worth reading differently from a style nit.
+  bad "model-catalogue    a pinned model no longer exists at the provider" \
+      "$(grep -A4 'NO LONGER EXIST' "$mc_out" | tail -n +2 | grep -E '^\s+\S' | tr '\n' ' ')USER-FACING: the tab asking for that tier is 404ing now."
+fi
+rm -f "$mc_out"
 
 # TWO THINGS ABOUT THIS ONE THAT ARE NOT VISIBLE FROM THE CALL.
 #
