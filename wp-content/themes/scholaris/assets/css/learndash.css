@@ -1,0 +1,135 @@
+/* ==========================================================================
+   LearnDash integration
+   --------------------------------------------------------------------------
+   The theme was built around Tutor's templates. LearnDash's focus mode renders
+   its own layout — a fixed course sidebar beside a narrow content column — and
+   until this file there was NOT ONE rule anywhere in the theme or either plugin
+   scoped to it. Our global styles landed on LearnDash's markup unmediated.
+
+   What the owner saw: a lesson titled "LESSON 1" set at hero scale, wrapping
+   onto two lines in a column barely wider than the words; "Back to Course" and
+   "Mark Complete" crushed into a stack; and the study-tools panel squeezed to a
+   ribbon down the left edge.
+
+   None of that is LearnDash being wrong. It is our own §2 heading rule —
+   uppercase, 800, --step-4 — meeting a 350px column that was never in the
+   theme's model, plus a panel with no layout of its own.
+
+   Scoped entirely under .learndash-wrapper so nothing here can reach the rest
+   of the site.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- headings --
+   Hero scale is for a 1200px page, not a lesson column. These stay in the
+   retheme's voice — Archivo, uppercase, tracked — at sizes that fit beside a
+   sidebar. --step-2 for the lesson title is deliberate: it is a page title in
+   a panel, not a landing-page banner. */
+.learndash-wrapper h1,
+.learndash-wrapper .ld-focus-header h1 {
+  font-size: var(--step-2);
+  line-height: 1.15;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  margin-bottom: var(--space-s);
+}
+.learndash-wrapper h2 { font-size: var(--step-1); }
+.learndash-wrapper h3,
+.learndash-wrapper h4 { font-size: var(--step-0); }
+
+/* LearnDash sets its own titles in sentence case and they read as content, not
+   as our furniture — a lesson title is the student's material. */
+.learndash-wrapper .ld-item-title,
+.learndash-wrapper .ld-lesson-title,
+.learndash-wrapper .ld-focus-header .ld-lesson-title {
+  text-transform: none;
+  letter-spacing: -0.01em;
+}
+
+/* ------------------------------------------------------------ LD's controls --
+   "Back to Course" and "Mark Complete" belong on one row with room to breathe.
+   They were stacking because our .btn padding met a column with none to give. */
+.learndash-wrapper .ld-content-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-s);
+  margin-block: var(--space-m);
+}
+.learndash-wrapper .ld-content-actions .ld-button,
+.learndash-wrapper .ld-content-action a {
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- study tools --
+   The panel the owner screenshotted as a ribbon. It is the whole reason the
+   LMS conversion had to keep working, so it gets a real card: full column
+   width, its own surface, and a button row that wraps to a stack only when the
+   column genuinely cannot hold it. */
+.learndash-wrapper .eduai-lesson {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-block: var(--space-l);
+  padding: var(--space-m);
+  background: hsl(var(--accent) / 0.45);
+  border: 0;
+  border-radius: var(--radius-l);
+}
+
+.learndash-wrapper .eduai-lesson__toolsfor {
+  display: block;
+  margin-bottom: var(--space-s);
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--text-muted));
+}
+.learndash-wrapper .eduai-lesson__name {
+  display: block;
+  margin-bottom: var(--space-s);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--step-1);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+/* Three tools, one row, equal weight. auto-fit with a 9rem floor keeps them
+   side by side on a normal column and drops to a stack only when they truly
+   do not fit — rather than stacking at every width, which is what the absence
+   of any rule produced. */
+.learndash-wrapper .eduai-lesson__toolsrow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: var(--space-2xs);
+}
+.learndash-wrapper .eduai-lesson__toolsrow .eduai-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- the frame --
+   The slide viewer must not overflow a column narrower than its natural size. */
+.learndash-wrapper .eduai-lesson__frame,
+.learndash-wrapper .eduai-lesson__viewer {
+  max-width: 100%;
+  overflow: hidden;
+}
+.learndash-wrapper .eduai-lesson__frame iframe,
+.learndash-wrapper .eduai-lesson__frame object { max-width: 100%; }
+
+/* ------------------------------------------------------------------ narrow --
+   Below the width where LearnDash collapses its sidebar, the column is the
+   whole screen and the tools read better stacked than as three cramped pills. */
+@media (max-width: 640px) {
+  .learndash-wrapper .eduai-lesson { padding: var(--space-s); }
+  .learndash-wrapper .eduai-lesson__toolsrow { grid-template-columns: 1fr; }
+}

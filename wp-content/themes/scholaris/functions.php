@@ -71,6 +71,24 @@ function scholaris_assets(): void {
 	wp_enqueue_style( 'scholaris', SCHOLARIS_URI . '/assets/css/main.css', array(), SCHOLARIS_VERSION );
 	wp_enqueue_style( 'scholaris-style', get_stylesheet_uri(), array( 'scholaris' ), SCHOLARIS_VERSION );
 
+	/*
+	 * LearnDash's own layout needs its own rules — see assets/css/learndash.css.
+	 * Loaded only where LearnDash renders, so the rest of the site never pays
+	 * for it and nothing in it can reach a non-LMS page.
+	 *
+	 * Depends on 'scholaris' so it wins on equal specificity: every rule in it
+	 * exists to temper a global the theme sets, and load order is the whole
+	 * mechanism.
+	 */
+	if ( class_exists( 'SFWD_LMS' ) ) {
+		wp_enqueue_style(
+			'scholaris-learndash',
+			SCHOLARIS_URI . '/assets/css/learndash.css',
+			array( 'scholaris' ),
+			SCHOLARIS_VERSION
+		);
+	}
+
 	wp_enqueue_script( 'scholaris', SCHOLARIS_URI . '/assets/js/main.js', array(), SCHOLARIS_VERSION, true );
 
 	if ( is_singular() && comments_open() && get_option( 'thread_comments' ) ) {
