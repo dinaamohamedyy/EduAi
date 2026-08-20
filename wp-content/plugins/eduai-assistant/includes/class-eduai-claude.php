@@ -71,9 +71,11 @@ class EduAI_Claude {
 				 * `content`, so its internal monologue would be printed to the
 				 * student as the reply.
 				 *
-				 * A pinned model id is a dependency on someone else's
-				 * catalogue. This one deserves a health check rather than the
-				 * next silent outage.
+				 * A pinned model id is a dependency on a catalogue nobody here
+				 * controls, and no test that asks whether we agree with
+				 * ourselves can see it change. scripts/model-catalogue.php asks
+				 * the provider instead, reading these ids from this array
+				 * rather than repeating them.
 				 */
 				'models'   => array(
 					'strongest' => 'openai/gpt-oss-120b',
