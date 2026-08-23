@@ -152,22 +152,30 @@ class EduAI_Transcript {
 		}
 
 		/*
-		 * Already queued — but only if it actually still is.
+		 * A pending event is the authority on whether this is queued, and it
+		 * outranks $force.
 		 *
-		 * The flag covers the window where cron has picked the job up and not
-		 * yet finished, which wp_schedule_single_event's own dedupe cannot see.
-		 * On its own though it is a latch with no release: if the event is ever
-		 * lost — cron disabled, a crash mid-run, a probe that scheduled and
-		 * exited — the attachment reads `queued` for ever and NOTHING will
-		 * schedule it again without $force. Found exactly that way: an
-		 * attachment stuck from an earlier run silently refused every later
-		 * attempt, and the refusal looked identical to correct de-duplication.
+		 * THE META FLAG IS NOT THE AUTHORITY. On its own it is a latch with no
+		 * release: if the event is ever lost — cron disabled, a crash mid-run, a
+		 * probe that scheduled and exited — the attachment reads `queued` for
+		 * ever and NOTHING schedules it again. Found exactly that way, and the
+		 * refusal looked identical to correct de-duplication.
 		 *
-		 * So the flag defers to the queue. No pending event means the claim is
-		 * stale, whatever the meta says.
+		 * FORCE MEANS "RUN AGAIN", NEVER "RUN TWICE AT ONCE". $force exists to
+		 * get past the stored-transcript guard above; letting it past this one
+		 * as well put two jobs on one file — two uploads of the same recording,
+		 * two provider bills, and two writers on one set of meta keys. Measured
+		 * at two pending events for a single attachment, which is the same
+		 * defect as keying the check on the caller and had the same cause:
+		 * nothing about the call site showed that a second job was possible.
+		 *
+		 * WHAT THIS STILL DOES NOT COVER, said plainly because the note it
+		 * replaces claimed otherwise: while cron is RUNNING the job there is no
+		 * pending event, so a call in that window queues a second run. Covering
+		 * it means trusting the flag, and a stranded attachment that can never
+		 * be transcribed again is the worse failure of the two.
 		 */
-		if ( ! $force && 'queued' === self::state( $attachment_id )
-			&& self::pending_for( $attachment_id ) ) {
+		if ( self::pending_for( $attachment_id ) ) {
 			return;
 		}
 
