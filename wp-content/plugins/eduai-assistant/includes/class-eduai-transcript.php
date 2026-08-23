@@ -678,6 +678,20 @@ class EduAI_Transcript {
 	 * refusal. Uploads is writable by definition on any install that can
 	 * accept the video in the first place.
 	 *
+	 * ON MORE THAN ONE PHP NODE this adds no new constraint: uploads must
+	 * already be shared storage for the media library to work at all, so a
+	 * scratch file written here is reachable by whichever node picks the job
+	 * up. It adds temporary write traffic to that share, nothing more.
+	 *
+	 * THE CASE THAT DOES BREAK IT is offloading uploads to object storage.
+	 * `basedir` then points at a stream wrapper or a synced mount, and ffmpeg
+	 * needs a real local path — it cannot write to s3://. Whoever does that
+	 * offload has to give this a deliberate local scratch directory, and note
+	 * that the obvious fallback is already ruled out above: get_temp_dir() is
+	 * precisely what open_basedir refused. Neither of the two paths that come
+	 * to mind first will work, which is why this is written down here rather
+	 * than left to be rediscovered.
+	 *
 	 * @param string $prefix Directory name prefix.
 	 * @return string Absolute path, or '' when it could not be created.
 	 */
