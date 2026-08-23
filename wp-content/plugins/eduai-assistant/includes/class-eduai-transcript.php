@@ -167,13 +167,52 @@ class EduAI_Transcript {
 		 * stale, whatever the meta says.
 		 */
 		if ( ! $force && 'queued' === self::state( $attachment_id )
-			&& wp_next_scheduled( self::HOOK, array( $attachment_id, $post_id ) ) ) {
+			&& self::pending_for( $attachment_id ) ) {
 			return;
 		}
 
 		update_post_meta( $attachment_id, self::META_STATE, 'queued' );
 
 		wp_schedule_single_event( time() + 5, self::HOOK, array( $attachment_id, $post_id ) );
+	}
+
+	/**
+	 * Is a transcription already pending for this file, whoever asked for it?
+	 *
+	 * Deliberately NOT `wp_next_scheduled( self::HOOK, array( $id, $post_id ) )`,
+	 * which is what stood here and was correct only by accident. WordPress keys
+	 * cron events by `md5( serialize( $args ) )`, so that call does not ask
+	 * "is this pending" — it asks "is this pending FOR THIS POST".
+	 *
+	 * The same recording legitimately arrives under two different posts:
+	 * on_meta_change passes the material carrying `_scholaris_video_id`,
+	 * schedule_lesson passes the LearnDash lesson. A video referenced from both
+	 * missed its own pending event, queued a second time, uploaded 25 MB to the
+	 * provider twice, paid twice, and put two writers on one set of meta keys.
+	 * Only one of those two paths has live data today, which is the entire
+	 * reason it has never bitten.
+	 *
+	 * What is being de-duplicated is transcribing A FILE. The post supplies
+	 * vocabulary for the prompt and nothing else, so it must not partition the
+	 * queue — and the transcript is stored on the attachment, shared by every
+	 * post that points at it.
+	 *
+	 * @param int $attachment_id Attachment.
+	 */
+	private static function pending_for( int $attachment_id ): bool {
+		foreach ( (array) _get_cron_array() as $events ) {
+			if ( empty( $events[ self::HOOK ] ) ) {
+				continue;
+			}
+
+			foreach ( (array) $events[ self::HOOK ] as $event ) {
+				if ( isset( $event['args'][0] ) && (int) $event['args'][0] === $attachment_id ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
