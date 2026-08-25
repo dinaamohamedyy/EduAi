@@ -28,7 +28,7 @@
       dir: 'ltr', label: 'English',
       launch: 'Ask about courses',
       title: 'Course enquiries',
-      sub: 'Ask about courses, fees and how to join',
+      sub: 'Courses, fees and joining',
       close: 'Close',
       send: 'Send',
       placeholder: 'Type your question…',
@@ -37,6 +37,7 @@
       humanTitle: 'A colleague is joining',
       humanNote: 'Anything you type now goes to them, not to the assistant.',
       notListed: 'Not listed',
+      noDetails: 'Details not published yet',
       fDuration: 'Duration', fFormat: 'Format', fPrice: 'Price', fSchedule: 'Starts',
       view: 'View course',
       required: 'This field is required',
@@ -44,13 +45,14 @@
       submit: 'Send my details',
       sent: 'Thank you — someone will be in touch.',
       failed: 'That did not send. Try again in a moment.',
+      busy: 'A lot of people are asking right now. Wait a few seconds and try again.',
       switched: 'Language switched to English.',
     },
     ar: {
       dir: 'rtl', label: 'العربية',
       launch: 'اسأل عن الدورات',
       title: 'استفسارات الدورات',
-      sub: 'اسأل عن الدورات والرسوم وطريقة الانضمام',
+      sub: 'الدورات والرسوم والتسجيل',
       close: 'إغلاق',
       send: 'إرسال',
       placeholder: 'اكتب سؤالك…',
@@ -59,6 +61,7 @@
       humanTitle: 'سينضم أحد الزملاء',
       humanNote: 'كل ما تكتبه الآن يصل إليه وليس إلى المساعد.',
       notListed: 'غير محدد',
+      noDetails: 'لم تُنشر التفاصيل بعد',
       fDuration: 'المدة', fFormat: 'النظام', fPrice: 'الرسوم', fSchedule: 'البداية',
       view: 'عرض الدورة',
       required: 'هذا الحقل مطلوب',
@@ -66,6 +69,7 @@
       submit: 'أرسل بياناتي',
       sent: 'شكرًا لك — سيتواصل معك أحد الزملاء.',
       failed: 'لم يتم الإرسال. حاول مرة أخرى بعد قليل.',
+      busy: 'هناك ضغط على الخدمة الآن. انتظر بضع ثوانٍ ثم حاول مجددًا.',
       switched: 'تم تغيير اللغة إلى العربية.',
     },
   };
@@ -120,6 +124,9 @@
 
   /* ---------------------------------------------------------------- head -- */
   var head = el('div', 'eq-head');
+  var mark = el('span', 'eq-mark');
+  mark.setAttribute('aria-hidden', 'true');
+  mark.appendChild(svg(['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'], 17));
   var headText = el('div');
   var headTitle = el('p', 'eq-head__title', t('title'));
   var headSub = el('p', 'eq-head__sub', t('sub'));
@@ -135,6 +142,7 @@
   headActions.appendChild(langBtn);
   headActions.appendChild(closeBtn);
 
+  head.appendChild(mark);
   head.appendChild(headText);
   head.appendChild(headActions);
 
@@ -223,48 +231,50 @@
    * which is different from a key being absent, and the envelope guarantees
    * every field is present so those two can never be confused here.
    */
-  function fact(key, value) {
-    var row = el('div', 'eq-fact');
-    row.appendChild(el('span', 'eq-fact__key', key));
-    if (value == null || value === '') {
-      var u = el('span', 'eq-fact__val eq-fact__val--unknown', t('notListed'));
-      u.setAttribute('dir', 'auto');
-      row.appendChild(u);
-    } else {
-      var val = el('span', 'eq-fact__val', String(value));
-      val.setAttribute('dir', 'auto');
-      row.appendChild(val);
-    }
-    return row;
+  /*
+   * A KNOWN fact, as a pill. Unknowns do not get one.
+   *
+   * This reverses how I first built it, and the reason is worth keeping. I
+   * rendered every field as a label/value row and printed "Not listed" for the
+   * ones nobody had filled in, on the argument that hiding them would leave a
+   * bare title. Measured on the real data that produced 12 grey rows out of 16:
+   * three quarters of every card was a statement of absence, and absence was
+   * the loudest thing in the panel.
+   *
+   * The promise was never "show a row per field". It was "never imply a value
+   * nobody entered". A pill for each known fact keeps that promise exactly,
+   * and one quiet line covers the rest — so the card says what it knows, says
+   * plainly when it knows nothing, and stops shouting about the gaps.
+   */
+  function pill(value) {
+    var s = el('span', 'eq-pill', String(value));
+    s.setAttribute('dir', 'auto');
+    return s;
   }
 
   function courseCard(card) {
     var c = el('article', 'eq-card');
+
     /*
      * EVERY CARD FIELD CARRIES ITS OWN DIRECTION.
      *
-     * The card block takes its dir from the message language, and the fields
-     * used to inherit it. That is wrong whenever a field is written in the
-     * other language — which here is the normal case, not the exception: all
-     * four course titles on this site are English, so an Arabic conversation
-     * renders English titles and descriptions inside an RTL box.
+     * The card block takes its direction from the message language and the
+     * fields used to inherit it. That is wrong whenever a field is written in
+     * the other language, which here is the normal case: all four course
+     * titles on this site are English, so an Arabic conversation renders
+     * English text inside an RTL box.
      *
-     * The symptom is bidi reordering of the neutral characters at the edges.
-     * "Covers Linear Regression and LR." rendered as ".Covers Linear
-     * Regression and LR" — the full stop jumped to the visual start, because a
-     * trailing neutral takes the direction of the PARAGRAPH rather than of the
-     * text it follows. Invisible in the string; only visible on screen.
+     * The symptom was bidi reordering of the neutral characters at the edges —
+     * "Covers Linear Regression and LR." rendering as ".Covers Linear
+     * Regression and LR", because a trailing neutral takes the direction of
+     * the paragraph rather than of the text it follows.
      *
-     * dir="auto" asks the browser to take each field's direction from its own
-     * first strong character, so an English title is laid out LTR inside an
-     * otherwise RTL card and an Arabic one is not disturbed.
-     *
-     * Deliberately NOT applied to the message bubble: a recommendation reads
-     * "Machine Learning: يُغطي…", whose first strong character is Latin, so
-     * dir="auto" would lay out a whole Arabic sentence left-to-right. The
-     * bubble knows its language from the envelope and should keep using it.
+     * Deliberately NOT on the message bubble: a recommendation opens
+     * "Machine Learning: يغطي…", whose first strong character is Latin, so
+     * auto would lay a whole Arabic sentence out left to right. Auto is right
+     * for a field of unknown language and wrong for one the envelope names.
      */
-    var h = el('p', 'eq-card__title');
+    var h = el('h3', 'eq-card__title');
     h.setAttribute('dir', 'auto');
     if (card.url) {
       var a = el('a', null, card.title || '');
@@ -275,28 +285,31 @@
     }
     c.appendChild(h);
 
-    // Description is the one field allowed to be absent rather than "Not
-    // listed": a missing sentence is not a fact anyone was promised, and a row
-    // reading "Description: not listed" is noise rather than honesty.
     if (card.description) {
       var d = el('p', 'eq-card__desc', card.description);
       d.setAttribute('dir', 'auto');
       c.appendChild(d);
     }
 
-    var facts = el('div', 'eq-card__facts');
-    facts.appendChild(fact(t('fDuration'), card.duration));
-    facts.appendChild(fact(t('fFormat'), card.format));
-    facts.appendChild(fact(t('fPrice'), card.price));
-    facts.appendChild(fact(t('fSchedule'), card.schedule));
-    c.appendChild(facts);
+    var known = [ card.price, card.duration, card.format, card.schedule ].filter(function (v) {
+      return v != null && v !== '';
+    });
+
+    if (known.length) {
+      var meta = el('div', 'eq-card__meta');
+      known.forEach(function (v) { meta.appendChild(pill(v)); });
+      c.appendChild(meta);
+    } else {
+      // One line, not four rows. Still explicit: it says the details are not
+      // published, so nothing here can be mistaken for a fee or a date.
+      c.appendChild(el('p', 'eq-card__nodetail', t('noDetails')));
+    }
 
     if (card.url) {
-      var cta = el('div', 'eq-card__cta');
-      var link = el('a', 'eq-btn', card.cta || t('view'));
+      var link = el('a', 'eq-card__go', card.cta || t('view'));
       link.href = card.url;
-      cta.appendChild(link);
-      c.appendChild(cta);
+      link.appendChild(svg(['M5 12h14', 'm12 5 7 7-7 7'], 14));
+      c.appendChild(link);
     }
     return c;
   }
@@ -565,9 +578,12 @@
     transport(text).then(function (env) {
       hideTyping();
       renderEnvelope(env || { text: '' });
-    }).catch(function () {
+    }).catch(function (err) {
       hideTyping();
-      var e = el('div', 'eq-error', t('failed'));
+      // 429 is not a failure, it is a queue. Telling someone their message did
+      // not send when it was merely rate limited invites them to send it again,
+      // which is the one thing that makes it worse.
+      var e = el('div', 'eq-error', (err && err.status === 429) ? t('busy') : t('failed'));
       log.appendChild(e);
       status.textContent = t('failed');
     }).then(function () {
@@ -674,7 +690,11 @@
       headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': CFG.nonce || '' },
       body: JSON.stringify(body),
     }).then(function (res) {
-      if (!res.ok) { throw new Error('http ' + res.status); }
+      if (!res.ok) {
+        var err = new Error('http ' + res.status);
+        err.status = res.status;
+        throw err;
+      }
       return res.json();
     });
   }

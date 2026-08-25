@@ -56,10 +56,23 @@
 }
 
 /* ------------------------------------------------------------- launcher --- */
+/*
+ * THE SECOND DELIBERATE PHYSICAL RULE IN THIS FILE, and it is a UX fix rather
+ * than a typographic one.
+ *
+ * These were inset-inline-end, which flips with direction — so switching to
+ * Arabic left the launcher where it was and opened the panel on the OPPOSITE
+ * side of the screen. Measured: panel at x=847 in English, x=28 in Arabic, on
+ * the same 1265px viewport. Pressing a button on the right and having a panel
+ * appear on the left is disorienting, and switching language mid-conversation
+ * teleported it.
+ *
+ * The anchor is furniture, not text. Its CONTENTS mirror; its corner does not.
+ */
 .eq-launcher {
   position: fixed;
-  inset-inline-end: var(--eq-inset);
-  inset-block-end: calc(var(--eq-inset) + var(--eq-stack));
+  right: var(--eq-inset);
+  bottom: calc(var(--eq-inset) + var(--eq-stack));
   /* Below the study assistant's 9998 on purpose: if both are ever open, the
      one the visitor summoned last should not be buried, and the assistant is
      the logged-in tool with more state to lose. */
@@ -82,8 +95,8 @@
 /* ---------------------------------------------------------------- panel --- */
 .eq-panel {
   position: fixed;
-  inset-inline-end: var(--eq-inset);
-  inset-block-end: calc(var(--eq-inset) + var(--eq-stack));
+  right: var(--eq-inset);
+  bottom: calc(var(--eq-inset) + var(--eq-stack));
   z-index: 9991;
   width: min(390px, calc(100vw - 2 * var(--eq-inset)));
   max-height: min(640px, calc(100vh - 2 * var(--eq-inset)));
@@ -199,47 +212,87 @@
 }
 
 /* ----------------------------------------------------------- course card --- */
-.eq-cards { display: grid; gap: 0.6rem; }
+/*
+ * THE CARD IS A TITLE, A SENTENCE, AND WHAT WE KNOW.
+ *
+ * The first version rendered a label/value row per field and printed
+ * "Not listed" for every blank. On the real data that is 12 grey rows out of
+ * 16 — three quarters of the card devoted to saying nothing is there, and the
+ * loudest thing in the panel was absence. It was honest and it looked broken.
+ *
+ * Known facts are pills; the unknown ones simply are not drawn. That still
+ * cannot imply a fee or a date nobody entered — a pill exists only where a
+ * value does — and when NOTHING is known one quiet line says so outright.
+ */
+.eq-cards { display: grid; gap: 0.55rem; }
+
 .eq-card {
   border: 1px solid hsl(var(--eq-border));
   border-radius: var(--eq-radius);
   background: hsl(var(--eq-surface));
-  padding: 0.8rem;
+  padding: 0.85rem 0.9rem;
   min-inline-size: 0;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
 }
-.eq-card__title { margin: 0 0 0.25rem; font-size: 0.95rem; font-weight: 650; }
+.eq-card:hover {
+  border-color: hsl(var(--eq-brand) / 0.45);
+  box-shadow: 0 2px 8px hsl(222 40% 12% / 0.06);
+}
+
+.eq-card__title {
+  margin: 0; font-size: 0.97rem; font-weight: 680; line-height: 1.35;
+  letter-spacing: -0.01em;
+}
 .eq-card__title a { color: inherit; text-decoration: none; }
-.eq-card__title a:hover { text-decoration: underline; }
+.eq-card__title a:hover { color: hsl(var(--eq-brand-strong)); }
+
 .eq-card__desc {
-  margin: 0 0 0.5rem; font-size: 0.85rem; color: hsl(var(--eq-muted));
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  margin: 0.3rem 0 0;
+  font-size: 0.845rem; line-height: 1.55; color: hsl(var(--eq-muted));
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* Pills read as attributes of the course rather than as a table someone forgot
+   to finish. Wrapping, because a long format string must not widen the panel. */
+.eq-card__meta { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-block-start: 0.55rem; }
+.eq-pill {
+  font-size: 0.73rem; font-weight: 600; line-height: 1;
+  padding: 0.32rem 0.55rem;
+  border-radius: 999px;
+  background: hsl(var(--eq-brand) / 0.09);
+  color: hsl(var(--eq-brand-strong));
+  white-space: nowrap;
+}
+
+/* The whole-card unknown state. One line, muted, no italic — italic on a
+   short line in Arabic is close to unreadable at this size. */
+.eq-card__nodetail {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem; color: hsl(var(--eq-faint));
 }
 
 /*
- * THE HONEST FIELD LIST.
+ * The action is a link with an arrow, not a filled button.
  *
- * Measured on the real data: four courses, no descriptions, duration empty on
- * all four, price only free/open, no categories, no schedule field at all. So
- * the common case for this card is NOT the full one — it is a title and four
- * unknowns, and a card that hides unknown rows would render as a bare title
- * and teach the visitor nothing about what is missing.
+ * It was a full-width primary button, repeated once per card — so a three-card
+ * answer showed three identical blue slabs and they, not the courses, were the
+ * loudest thing on screen. The panel already has one primary action (send);
+ * this is navigation.
  *
- * Every row is therefore always present, and an unknown value prints "Not
- * listed" in muted type. That is a deliberate trade: slightly duller than a
- * card that hides empties, and it can never imply a fee or a date that nobody
- * entered. Inventing one is the same failure as answering confidently about
- * photosynthesis, and it costs more here because a fee is a promise.
+ * text-decoration is set explicitly because the host theme underlines anchors
+ * inside content, which leaked through and made the old button look broken.
  */
-.eq-card__facts { display: grid; gap: 0.3rem; margin: 0; font-size: 0.82rem; }
-.eq-fact { display: flex; gap: 0.5rem; align-items: baseline; min-inline-size: 0; }
-.eq-fact__key {
-  flex: none; inline-size: 5.5rem;
-  color: hsl(var(--eq-faint));
-  font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase;
+.eq-card__go {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  margin-block-start: 0.6rem;
+  font-size: 0.83rem; font-weight: 650;
+  color: hsl(var(--eq-brand-strong));
+  text-decoration: none;
 }
-.eq-fact__val { min-inline-size: 0; }
-.eq-fact__val--unknown { color: hsl(var(--eq-faint)); font-style: italic; }
-.eq-card__cta { margin-block-start: 0.65rem; }
+.eq-card__go:hover { text-decoration: underline; }
+.eq-card__go:focus-visible { outline: 3px solid hsl(var(--eq-brand) / 0.4); outline-offset: 3px; border-radius: 4px; }
+/* The arrow points along the reading direction, so it mirrors with the card. */
+[dir="rtl"] .eq-card__go svg { transform: scaleX(-1); }
 
 /* ----------------------------------------------------------------- chips --- */
 .eq-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
@@ -368,3 +421,137 @@
   padding: 0.6rem 0.8rem; border-radius: var(--eq-radius-s);
   font-size: 0.85rem;
 }
+
+/* ---------------------------------------------------------------- polish --- */
+/*
+ * The panel read as a plain rectangle with a flat blue slab on top. These are
+ * the smallest changes that give it a shape: a rounder shell, a softer and
+ * deeper shadow so it sits ABOVE the page rather than on it, a brand mark so
+ * the header is a speaker rather than a title bar, and a scrollbar that is not
+ * the default grey.
+ */
+.eq-panel {
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px hsl(222 40% 12% / 0.06),
+    0 12px 28px hsl(222 40% 12% / 0.14),
+    0 40px 70px hsl(222 40% 12% / 0.16);
+}
+
+.eq-head {
+  padding: 0.9rem 1rem;
+  /* A flat fill is what made it read as a title bar. */
+  background: linear-gradient(135deg, hsl(var(--eq-brand)), hsl(var(--eq-brand-strong)));
+}
+.eq-head__title { font-size: 0.98rem; letter-spacing: -0.01em; }
+.eq-head__sub { font-size: 0.735rem; opacity: 0.82; margin-block-start: 0.1rem; }
+
+/* The mark gives the header a speaker. Without it the panel opens with nobody
+   in it — a heading, a toggle and a close button. */
+.eq-mark {
+  inline-size: 34px; block-size: 34px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 11px;
+  background: hsl(var(--eq-on-brand) / 0.18);
+  color: hsl(var(--eq-on-brand));
+  box-shadow: inset 0 0 0 1px hsl(var(--eq-on-brand) / 0.22);
+}
+
+.eq-iconbtn, .eq-lang { border-radius: 8px; }
+.eq-lang { padding: 0.34rem 0.62rem; }
+
+.eq-log { padding: 0.9rem; gap: 0.6rem; }
+.eq-log::-webkit-scrollbar { inline-size: 10px; }
+.eq-log::-webkit-scrollbar-track { background: transparent; }
+.eq-log::-webkit-scrollbar-thumb {
+  background: hsl(var(--eq-text) / 0.16);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.eq-log::-webkit-scrollbar-thumb:hover { background: hsl(var(--eq-text) / 0.28); background-clip: content-box; }
+
+/* Bubbles: a touch tighter, and the bot bubble carries no border so the cards
+   below it are the only bordered objects in the thread. */
+.eq-bubble { padding: 0.55rem 0.8rem; font-size: 0.9rem; border-radius: 13px; }
+.eq-msg--bot .eq-bubble {
+  border-color: transparent;
+  background: hsl(var(--eq-surface));
+  box-shadow: 0 1px 2px hsl(222 40% 12% / 0.07);
+}
+
+/* Chips sit below the thread as the guided path; making them quieter than the
+   send button keeps one primary action on screen. */
+.eq-chip { font-size: 0.8rem; padding: 0.38rem 0.75rem; border-color: hsl(var(--eq-border)); color: hsl(var(--eq-text)); }
+.eq-chip:hover { border-color: hsl(var(--eq-brand) / 0.5); background: hsl(var(--eq-brand) / 0.06); color: hsl(var(--eq-brand-strong)); }
+
+.eq-composer { padding: 0.6rem; gap: 0.4rem; }
+.eq-composer textarea { border-radius: 11px; }
+.eq-send { inline-size: 36px; block-size: 36px; border-radius: 11px; }
+
+/* Any anchor the host theme would underline. The old card button looked broken
+   for exactly this reason. */
+.eq-root a { text-decoration: none; }
+
+/* ----------------------------------------------------------------- reset --- */
+/*
+ * The widget must not inherit the host's typography, and this is not
+ * hypothetical tidiness — it shipped a real defect.
+ *
+ * Promoting the card title from <p> to <h3>, which is the correct element for
+ * a card heading, immediately picked up this theme's heading rule and rendered
+ * every course as "MACHINE LEARNING". The repo has a commit of its own saying
+ * capitals corrupt notation and content headings keep their case; a course
+ * title is content, and on a transferable plugin the next host will have its
+ * own opinion about h3.
+ *
+ * So the elements this widget creates declare their own typography rather than
+ * accepting whatever surrounds them.
+ */
+.eq-root h1, .eq-root h2, .eq-root h3, .eq-root h4, .eq-root p {
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: inherit;
+}
+.eq-root h3 { font-weight: 680; }
+
+/* Lighter than the default, and than my first attempt: the thumb was reading
+   as a solid grey bar down the edge of the panel. */
+.eq-log::-webkit-scrollbar { inline-size: 8px; }
+.eq-log::-webkit-scrollbar-thumb {
+  background: hsl(var(--eq-text) / 0.10);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.eq-log::-webkit-scrollbar-thumb:hover { background: hsl(var(--eq-text) / 0.2); background-clip: content-box; }
+
+/* ------------------------------------------------------------ head fit --- */
+/*
+ * A header whose height depends on how long the translation is will be wrong
+ * in some language, and this one already was: the Arabic subtitle wrapped to
+ * two lines and took the header from 74px to 103px, which reads as crowded
+ * next to the same header in English.
+ *
+ * I first read that as the title being clipped. Measured, nothing was clipped
+ * and nothing overflowed — it was simply taller. Worth the check: the fix for
+ * "clipped" would have been overflow rules that hid the second line rather
+ * than preventing it.
+ *
+ * One line, ellipsised, and the prose leading backed off for the title bar —
+ * 1.85 is right for a paragraph of Arabic and far too loose for two short
+ * lines in a coloured strip.
+ */
+.eq-head { align-items: center; }
+.eq-head > div { min-inline-size: 0; }
+.eq-head__title,
+.eq-head__sub {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* Legibility on the gradient. At 0.735rem and 82% opacity the subtitle was
+   present without being readable, which is the worst of both: it costs a line
+   of header and tells the visitor nothing. */
+.eq-head { padding: 0.95rem 1rem; gap: 0.65rem; }
+.eq-head__title { font-size: 1.04rem; font-weight: 700; }
+.eq-head__sub { font-size: 0.775rem; opacity: 0.9; }
