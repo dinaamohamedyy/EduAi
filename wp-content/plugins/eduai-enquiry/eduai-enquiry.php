@@ -3,7 +3,7 @@
  * Plugin Name:       EduAI Enquiry
  * Plugin URI:        https://example.org/eduai-enquiry
  * Description:       Bilingual (English/Arabic) enquiry assistant for visitors: finds courses, recommends, guides enrolment, captures leads to a CRM, and hands over to a human.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            EduAi
@@ -37,7 +37,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'EDUAI_ENQUIRY_VERSION', '1.0.0' );
+define( 'EDUAI_ENQUIRY_VERSION', '1.1.0' );
 define( 'EDUAI_ENQUIRY_FILE', __FILE__ );
 define( 'EDUAI_ENQUIRY_DIR', plugin_dir_path( __FILE__ ) );
 define( 'EDUAI_ENQUIRY_URL', plugin_dir_url( __FILE__ ) );

@@ -35,6 +35,11 @@ class EduAI_Enquiry_Leads {
 	public const RETENTION_HOOK = 'eduai_enquiry_prune';
 
 	/**
+	 * Where the last retention run is recorded.
+	 */
+	public const STATUS_OPTION = 'eduai_enquiry_prune_last';
+
+	/**
 	 * Attempts before a lead is left for a human to collect.
 	 */
 	private const MAX_ATTEMPTS = 5;
@@ -70,6 +75,7 @@ class EduAI_Enquiry_Leads {
 				language VARCHAR(5) NOT NULL DEFAULT 'en',
 				consent TINYINT(1) NOT NULL DEFAULT 0,
 				consent_at DATETIME NULL,
+				consent_text TEXT NULL,
 				source VARCHAR(40) NOT NULL DEFAULT 'chat',
 				crm_state VARCHAR(20) NOT NULL DEFAULT 'pending',
 				crm_attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
@@ -89,6 +95,18 @@ class EduAI_Enquiry_Leads {
 	public static function init(): void {
 		add_action( self::DISPATCH_HOOK, array( __CLASS__, 'dispatch' ), 10, 1 );
 		add_action( self::RETENTION_HOOK, array( __CLASS__, 'prune' ) );
+
+		/*
+		 * WordPress already has subject-access and erasure tooling, under
+		 * Tools > Export/Erase Personal Data, and every other store on this
+		 * site is registered with it — WordPress's own, and eleven from
+		 * LearnDash. A PII table that does not register is INVISIBLE to it:
+		 * an administrator runs an erasure request, the screen reports
+		 * success, and the enquiry row survives untouched. That is worse than
+		 * having no tooling, because it answers the question wrongly.
+		 */
+		add_filter( 'wp_privacy_personal_data_exporters', array( __CLASS__, 'register_exporter' ) );
+		add_filter( 'wp_privacy_personal_data_erasers', array( __CLASS__, 'register_eraser' ) );
 
 		if ( ! wp_next_scheduled( self::RETENTION_HOOK ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::RETENTION_HOOK );
@@ -119,6 +137,20 @@ class EduAI_Enquiry_Leads {
 		$consent = ! empty( $lead['consent'] );
 		$now     = gmdate( 'Y-m-d H:i:s' );
 
+		/*
+		 * WHAT THEY AGREED TO, not merely that they agreed.
+		 *
+		 * `consent = 1` records our own assertion and nothing a person can be
+		 * held to. The question anybody asks afterwards — a regulator, the
+		 * visitor, a buyer of this plugin — is always *what were they shown*,
+		 * and a boolean cannot answer it. The wording is also translated and
+		 * will be edited, so a row captured today cannot be explained by
+		 * reading today's copy of the string.
+		 *
+		 * Stored verbatim, at capture time, in the language it was displayed.
+		 */
+		$consent_text = trim( wp_strip_all_tags( (string) ( $lead['consent_text'] ?? '' ) ) );
+
 		$ok = $wpdb->insert(
 			self::table(),
 			array(
@@ -130,11 +162,15 @@ class EduAI_Enquiry_Leads {
 				'language'   => in_array( $lead['language'] ?? 'en', array( 'en', 'ar' ), true ) ? $lead['language'] : 'en',
 				'consent'    => $consent ? 1 : 0,
 				'consent_at' => $consent ? $now : null,
+				// Null rather than '' when nothing was supplied: it must be
+				// possible to tell "we did not record the wording" from
+				// "the wording was empty", and the exporter says so out loud.
+				'consent_text' => ( $consent && '' !== $consent_text ) ? mb_substr( $consent_text, 0, 2000 ) : null,
 				'source'     => mb_substr( (string) ( $lead['source'] ?? 'chat' ), 0, 40 ),
 				'crm_state'  => 'pending',
 				'created_at' => $now,
 			),
-			array( '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s' )
+			array( '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%s' )
 		);
 
 		if ( ! $ok ) {
@@ -292,6 +328,21 @@ class EduAI_Enquiry_Leads {
 	 *
 	 * Zero means keep for ever, and that is an explicit choice an administrator
 	 * has to make rather than the default.
+	 *
+	 * EVERY STATE, INCLUDING THE ONES WE FAILED TO DELIVER
+	 *
+	 * This deleted only `sent` and `no_endpoint`, so a lead whose CRM call
+	 * failed was kept for ever. That reads as caution and is the opposite of
+	 * it: a broken webhook silently turns a retention policy into indefinite
+	 * storage of somebody's name, email and phone number, and the worse our
+	 * delivery is, the longer we hold their data. Being unable to deliver it
+	 * is not a lawful basis for keeping it, and it is not a reason the person
+	 * would accept.
+	 *
+	 * So retention runs on the age of the row, whatever became of it — and the
+	 * per-state counts are recorded so that discarding undelivered enquiries
+	 * is VISIBLE rather than silent. A large `failed` number here is an
+	 * instruction to fix the endpoint, not to keep the rows longer.
 	 */
 	public static function prune(): int {
 		global $wpdb;
@@ -299,18 +350,231 @@ class EduAI_Enquiry_Leads {
 		$days = (int) ( get_option( 'eduai_enquiry_settings', array() )['retention_days'] ?? 365 );
 
 		if ( $days <= 0 ) {
+			self::record_prune( array( 'skipped' => 'retention disabled' ) );
+
 			return 0;
 		}
 
-		EduAI_Enquiry_Session::prune();
+		$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
 
-		return (int) $wpdb->query(
+		// Counted BEFORE deletion, because afterwards there is nothing left to
+		// count and "0 failed enquiries discarded" would be indistinguishable
+		// from "this never ran".
+		$by_state = array();
+
+		foreach ( (array) $wpdb->get_results(
 			$wpdb->prepare(
-				'DELETE FROM ' . self::table() . ' WHERE created_at < %s AND crm_state IN ( %s, %s )',
-				gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS ),
-				'sent',
-				'no_endpoint'
+				'SELECT crm_state, COUNT(*) n FROM ' . self::table() . ' WHERE created_at < %s GROUP BY crm_state',
+				$cutoff
 			)
+		) as $row ) {
+			$by_state[ (string) $row->crm_state ] = (int) $row->n;
+		}
+
+		$deleted  = (int) $wpdb->query(
+			$wpdb->prepare( 'DELETE FROM ' . self::table() . ' WHERE created_at < %s', $cutoff )
+		);
+		$sessions = (int) EduAI_Enquiry_Session::prune();
+
+		self::record_prune(
+			array(
+				'deleted'        => $deleted,
+				'by_state'       => $by_state,
+				'sessions'       => $sessions,
+				'retention_days' => $days,
+			)
+		);
+
+		return $deleted;
+	}
+
+	/**
+	 * Write down that retention ran, and what it did.
+	 *
+	 * A purge nobody can see is a failure this platform already has once:
+	 * backup software installed, enabled, reading as protection, and never
+	 * executed. Nothing distinguishes "ran and found nothing" from "never ran"
+	 * unless the run leaves a mark, so this records the ATTEMPT and not only
+	 * the outcome.
+	 *
+	 * Counts only. No lead ever passes through here.
+	 *
+	 * @param array $result What happened.
+	 */
+	private static function record_prune( array $result ): void {
+		update_option(
+			self::STATUS_OPTION,
+			array_merge( array( 'at' => gmdate( 'Y-m-d H:i:s' ) ), $result ),
+			false
+		);
+	}
+
+	/**
+	 * When retention last ran, what it removed, and when it runs next.
+	 *
+	 * For the admin screen. Counts only, never lead data.
+	 */
+	public static function prune_status(): array {
+		$last = get_option( self::STATUS_OPTION, array() );
+		$next = wp_next_scheduled( self::RETENTION_HOOK );
+
+		return array(
+			'last'      => is_array( $last ) ? $last : array(),
+			'next'      => $next ? (int) $next : 0,
+			'scheduled' => (bool) $next,
+		);
+	}
+
+	/**
+	 * Tell WordPress how to export an enquiry.
+	 *
+	 * @param array $exporters Registered exporters.
+	 */
+	public static function register_exporter( $exporters ) {
+		$exporters['eduai-enquiry-leads'] = array(
+			'exporter_friendly_name' => __( 'Course enquiries', 'eduai-enquiry' ),
+			'callback'               => array( __CLASS__, 'export_personal_data' ),
+		);
+
+		return $exporters;
+	}
+
+	/**
+	 * Tell WordPress how to erase an enquiry.
+	 *
+	 * @param array $erasers Registered erasers.
+	 */
+	public static function register_eraser( $erasers ) {
+		$erasers['eduai-enquiry-leads'] = array(
+			'eraser_friendly_name' => __( 'Course enquiries', 'eduai-enquiry' ),
+			'callback'             => array( __CLASS__, 'erase_personal_data' ),
+		);
+
+		return $erasers;
+	}
+
+	/**
+	 * Everything held about one email address.
+	 *
+	 * WordPress keys privacy requests by email, so an enquiry captured with a
+	 * phone number and no email cannot be found by this. That is a limit of
+	 * the platform's model rather than of this table, and it is worth knowing
+	 * before anybody reports an export as complete.
+	 *
+	 * @param string $email_address Subject.
+	 * @param int    $page          1-based page.
+	 */
+	public static function export_personal_data( $email_address, $page = 1 ): array {
+		global $wpdb;
+
+		$email = sanitize_email( (string) $email_address );
+		$page  = max( 1, (int) $page );
+		$per   = 100;
+
+		if ( '' === $email ) {
+			return array( 'data' => array(), 'done' => true );
+		}
+
+		$rows = (array) $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT * FROM ' . self::table() . ' WHERE email = %s ORDER BY id ASC LIMIT %d OFFSET %d',
+				$email,
+				$per,
+				( $page - 1 ) * $per
+			),
+			ARRAY_A
+		);
+
+		$export = array();
+
+		foreach ( $rows as $row ) {
+			$export[] = array(
+				'group_id'    => 'eduai-enquiry-leads',
+				'group_label' => __( 'Course enquiries', 'eduai-enquiry' ),
+				'item_id'     => 'enquiry-' . (int) $row['id'],
+				'data'        => array(
+					array( 'name' => __( 'Name', 'eduai-enquiry' ), 'value' => $row['name'] ),
+					array( 'name' => __( 'Email', 'eduai-enquiry' ), 'value' => $row['email'] ),
+					array( 'name' => __( 'Phone', 'eduai-enquiry' ), 'value' => $row['phone'] ),
+					array( 'name' => __( 'Enquiry', 'eduai-enquiry' ), 'value' => $row['interest'] ),
+					array(
+						'name'  => __( 'Course', 'eduai-enquiry' ),
+						'value' => $row['course_id'] ? get_the_title( (int) $row['course_id'] ) : '',
+					),
+					array( 'name' => __( 'Language', 'eduai-enquiry' ), 'value' => $row['language'] ),
+					array( 'name' => __( 'Received', 'eduai-enquiry' ), 'value' => $row['created_at'] ),
+					array(
+						'name'  => __( 'Consent given', 'eduai-enquiry' ),
+						'value' => $row['consent_at'] ? $row['consent_at'] : __( 'no', 'eduai-enquiry' ),
+					),
+					array(
+						'name'  => __( 'What they agreed to', 'eduai-enquiry' ),
+						// Said out loud rather than left blank. An export that
+						// silently omits the wording implies none was shown.
+						'value' => ( null === $row['consent_text'] || '' === $row['consent_text'] )
+							? __( 'The exact wording shown was not recorded for this enquiry.', 'eduai-enquiry' )
+							: $row['consent_text'],
+					),
+					array( 'name' => __( 'Sent to CRM', 'eduai-enquiry' ), 'value' => $row['crm_state'] ),
+				),
+			);
+		}
+
+		return array( 'data' => $export, 'done' => count( $rows ) < $per );
+	}
+
+	/**
+	 * Erase enquiries for one email address.
+	 *
+	 * DELETED, NOT ANONYMISED. An enquiry stripped of its contact details is
+	 * not a lead, and keeping the shell so a funnel count stays tidy is
+	 * precisely the retention that a person asking to be forgotten is asking
+	 * us not to do.
+	 *
+	 * A still-undelivered enquiry goes too, and that loses the enquiry. It is
+	 * the correct trade: the request to be forgotten outranks our wish to sell
+	 * to them.
+	 *
+	 * @param string $email_address Subject.
+	 * @param int    $page          1-based page.
+	 */
+	public static function erase_personal_data( $email_address, $page = 1 ): array {
+		global $wpdb;
+
+		$email = sanitize_email( (string) $email_address );
+
+		if ( '' === $email ) {
+			return array(
+				'items_removed'  => false,
+				'items_retained' => false,
+				'messages'       => array(),
+				'done'           => true,
+			);
+		}
+
+		$removed  = (int) $wpdb->query(
+			$wpdb->prepare( 'DELETE FROM ' . self::table() . ' WHERE email = %s', $email )
+		);
+		$messages = array();
+
+		if ( $removed > 0 ) {
+			$messages[] = sprintf(
+				/* translators: %d: number of enquiries deleted. */
+				_n(
+					'%d course enquiry was deleted. Any copy already sent to the CRM has to be removed there too.',
+					'%d course enquiries were deleted. Any copies already sent to the CRM have to be removed there too.',
+					$removed,
+					'eduai-enquiry'
+				),
+				$removed
+			);
+		}
+
+		return array(
+			'items_removed'  => $removed > 0,
+			'items_retained' => false,
+			'messages'       => $messages,
+			'done'           => true,
 		);
 	}
 

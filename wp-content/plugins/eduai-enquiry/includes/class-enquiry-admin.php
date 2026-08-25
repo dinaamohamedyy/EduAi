@@ -255,7 +255,85 @@ class EduAI_Enquiry_Admin {
 	/**
 	 * Recent enquiries, with their delivery state.
 	 */
+	/**
+	 * Whether retention is actually running, and what it last did.
+	 *
+	 * Shown ABOVE the enquiry list and before the "none yet" early return, so
+	 * it appears on an empty install too. An administrator with no leads is
+	 * exactly the person who cannot tell a working purge from an absent one.
+	 *
+	 * This exists because of item 01 on this platform's own risk register:
+	 * backup software installed, switched on, reading as protection, and never
+	 * once executed. A scheduled purge fails the same way and more quietly —
+	 * nothing about a table of recent leads reveals that old ones were never
+	 * removed.
+	 */
+	private static function retention(): void {
+		$status = EduAI_Enquiry_Leads::prune_status();
+		$days   = (int) ( get_option( 'eduai_enquiry_settings', array() )['retention_days'] ?? 365 );
+
+		echo '<h2 style="margin-top:24px">' . esc_html__( 'Retention', 'eduai-enquiry' ) . '</h2>';
+
+		echo '<p class="description">';
+		if ( $days > 0 ) {
+			printf(
+				/* translators: %d: number of days. */
+				esc_html__( 'Enquiries are deleted %d days after they arrive, whether or not they reached the CRM.', 'eduai-enquiry' ),
+				(int) $days
+			);
+		} else {
+			echo esc_html__( 'Enquiries are kept for ever. Contact details accumulate until somebody decides otherwise.', 'eduai-enquiry' );
+		}
+		echo '</p>';
+
+		if ( ! $status['scheduled'] ) {
+			echo '<div class="notice notice-error inline"><p><strong>'
+				. esc_html__( 'The clean-up is not scheduled, so nothing is being deleted.', 'eduai-enquiry' )
+				. '</strong> '
+				. esc_html__( 'Deactivating and reactivating this plugin will schedule it again.', 'eduai-enquiry' )
+				. '</p></div>';
+		}
+
+		$last = $status['last'];
+
+		if ( empty( $last['at'] ) ) {
+			echo '<div class="notice notice-warning inline"><p>'
+				. esc_html__( 'It has never run. Until it does, nothing has been deleted regardless of the setting above.', 'eduai-enquiry' )
+				. '</p></div>';
+
+			return;
+		}
+
+		$parts = array();
+
+		foreach ( (array) ( $last['by_state'] ?? array() ) as $state => $n ) {
+			$parts[] = sprintf( '%d %s', (int) $n, esc_html( (string) $state ) );
+		}
+
+		printf(
+			'<p class="description">%s <strong>%s</strong> &middot; %s</p>',
+			esc_html__( 'Last run', 'eduai-enquiry' ),
+			esc_html( (string) $last['at'] ),
+			$parts
+				? sprintf(
+					/* translators: 1: total deleted, 2: breakdown by delivery state. */
+					esc_html__( '%1$d enquiries deleted (%2$s)', 'eduai-enquiry' ),
+					(int) ( $last['deleted'] ?? 0 ),
+					implode( ', ', $parts )
+				)
+				: esc_html__( 'nothing was old enough to delete', 'eduai-enquiry' )
+		);
+
+		if ( ! empty( $last['by_state']['failed'] ) || ! empty( $last['by_state']['retrying'] ) ) {
+			echo '<p class="description" style="color:#8A5A00">'
+				. esc_html__( 'Some of those had never reached the CRM. Retention is not a delivery problem — if that number is large, the webhook needs fixing rather than the enquiries keeping.', 'eduai-enquiry' )
+				. '</p>';
+		}
+	}
+
 	private static function leads(): void {
+		self::retention();
+
 		$rows = EduAI_Enquiry_Leads::recent( 25 );
 
 		echo '<h2>' . esc_html__( 'Recent enquiries', 'eduai-enquiry' ) . '</h2>';
