@@ -228,16 +228,44 @@
     row.appendChild(el('span', 'eq-fact__key', key));
     if (value == null || value === '') {
       var u = el('span', 'eq-fact__val eq-fact__val--unknown', t('notListed'));
+      u.setAttribute('dir', 'auto');
       row.appendChild(u);
     } else {
-      row.appendChild(el('span', 'eq-fact__val', String(value)));
+      var val = el('span', 'eq-fact__val', String(value));
+      val.setAttribute('dir', 'auto');
+      row.appendChild(val);
     }
     return row;
   }
 
   function courseCard(card) {
     var c = el('article', 'eq-card');
+    /*
+     * EVERY CARD FIELD CARRIES ITS OWN DIRECTION.
+     *
+     * The card block takes its dir from the message language, and the fields
+     * used to inherit it. That is wrong whenever a field is written in the
+     * other language — which here is the normal case, not the exception: all
+     * four course titles on this site are English, so an Arabic conversation
+     * renders English titles and descriptions inside an RTL box.
+     *
+     * The symptom is bidi reordering of the neutral characters at the edges.
+     * "Covers Linear Regression and LR." rendered as ".Covers Linear
+     * Regression and LR" — the full stop jumped to the visual start, because a
+     * trailing neutral takes the direction of the PARAGRAPH rather than of the
+     * text it follows. Invisible in the string; only visible on screen.
+     *
+     * dir="auto" asks the browser to take each field's direction from its own
+     * first strong character, so an English title is laid out LTR inside an
+     * otherwise RTL card and an Arabic one is not disturbed.
+     *
+     * Deliberately NOT applied to the message bubble: a recommendation reads
+     * "Machine Learning: يُغطي…", whose first strong character is Latin, so
+     * dir="auto" would lay out a whole Arabic sentence left-to-right. The
+     * bubble knows its language from the envelope and should keep using it.
+     */
     var h = el('p', 'eq-card__title');
+    h.setAttribute('dir', 'auto');
     if (card.url) {
       var a = el('a', null, card.title || '');
       a.href = card.url;
@@ -250,7 +278,11 @@
     // Description is the one field allowed to be absent rather than "Not
     // listed": a missing sentence is not a fact anyone was promised, and a row
     // reading "Description: not listed" is noise rather than honesty.
-    if (card.description) { c.appendChild(el('p', 'eq-card__desc', card.description)); }
+    if (card.description) {
+      var d = el('p', 'eq-card__desc', card.description);
+      d.setAttribute('dir', 'auto');
+      c.appendChild(d);
+    }
 
     var facts = el('div', 'eq-card__facts');
     facts.appendChild(fact(t('fDuration'), card.duration));
