@@ -371,6 +371,28 @@
 
     if (env.text) { frag.appendChild(bubble('bot', env.text, msgLang)); }
 
+    /*
+     * TWO-PHASE: the cards are known without asking a model, the sentence
+     * about them is not. Every other path answers in 130-288ms; only the
+     * written recommendation waits on someone else's server, at 1.4-2.1s.
+     *
+     * So phase one paints the cards now and reserves the slot the sentence
+     * will occupy — reserved BEFORE the cards are appended, so when the text
+     * arrives it fills a space that already existed and nothing below it
+     * moves. Filling a gap is invisible; inserting one shifts the cards a
+     * visitor may already be reading.
+     */
+    var slot = null;
+
+    if (env.meta && env.meta.follow_up && !env.text) {
+      slot = el('div', 'eq-msg eq-msg--bot');
+      var pend = el('div', 'eq-bubble eq-typing');
+      pend.setAttribute('aria-label', t('typing'));
+      pend.appendChild(el('span')); pend.appendChild(el('span')); pend.appendChild(el('span'));
+      slot.appendChild(pend);
+      frag.appendChild(slot);
+    }
+
     if (env.cards && env.cards.length) {
       var wrap = el('div', 'eq-msg eq-msg--bot');
       var cards = el('div', 'eq-cards');
@@ -403,6 +425,74 @@
     log.scrollTop = log.scrollHeight;
     // The live region carries the words, not the markup.
     if (env.text) { status.textContent = env.text; }
+
+    if (slot) { fillFollowUp(slot, env.meta.follow_up, msgLang); }
+  }
+
+  /*
+   * Phase two. Fills the reserved slot, or removes it.
+   *
+   * REMOVING IT IS THE IMPORTANT HALF. The cards are already on screen and
+   * already useful — they came from the catalogue, not from a model. If the
+   * sentence never arrives, the honest result is the cards without it, not a
+   * placeholder animating forever. A spinner that never resolves is a claim
+   * that something is still coming, and after the deadline that claim is
+   * false.
+   *
+   * The client keeps its own deadline as well as the engine's. Their timeout
+   * protects the server from a slow model; this one protects the visitor from
+   * a request that never returns at all, which their timeout cannot see.
+   */
+  function fillFollowUp(slot, follow, msgLang) {
+    var settled = false;
+
+    var give_up = function () {
+      if (settled) { return; }
+      settled = true;
+      if (slot.parentNode) { slot.parentNode.removeChild(slot); }
+    };
+
+    var timer = setTimeout(give_up, (follow && follow.timeout_ms) || 6000);
+
+    var url = (follow && follow.url) || CFG.recommendUrl || (CFG.root + 'recommend');
+
+    var req = STUB ? stubFollowUp() : post(url, { token: follow && follow.token, lang: lang, session: CFG.session || null });
+
+    req
+      .then(function (env2) {
+        if (settled) { return; }
+        settled = true;
+        clearTimeout(timer);
+        var text = env2 && env2.text;
+        if (!text) { give_up(); return; }
+        var l2 = (env2 && env2.lang) || msgLang;
+        var b = el('div', 'eq-bubble', text);
+        b.setAttribute('lang', l2);
+        b.setAttribute('dir', STR[l2] ? STR[l2].dir : 'auto');
+
+        /*
+         * Reserving the slot is not the same as reserving its HEIGHT, and I
+         * had claimed otherwise until it was measured: three dots are shorter
+         * than two lines of prose, so filling the slot grew it and pushed the
+         * cards 60px down the screen — under the eyes of a visitor already
+         * reading them.
+         *
+         * So take the height the slot gains and give it back to the scroll
+         * position. Everything below the slot then stays exactly where it was
+         * while the sentence appears in the space above it.
+         *
+         * Only the fill needs this. Removal shrinks the slot and the browser
+         * already compensates — measured at 367px before and after.
+         */
+        var before = slot.getBoundingClientRect().height;
+        slot.replaceChild(b, slot.firstChild);
+        var grew = slot.getBoundingClientRect().height - before;
+        if (grew > 0) { log.scrollTop += grew; }
+        // Announced only now: this is the first moment the sentence exists,
+        // and announcing the placeholder would have said nothing.
+        status.textContent = text;
+      })
+      .catch(function () { clearTimeout(timer); give_up(); });
   }
 
   /* ---------------------------------------------------------------- flow -- */
@@ -576,6 +666,28 @@
    * database actually holds and a card that only looks right on invented data
    * is a card that has never been tested.
    */
+  /*
+   * The second phase, stubbed. CFG.stubFollowUp: 'ok' fills the slot,
+   * 'fail' rejects and 'hang' never settles — the last one is the only way to
+   * exercise the client deadline, and the removal path is the half worth
+   * testing because it is what a visitor sees when the model is slow.
+   */
+  function stubFollowUp() {
+    var mode = CFG.stubFollowUp || 'ok';
+    if (mode === 'hang') { return new Promise(function () {}); }
+    if (mode === 'fail') { return new Promise(function (_, rej) { setTimeout(function () { rej(new Error('stub')); }, 500); }); }
+    return new Promise(function (r) {
+      setTimeout(function () {
+        r({
+          type: 'message', lang: lang,
+          text: lang === 'ar'
+            ? 'بناءً على ما ذكرته، أقترح البدء بدورة تعلم الآلة — فهي مجانية ومفتوحة للتسجيل الآن.'
+            : 'Based on what you have told me, I would start with Machine Learning — it is free and open for enrolment now.',
+        });
+      }, 1500);
+    });
+  }
+
   function stubReply(text) {
     var delay = 700;
     var ar = lang === 'ar';
@@ -598,6 +710,17 @@
                  : 'Here is what we have on file. Fields marked not listed have not been entered yet.',
         cards: [{ id: 228, title: 'Machine Learning', url: '#', description: null, duration: null, format: null, price: 'Free', schedule: null, cta: null }],
       };
+    } else if (/recommend|اقترح|أقترح/i.test(text)) {
+      // Phase one: cards now, no text, and a slot reserved for the sentence.
+      env = {
+        type: 'message', lang: lang,
+        cards: [
+          { id: 228, title: 'Machine Learning', url: '#', description: null, duration: null, format: null, price: 'Free', schedule: null, cta: null },
+          { id: 438, title: 'New', url: '#', description: null, duration: null, format: null, price: 'Open', schedule: null, cta: null },
+        ],
+        meta: { follow_up: { url: null, token: 'stub', timeout_ms: 6000 } },
+      };
+      delay = 200;
     } else if (/course|دورات|show all/i.test(text)) {
       env = {
         type: 'message', lang: lang,
