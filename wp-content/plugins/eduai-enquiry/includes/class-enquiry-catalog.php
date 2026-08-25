@@ -122,15 +122,38 @@ class EduAI_Enquiry_Catalog {
 		 * mechanics, but here is what we do run" is a useful answer, and the
 		 * caller is told which of the two happened so it can word it correctly.
 		 */
+		/*
+		 * Nothing matched the course itself — try the lessons inside it before
+		 * giving up and listing everything. See courses_via_lessons().
+		 */
 		if ( ! $found && $words ) {
+			$ids = self::courses_via_lessons( $words, $limit );
+
+			if ( $ids ) {
+				$inner = get_posts( array_merge( $args, array( 's' => '', 'post__in' => $ids, 'orderby' => 'post__in' ) ) );
+
+				if ( $inner ) {
+					return array_map(
+						static function ( $p ) {
+							$row            = self::record( $p );
+							$row['matched'] = 'lessons';
+
+							return $row;
+						},
+						$inner
+					);
+				}
+			}
+
 			unset( $args['s'] );
 
 			$found = get_posts( $args );
 
 			return array_map(
 				static function ( $p ) {
-					$row              = self::record( $p );
-					$row['fallback']  = true;
+					$row             = self::record( $p );
+					$row['fallback'] = true;
+					$row['matched']  = 'catalogue';
 
 					return $row;
 				},
@@ -152,6 +175,69 @@ class EduAI_Enquiry_Catalog {
 		}
 
 		return self::record( $post );
+	}
+
+	/**
+	 * Courses whose LESSONS match the words, when the course itself does not.
+	 *
+	 * On this install a course carries a title and nothing else, so WordPress
+	 * search over courses matches almost nothing — "regression" found no course
+	 * while a lesson called Linear Regression sat inside one. The keyword
+	 * search the specification asks for was therefore not failing on a hard
+	 * problem; it was reading the one place the words are not.
+	 *
+	 * Lesson titles are facts the lecturer typed, so matching on them is still
+	 * reporting rather than guessing. The caller is told the match came this
+	 * way, because "we run Machine Learning, which covers regression" is a
+	 * different sentence from "we have a course called regression".
+	 *
+	 * @param array $words Keywords.
+	 * @param int   $limit Maximum courses.
+	 * @return int[] Course ids, best first.
+	 */
+	private static function courses_via_lessons( array $words, int $limit ): array {
+		if ( ! $words || ! function_exists( 'learndash_get_course_id' ) ) {
+			return array();
+		}
+
+		$types = array_values(
+			array_filter(
+				array( 'sfwd-lessons', 'sfwd-topic' ),
+				static fn( $t ) => post_type_exists( $t )
+			)
+		);
+
+		if ( ! $types ) {
+			return array();
+		}
+
+		$lessons = get_posts(
+			array(
+				'post_type'           => $types,
+				'post_status'         => 'publish',
+				'posts_per_page'      => 40,
+				's'                   => implode( ' ', array_slice( $words, 0, 6 ) ),
+				'fields'              => 'ids',
+				'ignore_sticky_posts' => true,
+				'no_found_rows'       => true,
+			)
+		);
+
+		$courses = array();
+
+		foreach ( (array) $lessons as $lesson_id ) {
+			$course_id = (int) learndash_get_course_id( (int) $lesson_id );
+
+			// A lesson attached to no course cannot be offered to anybody, and
+			// four of them on this site are in exactly that state.
+			if ( $course_id > 0 && 'publish' === get_post_status( $course_id ) ) {
+				$courses[ $course_id ] = ( $courses[ $course_id ] ?? 0 ) + 1;
+			}
+		}
+
+		arsort( $courses );
+
+		return array_slice( array_keys( $courses ), 0, $limit );
 	}
 
 	/**
@@ -234,7 +320,7 @@ class EduAI_Enquiry_Catalog {
 
 		return array(
 			'id'              => $id,
-			'title'           => get_the_title( $post ),
+			'title'           => self::plain_title( $post ),
 			'url'             => get_permalink( $post ),
 
 			'description'     => $description,
@@ -256,6 +342,9 @@ class EduAI_Enquiry_Catalog {
 
 			'categories'      => self::terms( $id ),
 			'fallback'        => false,
+			// How this course came to be in the answer: by its own title or
+			// text, by a lesson inside it, or because nothing matched at all.
+			'matched'         => 'course',
 
 			'fields'          => $fields,
 		);
@@ -280,6 +369,22 @@ class EduAI_Enquiry_Catalog {
 		'woo'       => array( 'description', 'price' ),
 		'generic'   => array( 'description' ),
 	);
+
+	/**
+	 * A title as plain text.
+	 *
+	 * get_the_title() returns HTML — it runs the_title, which texturises and
+	 * entity-encodes. Everything in a record is plain text bound for JSON and
+	 * escaped again by whatever renders it, so an ampersand arrived at the
+	 * visitor as `&amp;amp;`. Caught in a derived description reading
+	 * "Courses, Lessons, &amp;amp; Topics"; the same applied to every course title,
+	 * where it had simply not been noticed because no course here contains one.
+	 *
+	 * @param int|WP_Post $post Post or id.
+	 */
+	private static function plain_title( $post ): string {
+		return trim( html_entity_decode( wp_strip_all_tags( (string) get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' ) );
+	}
 
 	/**
 	 * How a field came to have the value it has.
@@ -344,7 +449,7 @@ class EduAI_Enquiry_Catalog {
 		$titles = array();
 
 		foreach ( $lessons as $lesson ) {
-			$title = trim( (string) get_the_title( is_object( $lesson ) ? $lesson->ID : (int) $lesson ) );
+			$title = self::plain_title( is_object( $lesson ) ? $lesson->ID : (int) $lesson );
 
 			/*
 			 * Placeholder titles are dropped rather than listed. "Covers
@@ -353,6 +458,16 @@ class EduAI_Enquiry_Catalog {
 			 * no information, and it reads as though somebody wrote it.
 			 */
 			if ( '' === $title || preg_match( '/^(lesson|section|topic|module|part|unit|new)\s*\d*$/i', $title ) ) {
+				continue;
+			}
+
+			// "Lesson 2: Building a Course" carries a real title behind a
+			// numbering prefix. Listing the prefix makes the sentence read as
+			// a table of contents rather than a description of the subject.
+			$title = (string) preg_replace( '/^(lesson|section|topic|module|part|unit)\s*\d*\s*[:\x{2013}\x{2014}-]\s*/iu', '', $title );
+			$title = trim( $title );
+
+			if ( '' === $title ) {
 				continue;
 			}
 
@@ -386,6 +501,18 @@ class EduAI_Enquiry_Catalog {
 	 * A human description, from the first place that has one.
 	 */
 	private static function description( $post ): string {
+		/*
+		 * The course-grid short description first, because it is the field a
+		 * LearnDash site actually fills in — and the only real description on
+		 * this install lived there while this method read past it and reported
+		 * the course as having none.
+		 */
+		$short = trim( (string) get_post_meta( (int) $post->ID, '_learndash_course_grid_short_description', true ) );
+
+		if ( '' !== $short ) {
+			return wp_strip_all_tags( $short );
+		}
+
 		$excerpt = trim( (string) $post->post_excerpt );
 
 		if ( '' !== $excerpt ) {
