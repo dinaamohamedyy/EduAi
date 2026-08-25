@@ -187,3 +187,36 @@ function scholaris_has_rail(): bool {
 
 	return ! is_front_page() || is_user_logged_in();
 }
+
+/**
+ * The active LMS's course post type, or '' when there is no LMS.
+ *
+ * The front page counted `courses`, which is TUTOR's name for it. After the
+ * LearnDash migration that post type no longer exists, so post_type_exists()
+ * was false, the counter stayed at its initial 0, and the hero told every
+ * visitor the site runs "0 COURSES" while four were published and the enquiry
+ * widget was listing them by name on the same screen.
+ *
+ * I fixed this same class of bug in scholaris_dashboard_data() and then left
+ * this one standing, which is the whole point of having a helper: the fix
+ * belongs somewhere a third caller will find it rather than in each place it
+ * happens to bite.
+ *
+ * EduAI_LMS is the authority when the plugin is present. The fallback exists
+ * because the theme must keep working without it, and it prefers LearnDash for
+ * the same reason the seam does — during a conversion both are installed, and
+ * a half-migrated site should read as its destination.
+ */
+function scholaris_course_post_type(): string {
+	if ( class_exists( 'EduAI_LMS' ) && EduAI_LMS::active() ) {
+		return EduAI_LMS::course_type();
+	}
+
+	foreach ( array( 'sfwd-courses', 'courses' ) as $sc_pt ) {
+		if ( post_type_exists( $sc_pt ) ) {
+			return $sc_pt;
+		}
+	}
+
+	return '';
+}

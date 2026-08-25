@@ -78,9 +78,12 @@ if ( is_user_logged_in() ) {
 					$material_count = isset( $counts->publish ) ? (int) $counts->publish : 0;
 				}
 
+				// Whichever LMS is active names this differently; see
+				// scholaris_course_post_type() for why the literal was wrong.
 				$course_count = 0;
-				if ( post_type_exists( 'courses' ) ) {
-					$counts       = wp_count_posts( 'courses' );
+				$course_type  = scholaris_course_post_type();
+				if ( $course_type && post_type_exists( $course_type ) ) {
+					$counts       = wp_count_posts( $course_type );
 					$course_count = isset( $counts->publish ) ? (int) $counts->publish : 0;
 				}
 

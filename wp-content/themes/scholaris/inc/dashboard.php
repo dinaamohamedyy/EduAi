@@ -58,7 +58,7 @@ function scholaris_dashboard_data( int $user_id = 0 ): array {
 	 * of this dashboard: say what is actually true, and do not let one message
 	 * cover two different facts.
 	 */
-	$sc_course_type = class_exists( 'EduAI_LMS' ) && EduAI_LMS::active() ? EduAI_LMS::course_type() : '';
+	$sc_course_type = scholaris_course_post_type();
 	$sc_any_courses = false;
 
 	if ( $sc_course_type ) {
