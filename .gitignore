@@ -22,6 +22,7 @@ wp-config-local.php
 /wp-content/plugins/*
 !/wp-content/plugins/eduai-assistant/
 !/wp-content/plugins/scholaris-library/
+!/wp-content/plugins/eduai-enquiry/
 /wp-content/themes/*
 !/wp-content/themes/scholaris/
 

@@ -1,0 +1,370 @@
+/* ==========================================================================
+   EduAI Enquiry — the sales/enquiry widget
+   A different product from the study assistant: this one talks to visitors who
+   are not logged in. Separate plugin, separate prefix (eq-), no shared rules,
+   so the whole thing can be lifted to another site without dragging the
+   assistant's stylesheet behind it.
+
+   RTL IS NOT A MIRROR APPLIED AT THE END. Every inset, margin, padding, radius
+   and border in this file is a LOGICAL property — inline-start / inline-end
+   rather than left / right — so `dir="rtl"` flips the layout with no `[dir]`
+   overrides anywhere below. There is exactly one physical exception and it is
+   commented where it appears.
+
+   The language can change mid-conversation, so DIRECTION IS PER MESSAGE, not
+   per widget: an Arabic reply in an English thread carries its own dir and
+   reads correctly beside the English one above it.
+   ========================================================================== */
+
+.eq-root {
+  /* Self-contained: falls back to its own values when the theme's tokens are
+     absent, because this plugin is meant to be transferable and cannot assume
+     Scholaris is underneath it. */
+  --eq-brand: var(--brand, 224 90% 62%);
+  --eq-brand-strong: var(--brand-strong, 224 72% 48%);
+  --eq-on-brand: var(--on-brand, 0 0% 100%);
+  --eq-surface: var(--surface, 0 0% 100%);
+  --eq-bg: var(--bg-subtle, 210 22% 96%);
+  --eq-text: var(--text, 222 30% 11%);
+  --eq-muted: var(--text-muted, 220 12% 40%);
+  --eq-faint: var(--text-faint, 220 9% 55%);
+  --eq-border: var(--border, 214 18% 90%);
+  --eq-danger: 8 64% 46%;
+
+  --eq-radius: 14px;
+  --eq-radius-s: 9px;
+  --eq-gap: 0.75rem;
+  --eq-font: var(--font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
+
+  /* How far the launcher sits from the corner, and how far the panel clears
+     it. JS raises --eq-stack when another floating launcher is already on the
+     page, measured from that element rather than assumed. */
+  --eq-inset: clamp(0.9rem, 3vw, 1.75rem);
+  --eq-stack: 0px;
+
+  font-family: var(--eq-font);
+  color: hsl(var(--eq-text));
+}
+
+/* Arabic wants a face that actually has Arabic glyphs; without this the
+   browser falls back per-glyph and the line-height jumps between scripts. */
+.eq-root [dir="rtl"] {
+  font-family: "Noto Sans Arabic", "Segoe UI", Tahoma, var(--eq-font);
+  /* Arabic ascenders and descenders need more room than Latin at the same
+     size, so the tighter Latin leading looks cramped applied to it. */
+  line-height: 1.85;
+}
+
+/* ------------------------------------------------------------- launcher --- */
+.eq-launcher {
+  position: fixed;
+  inset-inline-end: var(--eq-inset);
+  inset-block-end: calc(var(--eq-inset) + var(--eq-stack));
+  /* Below the study assistant's 9998 on purpose: if both are ever open, the
+     one the visitor summoned last should not be buried, and the assistant is
+     the logged-in tool with more state to lose. */
+  z-index: 9990;
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.7rem 1.1rem;
+  border: 0; border-radius: 999px;
+  background: hsl(var(--eq-brand)); color: hsl(var(--eq-on-brand));
+  font: inherit; font-size: 0.95rem; font-weight: 650;
+  cursor: pointer;
+  box-shadow: 0 6px 16px hsl(222 40% 12% / 0.18), 0 20px 40px hsl(222 40% 12% / 0.14);
+  transition: background-color 140ms ease, transform 140ms ease;
+}
+.eq-launcher:hover { background: hsl(var(--eq-brand-strong)); }
+.eq-launcher:active { transform: translateY(1px); }
+.eq-launcher:focus-visible { outline: 3px solid hsl(var(--eq-brand) / 0.45); outline-offset: 3px; }
+.eq-launcher[hidden] { display: none; }
+.eq-launcher__icon { flex: none; }
+
+/* ---------------------------------------------------------------- panel --- */
+.eq-panel {
+  position: fixed;
+  inset-inline-end: var(--eq-inset);
+  inset-block-end: calc(var(--eq-inset) + var(--eq-stack));
+  z-index: 9991;
+  width: min(390px, calc(100vw - 2 * var(--eq-inset)));
+  max-height: min(640px, calc(100vh - 2 * var(--eq-inset)));
+  display: flex; flex-direction: column;
+  background: hsl(var(--eq-surface));
+  border: 1px solid hsl(var(--eq-border));
+  border-radius: var(--eq-radius);
+  box-shadow: 0 10px 24px hsl(222 40% 12% / 0.16), 0 30px 60px hsl(222 40% 12% / 0.18);
+  overflow: hidden;
+}
+.eq-panel[hidden] { display: none; }
+
+/*
+ * On a phone the panel is the screen. Not a drawer with its own scroll
+ * context and not an overlay to dismiss — one full-bleed surface, because a
+ * 390px card floating on a 375px viewport is a panel with nowhere to go.
+ */
+@media (max-width: 480px) {
+  .eq-panel {
+    inset: 0;
+    width: 100%; max-height: none;
+    border: 0; border-radius: 0;
+  }
+}
+
+.eq-head {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  background: hsl(var(--eq-brand)); color: hsl(var(--eq-on-brand));
+  flex: none;
+}
+.eq-head__title { margin: 0; font-size: 1rem; font-weight: 650; }
+.eq-head__sub { margin: 0; font-size: 0.75rem; opacity: 0.85; }
+.eq-head__actions { margin-inline-start: auto; display: flex; gap: 0.3rem; flex: none; }
+
+.eq-iconbtn {
+  inline-size: 32px; block-size: 32px;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--eq-radius-s);
+  background: hsl(var(--eq-on-brand) / 0.14); color: inherit;
+  cursor: pointer; padding: 0; font: inherit;
+}
+.eq-iconbtn:hover { background: hsl(var(--eq-on-brand) / 0.26); }
+.eq-iconbtn:focus-visible { outline: 2px solid hsl(var(--eq-on-brand)); outline-offset: 2px; }
+
+/* The language toggle is text, not a flag. A flag names a country and this is
+   a language — Arabic is not one country's, and the visitor is picking how to
+   read, not where they are from. */
+.eq-lang {
+  border: 0; border-radius: var(--eq-radius-s);
+  background: hsl(var(--eq-on-brand) / 0.14); color: inherit;
+  font: inherit; font-size: 0.78rem; font-weight: 650;
+  padding: 0.3rem 0.6rem; cursor: pointer;
+}
+.eq-lang:hover { background: hsl(var(--eq-on-brand) / 0.26); }
+.eq-lang:focus-visible { outline: 2px solid hsl(var(--eq-on-brand)); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------ log --- */
+.eq-log {
+  flex: 1; min-block-size: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 1rem;
+  display: flex; flex-direction: column; gap: var(--eq-gap);
+  background: hsl(var(--eq-bg));
+  scrollbar-width: thin;
+}
+
+.eq-msg { display: flex; max-inline-size: 90%; }
+/* Bubbles take their side from the WRITING DIRECTION, not from left/right, so
+   a visitor's message sits on the trailing edge in both scripts without a
+   single [dir] override. */
+.eq-msg--bot { margin-inline-end: auto; }
+.eq-msg--user { margin-inline-start: auto; }
+
+.eq-bubble {
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--eq-radius);
+  background: hsl(var(--eq-surface));
+  border: 1px solid hsl(var(--eq-border));
+  font-size: 0.92rem; line-height: 1.6;
+  /* A long URL or an unbroken token must not widen the panel. */
+  min-inline-size: 0; overflow-wrap: anywhere;
+}
+/* The corner nearest the speaker is squared off. Written with logical corner
+   properties so the tail flips with direction automatically. */
+.eq-msg--bot .eq-bubble { border-end-start-radius: 4px; }
+.eq-msg--user .eq-bubble {
+  background: hsl(var(--eq-brand)); color: hsl(var(--eq-on-brand));
+  border-color: hsl(var(--eq-brand));
+  border-end-end-radius: 4px;
+}
+
+/* --------------------------------------------------------------- typing --- */
+/*
+ * Shown the instant a message is sent rather than when the reply starts, so
+ * the widget is never silent. The engine's budget is under 2s end to end and
+ * the strongest model measured 1.9s of that — an unacknowledged send inside
+ * that window reads as a dropped message and gets sent again.
+ */
+.eq-typing { display: inline-flex; gap: 4px; align-items: center; padding: 0.7rem 0.85rem; }
+.eq-typing span {
+  inline-size: 7px; block-size: 7px; border-radius: 50%;
+  background: hsl(var(--eq-faint));
+  animation: eq-blink 1.15s infinite ease-in-out;
+}
+.eq-typing span:nth-child(2) { animation-delay: 0.16s; }
+.eq-typing span:nth-child(3) { animation-delay: 0.32s; }
+@keyframes eq-blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .eq-typing span { animation: none; opacity: 0.55; }
+  .eq-launcher, .eq-iconbtn { transition: none; }
+}
+
+/* ----------------------------------------------------------- course card --- */
+.eq-cards { display: grid; gap: 0.6rem; }
+.eq-card {
+  border: 1px solid hsl(var(--eq-border));
+  border-radius: var(--eq-radius);
+  background: hsl(var(--eq-surface));
+  padding: 0.8rem;
+  min-inline-size: 0;
+}
+.eq-card__title { margin: 0 0 0.25rem; font-size: 0.95rem; font-weight: 650; }
+.eq-card__title a { color: inherit; text-decoration: none; }
+.eq-card__title a:hover { text-decoration: underline; }
+.eq-card__desc {
+  margin: 0 0 0.5rem; font-size: 0.85rem; color: hsl(var(--eq-muted));
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/*
+ * THE HONEST FIELD LIST.
+ *
+ * Measured on the real data: four courses, no descriptions, duration empty on
+ * all four, price only free/open, no categories, no schedule field at all. So
+ * the common case for this card is NOT the full one — it is a title and four
+ * unknowns, and a card that hides unknown rows would render as a bare title
+ * and teach the visitor nothing about what is missing.
+ *
+ * Every row is therefore always present, and an unknown value prints "Not
+ * listed" in muted type. That is a deliberate trade: slightly duller than a
+ * card that hides empties, and it can never imply a fee or a date that nobody
+ * entered. Inventing one is the same failure as answering confidently about
+ * photosynthesis, and it costs more here because a fee is a promise.
+ */
+.eq-card__facts { display: grid; gap: 0.3rem; margin: 0; font-size: 0.82rem; }
+.eq-fact { display: flex; gap: 0.5rem; align-items: baseline; min-inline-size: 0; }
+.eq-fact__key {
+  flex: none; inline-size: 5.5rem;
+  color: hsl(var(--eq-faint));
+  font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.eq-fact__val { min-inline-size: 0; }
+.eq-fact__val--unknown { color: hsl(var(--eq-faint)); font-style: italic; }
+.eq-card__cta { margin-block-start: 0.65rem; }
+
+/* ----------------------------------------------------------------- chips --- */
+.eq-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.eq-chip {
+  border: 1px solid hsl(var(--eq-brand) / 0.45);
+  border-radius: 999px;
+  background: hsl(var(--eq-surface)); color: hsl(var(--eq-brand-strong));
+  font: inherit; font-size: 0.83rem; font-weight: 600;
+  padding: 0.4rem 0.8rem; cursor: pointer;
+  /* Chips are the guided flow, so they are real buttons: reachable by tab,
+     operable by Enter and Space, and announced as controls. */
+}
+.eq-chip:hover { background: hsl(var(--eq-brand) / 0.08); }
+.eq-chip:focus-visible { outline: 3px solid hsl(var(--eq-brand) / 0.4); outline-offset: 2px; }
+.eq-chip[disabled] { opacity: 0.5; cursor: default; }
+
+/* ------------------------------------------------------------------ form --- */
+.eq-form {
+  border: 1px solid hsl(var(--eq-border)); border-radius: var(--eq-radius);
+  background: hsl(var(--eq-surface)); padding: 0.85rem;
+  display: grid; gap: 0.6rem;
+}
+.eq-form__title { margin: 0; font-size: 0.92rem; font-weight: 650; }
+.eq-field { display: grid; gap: 0.25rem; min-inline-size: 0; }
+.eq-field label { font-size: 0.78rem; color: hsl(var(--eq-muted)); }
+.eq-field input, .eq-field textarea, .eq-field select {
+  font: inherit; font-size: 0.9rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid hsl(var(--eq-border)); border-radius: var(--eq-radius-s);
+  background: hsl(var(--eq-surface)); color: hsl(var(--eq-text));
+  inline-size: 100%; min-inline-size: 0;
+}
+.eq-field input:focus-visible, .eq-field textarea:focus-visible {
+  outline: none; border-color: hsl(var(--eq-brand));
+  box-shadow: 0 0 0 3px hsl(var(--eq-brand) / 0.22);
+}
+.eq-field__err { font-size: 0.76rem; color: hsl(var(--eq-danger)); }
+.eq-field--invalid input { border-color: hsl(var(--eq-danger)); }
+.eq-consent { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.78rem; color: hsl(var(--eq-muted)); }
+.eq-consent input { inline-size: auto; margin-block-start: 0.15rem; flex: none; }
+
+.eq-btn {
+  border: 1px solid hsl(var(--eq-brand)); border-radius: var(--eq-radius-s);
+  background: hsl(var(--eq-brand)); color: hsl(var(--eq-on-brand));
+  font: inherit; font-size: 0.88rem; font-weight: 650;
+  padding: 0.5rem 0.9rem; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.eq-btn:hover { background: hsl(var(--eq-brand-strong)); border-color: hsl(var(--eq-brand-strong)); }
+.eq-btn:focus-visible { outline: 3px solid hsl(var(--eq-brand) / 0.4); outline-offset: 2px; }
+.eq-btn--quiet {
+  background: hsl(var(--eq-surface)); color: hsl(var(--eq-text));
+  border-color: hsl(var(--eq-border));
+}
+.eq-btn--quiet:hover { background: hsl(var(--eq-bg)); border-color: hsl(var(--eq-border)); }
+
+/* -------------------------------------------------------------- handoff --- */
+/*
+ * "Talk to a human" is a state, not a message: once it is on, the visitor is
+ * waiting for a person and the bot must stop implying it is still answering.
+ * The composer stays usable — what they type now is for the human.
+ */
+.eq-handoff {
+  border: 1px solid hsl(var(--eq-brand) / 0.4);
+  border-inline-start: 3px solid hsl(var(--eq-brand));
+  border-radius: var(--eq-radius);
+  background: hsl(var(--eq-brand) / 0.06);
+  padding: 0.7rem 0.85rem;
+  font-size: 0.86rem;
+  display: grid; gap: 0.35rem;
+}
+.eq-handoff__title { font-weight: 650; }
+.eq-handoff__note { color: hsl(var(--eq-muted)); }
+
+/* ------------------------------------------------------------- composer --- */
+.eq-composer {
+  flex: none;
+  display: flex; gap: 0.5rem; align-items: flex-end;
+  padding: 0.7rem;
+  border-block-start: 1px solid hsl(var(--eq-border));
+  background: hsl(var(--eq-surface));
+}
+.eq-composer textarea {
+  flex: 1; min-inline-size: 0;
+  font: inherit; font-size: 0.9rem; line-height: 1.5;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid hsl(var(--eq-border)); border-radius: var(--eq-radius-s);
+  background: hsl(var(--eq-surface)); color: hsl(var(--eq-text));
+  resize: none; max-block-size: 7rem;
+}
+.eq-composer textarea:focus-visible {
+  outline: none; border-color: hsl(var(--eq-brand));
+  box-shadow: 0 0 0 3px hsl(var(--eq-brand) / 0.22);
+}
+.eq-send {
+  flex: none;
+  inline-size: 38px; block-size: 38px;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--eq-radius-s);
+  background: hsl(var(--eq-brand)); color: hsl(var(--eq-on-brand));
+  cursor: pointer; padding: 0;
+}
+.eq-send:hover { background: hsl(var(--eq-brand-strong)); }
+.eq-send:focus-visible { outline: 3px solid hsl(var(--eq-brand) / 0.4); outline-offset: 2px; }
+.eq-send[disabled] { opacity: 0.45; cursor: default; }
+/*
+ * THE ONE PHYSICAL PROPERTY IN THIS FILE, and it is correct that it is
+ * physical. The paper-plane glyph points right in both scripts as drawn, so in
+ * RTL it must be mirrored to point along the direction of sending. Everything
+ * else here flips because the layout flips; this flips because the ICON has a
+ * handedness the layout does not.
+ */
+[dir="rtl"] .eq-send svg { transform: scaleX(-1); }
+
+/* --------------------------------------------------------- screen reader --- */
+.eq-sr {
+  position: absolute; inline-size: 1px; block-size: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* ---------------------------------------------------------------- error --- */
+.eq-error {
+  border-inline-start: 3px solid hsl(var(--eq-danger));
+  background: hsl(var(--eq-danger) / 0.07);
+  padding: 0.6rem 0.8rem; border-radius: var(--eq-radius-s);
+  font-size: 0.85rem;
+}
