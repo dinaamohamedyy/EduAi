@@ -66,6 +66,13 @@ That is a coordination shape, not three individual lapses, and the fix is a plac
     to commit"* while their content was already on origin. The 24 lines survived — **the commit
     message explaining why they existed did not**, and on this project the rationale is the
     expensive half. Staging is not private, and the exposure shrinks only by closing the gap.
+    **Addendum, 25 Aug 2026: echo what you staged before you commit.** `git add <one file>` does
+    not mean one file is staged — the deployment engineer ran it expecting one and their guard
+    printed **six**, the other five being another session's in-flight plugin edits already sitting
+    in the shared index. Their mount landed inside `e7ce583`, someone else's commit, and again
+    only the message was lost. **Printing the staged list is the only reason they knew it happened
+    rather than assuming their commit worked.** A silent `git add` in this tree tells you nothing
+    about what you are about to commit.
 11. **"Hold this, don't publish it yet" is unenforceable on `main`.** Six sessions push on a
     short cycle, so a commit on `main` is public within seconds whether or not its author types
     `git push` — one was pushed by another session while its author was writing a message
