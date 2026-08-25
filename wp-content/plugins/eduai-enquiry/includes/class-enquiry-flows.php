@@ -204,8 +204,20 @@ class EduAI_Enquiry_Flows {
 			);
 		}
 
-		$fell_back = ! empty( $courses[0]['fallback'] );
+		/*
+		 * WHY these matched changes what the sentence can honestly say.
+		 *
+		 * A course whose LESSONS mention regression is not "a course called
+		 * regression". Back-end's `matched` carries the difference, and only
+		 * this layer can turn it into words.
+		 */
+		$matched   = $courses[0]['matched'] ?? 'course';
+		$fell_back = 'catalogue' === $matched || ! empty( $courses[0]['fallback'] );
 		$text      = $fell_back ? EduAI_Enquiry_I18n::t( 'no_courses', $language ) : '';
+
+		if ( ! $fell_back && 'lessons' === $matched ) {
+			$text = EduAI_Enquiry_I18n::t( 'covered_inside', $language );
+		}
 
 		/*
 		 * When the visitor asked about money and we do not have it, say so in
@@ -213,7 +225,10 @@ class EduAI_Enquiry_Flows {
 		 * as "free" to most people, which is the expensive misreading.
 		 */
 		if ( $emphasise_price ) {
-			$unknown = array_filter( $courses, static fn( $c ) => ! $c['price_known'] );
+			$unknown = array_filter(
+				$courses,
+				static fn( $c ) => 'present' !== EduAI_Enquiry_Catalog::field( $c, 'price' )['status']
+			);
 
 			if ( $unknown ) {
 				$text = trim( $text . ' ' . EduAI_Enquiry_I18n::t( 'price_unknown_note', $language ) );
@@ -593,33 +608,54 @@ class EduAI_Enquiry_Flows {
 		/*
 		 * EVERY KEY IS ALWAYS PRESENT, and unknown is an explicit null.
 		 *
-		 * Front-end asked for this and the reason is exact: once JSON reaches
-		 * JavaScript, an omitted key and a null are indistinguishable. Both
-		 * would print "not listed" — one because we said so, the other because
-		 * the engine had a bug. That is the difference between a card that is
-		 * honest and a card that is lucky.
+		 * Front-end's one hard ask, and the reason is exact: once JSON reaches
+		 * JavaScript an omitted key and a null render identically, so "we do not
+		 * know the fee" and "the engine forgot to send the fee" become the same
+		 * card. Honest versus lucky.
+		 *
+		 * FOUR STATUSES, NOT A BOOLEAN. Back-end's contract distinguishes a
+		 * field the source HAS and nobody filled in (`not_set` — say "not
+		 * listed") from one the source has no concept of (`unsupported` — say
+		 * nothing at all). My old `*_known` flag collapsed those, so a
+		 * WooCommerce site with no notion of a schedule would have been told a
+		 * schedule was "not listed", which is a claim about a field that does
+		 * not exist.
+		 *
+		 * The statuses travel ALONGSIDE the values rather than replacing them,
+		 * so the front end's existing renderer keeps working unchanged and can
+		 * adopt them when it wants to.
 		 */
-		$price = null;
+		$status = array();
+		$value  = array();
 
-		if ( $c['price_known'] ) {
-			// Free and open are a controlled vocabulary, so the word is chosen
-			// in the VISITOR's language rather than the site's.
-			$price = '' !== $c['price_token']
-				? EduAI_Enquiry_I18n::t( 'free' === $c['price_token'] ? 'free' : 'open', $language )
-				: $c['price'];
+		foreach ( array( 'description', 'duration', 'format', 'price', 'schedule' ) as $key ) {
+			$field          = EduAI_Enquiry_Catalog::field( $c, $key );
+			$status[ $key ] = $field['status'];
+
+			$value[ $key ] = in_array( $field['status'], array( 'present', 'derived' ), true )
+				? $field['value']
+				: null;
+		}
+
+		// Free and open are a controlled vocabulary, so the word is chosen in
+		// the VISITOR's language rather than the site's. A real amount is not.
+		if ( null !== $value['price'] && '' !== (string) ( $c['price_token'] ?? '' ) ) {
+			$value['price'] = EduAI_Enquiry_I18n::t( 'free' === $c['price_token'] ? 'free' : 'open', $language );
 		}
 
 		return array(
 			'id'          => $c['id'],
 			'title'       => $c['title'],
 			'url'         => $c['url'],
-			'description' => $c['description_known'] ? $c['description'] : null,
-			'duration'    => $c['duration_known'] ? $c['duration'] : null,
-			'format'      => $c['format_known'] ? $c['format'] : null,
-			'price'       => $price,
-			'schedule'    => $c['schedule_known'] ? $c['schedule'] : null,
+			'description' => $value['description'],
+			'duration'    => $value['duration'],
+			'format'      => $value['format'],
+			'price'       => $value['price'],
+			'schedule'    => $value['schedule'],
 			'cta'         => null,
-			'categories'  => $c['categories'],
+			'categories'  => $c['categories'] ?? array(),
+			'status'      => $status,
+			'matched'     => $c['matched'] ?? 'course',
 		);
 	}
 

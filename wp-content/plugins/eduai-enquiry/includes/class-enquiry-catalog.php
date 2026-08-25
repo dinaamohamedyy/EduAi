@@ -382,7 +382,16 @@ class EduAI_Enquiry_Catalog {
 	 *
 	 * @param int|WP_Post $post Post or id.
 	 */
-	private static function plain_title( $post ): string {
+	/*
+	 * Public because the leads table needs it too.
+	 *
+	 * get_the_title() returns HTML entities, and this plugin sends two things
+	 * to places that escape again downstream: the CRM payload and the personal-
+	 * data export. An ampersand in a course title reached both as `&amp;`.
+	 * Widened rather than copied - a second decoder is how two of them end up
+	 * disagreeing about what plain text means.
+	 */
+	public static function plain_title( $post ): string {
 		return trim( html_entity_decode( wp_strip_all_tags( (string) get_the_title( $post ) ), ENT_QUOTES, 'UTF-8' ) );
 	}
 

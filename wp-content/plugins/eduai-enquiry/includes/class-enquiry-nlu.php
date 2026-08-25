@@ -71,7 +71,7 @@ class EduAI_Enquiry_NLU {
 		'human'     => array(
 			'/\b(human|agent|person|representative|advisor|adviser|someone real|talk to (a|someone))\b/iu',
 			'/\b(call me|contact me|speak to)\b/iu',
-			'/(موظف|شخص|انسان|بشري|مستشار|احد|اتحدث مع|اكلم|خدمه العملاء|خدمة العملاء)/u',
+			'/(موظف|شخص|انسان|بشري|مستشار|احد|اتحدث مع|اكلم|خدمه العملاء|خدمه العملاء)/u',
 		),
 		'register'  => array(
 			'/\b(register|enrol|enroll|sign ?up|join|apply|how do i (start|begin|get))\b/iu',
@@ -79,15 +79,20 @@ class EduAI_Enquiry_NLU {
 		),
 		'price'     => array(
 			'/\b(price|cost|fee|fees|how much|tuition|payment|discount|free)\b/iu',
-			'/(سعر|السعر|تكلفة|التكلفة|رسوم|كم يكلف|كم سعر|مجان|مجاني|مجانا|خصم)/u',
+			'/(سعر|السعر|تكلفه|التكلفه|رسوم|كم يكلف|كم سعر|مجان|مجاني|مجانا|خصم|خصومات|كم ثمن)/u',
 		),
 		'recommend' => array(
 			'/\b(recommend|suggest|advice|advise|which (course|one)|what should i|best (course|for me)|help me (choose|pick))\b/iu',
-			'/(انصح|تنصح|اقترح|توصي|توصية|ايه افضل|اي دورة|ماذا اختار|ساعدني اختار)/u',
+			'/(انصح|تنصح|اقترح|توصي|توصيه|ايه افضل|اي دوره|ماذا اختار|ساعدني اختار)/u',
 		),
 		'discover'  => array(
-			'/\b(course|courses|class|classes|programme|program|training|workshop|do you (have|offer)|looking for|learn)\b/iu',
-			'/(دورة|دوره|دورات|كورس|كورسات|برنامج|تدريب|ورشة|عندكم|ابحث عن|اتعلم|تعليم)/u',
+			// "is there something available about regression" carries no word
+			// like "course" at all, and was escalating to the model every time.
+			// The shape of the question is the signal, not the noun.
+			'/\b(course|courses|class|classes|programme|program|training|workshop|learn|teach|study)\b/iu',
+			'/\b(do you (have|offer|run|teach)|is there|are there|got anything|looking for|interested in|anything (on|about)|something (on|about))\b/iu',
+			'/(دوره|دوره|دورات|كورس|كورسات|برنامج|تدريب|ورشه|عندكم|ابحث عن|اتعلم|تعليم)/u',
+			'/(هل يوجد|هل توجد|يوجد شي|توجد شي|لديكم|تقدمون|متوفر)/u',
 		),
 		'greeting'  => array(
 			'/^\s*(hi|hey|hello|good (morning|afternoon|evening)|salam|salaam)\b/iu',
@@ -315,7 +320,7 @@ class EduAI_Enquiry_NLU {
 			'topics'  => self::topics( $norm ),
 		);
 
-		if ( preg_match( '/\b(beginner|basic|introduction|intro|starter|new to)\b/iu', $norm ) || preg_match( '/(مبتدي|مبتدئ|اساسي|بداية|مقدمة|مقدمه)/u', $norm ) ) {
+		if ( preg_match( '/\b(beginner|basic|introduction|intro|starter|new to)\b/iu', $norm ) || preg_match( '/(مبتدي|مبتدي|اساسي|بدايه|مقدمه|مقدمه)/u', $norm ) ) {
 			$out['level'] = 'beginner';
 		} elseif ( preg_match( '/\b(advanced|expert|deep|professional)\b/iu', $norm ) || preg_match( '/(متقدم|احترافي|محترف)/u', $norm ) ) {
 			$out['level'] = 'advanced';
@@ -331,7 +336,7 @@ class EduAI_Enquiry_NLU {
 
 		if ( preg_match( '/\bfree\b/iu', $norm ) || preg_match( '/(مجان|مجاني|مجانا)/u', $norm ) ) {
 			$out['free'] = true;
-		} elseif ( preg_match( '/\b(paid|premium)\b/iu', $norm ) || preg_match( '/(مدفوع|مدفوعة)/u', $norm ) ) {
+		} elseif ( preg_match( '/\b(paid|premium)\b/iu', $norm ) || preg_match( '/(مدفوع|مدفوعه)/u', $norm ) ) {
 			$out['free'] = false;
 		}
 
@@ -480,7 +485,14 @@ class EduAI_Enquiry_NLU {
 	private static function topics( string $norm ): array {
 		$stop = array(
 			'the','a','an','and','or','of','for','to','in','on','is','are','do','does','you','i','me','my','we','it','that','this','have','has','want','need','like','about','with','can','could','would','please','course','courses','class','classes','looking','learn','study','tell','show','give','any','some','what','which','how','much','there','your',
-			'في','من','على','عن','الى','هل','ما','ماذا','كيف','هذا','هذه','اريد','ابحث','عندكم','لديكم','دورة','دوره','دورات','كورس','كورسات','ال','و','او','مع','التي','الذي','يوجد','ممكن','لو','سمحت',
+			// Filler that surrounds a real query and destroys it. "do you have
+			// anything on classification" searched for `anything classification`
+			// and matched nothing, so a course NAMED Classification fell through to
+			// listing the whole catalogue. Measured, not guessed: the same question
+			// with the filler removed matches on the title.
+			'anything','something','some','available','offer','offers','offered','offering',
+			'know','find','get','more','info','information','subject','stuff','things','thing',
+			'في','من','على','عن','الى','هل','ما','ماذا','كيف','هذا','هذه','اريد','ابحث','عندكم','لديكم','دورة','دوره','دورات','كورس','كورسات','ال','و','او','مع','التي','الذي','يوجد','ممكن','لو','سمحت','شي','شيء','متوفر','متاح','اعرف','اجد','اكثر','معلومات','موضوع','مجال',
 		);
 
 		$words = preg_split( '/[^\p{L}\p{N}+#]+/u', mb_strtolower( $norm ), -1, PREG_SPLIT_NO_EMPTY );

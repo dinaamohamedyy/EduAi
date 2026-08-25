@@ -49,6 +49,7 @@ my $PREVIEW = "design/preview.html";
 my $LIVE    = "preview.html";
 
 my @checks = (
+    [ 'arabic-patterns-normalised' => \&check_arabic_patterns ],
     [ 'agent-prompt-parity'    => \&check_agent_prompts ],
     [ 'agent-registry-parity'  => \&check_agent_registry ],
     [ 'provider-model-parity'  => \&check_providers ],
@@ -2244,6 +2245,57 @@ sub check_doc_citations {
                 ? ". Rename one of those files, OR name the file in full at each citation below"
                 : ". Name the file in full at each, or rename one of those files" )
             . ":\n          " . join( "\n          ", @cites );
+    }
+
+    return @problems;
+}
+
+# Arabic matching patterns must be written in the SAME form the matcher folds
+# text into, or they are dead code that can never fire.
+#
+# EduAI_Enquiry_NLU::normalise() strips hamza and folds ta-marbuta to ha before
+# matching, because that is how people actually type. Six patterns were written
+# with the unfolded letters, so a term like تكلفة could never match the folded
+# التكلفه - no error, no warning, just an Arabic speaker escalated to a paid
+# model on every question those patterns existed to answer for free.
+#
+# Checked mechanically rather than by eye: the letters below are exactly the
+# ones normalise() removes, so this catches the CLASS and not the six instances
+# somebody happened to find.
+sub check_arabic_patterns {
+    my @problems;
+    my $file = 'wp-content/plugins/eduai-enquiry/includes/class-enquiry-nlu.php';
+    my $body = slurp_local($file);
+
+    return skip_absent_local($file) unless defined $body;
+
+    my %folded = (
+        "\x{0623}" => 'alef with hamza above',
+        "\x{0625}" => 'alef with hamza below',
+        "\x{0622}" => 'alef with madda',
+        "\x{0649}" => 'alef maksura',
+        "\x{0626}" => 'ya with hamza',
+        "\x{0624}" => 'waw with hamza',
+        "\x{0629}" => 'ta marbuta',
+    );
+
+    my $n = 0;
+
+    for my $line ( split /\n/, $body ) {
+        ++$n;
+
+        next unless $line =~ m{'/.*/[iu]+'};
+        next unless $line =~ /[\x{0600}-\x{06FF}]/;
+
+        for my $ch ( sort keys %folded ) {
+            next unless index( $line, $ch ) >= 0;
+
+            push @problems,
+                "$file:$n has $folded{$ch} in a matching pattern. normalise() folds "
+                . 'that away before matching, so the term can never fire. Write the '
+                . 'pattern in the folded form.';
+            last;
+        }
     }
 
     return @problems;

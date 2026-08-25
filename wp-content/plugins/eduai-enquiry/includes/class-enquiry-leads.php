@@ -250,7 +250,7 @@ class EduAI_Enquiry_Leads {
 				'phone'      => $row['phone'],
 				'interest'   => $row['interest'],
 				'course_id'  => (int) $row['course_id'],
-				'course'     => $row['course_id'] ? get_the_title( (int) $row['course_id'] ) : '',
+				'course'     => $row['course_id'] ? EduAI_Enquiry_Catalog::plain_title( (int) $row['course_id'] ) : '',
 				'language'   => $row['language'],
 				'consent'    => (bool) $row['consent'],
 				'consent_at' => $row['consent_at'],
@@ -499,7 +499,7 @@ class EduAI_Enquiry_Leads {
 					array( 'name' => __( 'Enquiry', 'eduai-enquiry' ), 'value' => $row['interest'] ),
 					array(
 						'name'  => __( 'Course', 'eduai-enquiry' ),
-						'value' => $row['course_id'] ? get_the_title( (int) $row['course_id'] ) : '',
+						'value' => $row['course_id'] ? EduAI_Enquiry_Catalog::plain_title( (int) $row['course_id'] ) : '',
 					),
 					array( 'name' => __( 'Language', 'eduai-enquiry' ), 'value' => $row['language'] ),
 					array( 'name' => __( 'Received', 'eduai-enquiry' ), 'value' => $row['created_at'] ),
