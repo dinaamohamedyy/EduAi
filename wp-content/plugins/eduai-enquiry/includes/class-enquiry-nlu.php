@@ -43,6 +43,11 @@ class EduAI_Enquiry_NLU {
 	 * always picks something is a bot that confidently answers questions it did
 	 * not understand.
 	 */
+	/**
+	 * Where per-language understanding rates are kept.
+	 */
+	private const STATS_OPTION = 'eduai_enquiry_nlu_stats';
+
 	public const INTENTS = array(
 		'greeting',
 		'discover',
@@ -88,6 +93,23 @@ class EduAI_Enquiry_NLU {
 			'/^\s*(hi|hey|hello|good (morning|afternoon|evening)|salam|salaam)\b/iu',
 			'/^\s*(مرحبا|اهلا|السلام عليكم|صباح الخير|مساء الخير|هلا)/u',
 		),
+
+		/*
+		 * The buckets below were added after MEASURING the hit rate on a
+		 * realistic set of sales questions rather than obvious ones. My first
+		 * fifteen test phrases matched 14 times and told me almost nothing; a
+		 * dozen questions a visitor would really ask matched 58% in English and
+		 * 50% in Arabic, and every miss is a 200-token model call against a
+		 * 2,000-token minute.
+		 */
+		'details'   => array(
+			'/\b(tell me (more )?about|what (is|are)|explain|details|more (info|information)|syllabus|curriculum|certificate|certification|accredited|prerequisite)\b/iu',
+			'/(حدثني|اخبرني|ما هي|ماهي|تفاصيل|معلومات|محتوي|منهج|شهاده|شهادات|معتمده|متطلبات)/u',
+		),
+		'schedule'  => array(
+			'/\b(when|what time|times|timing|start date|starts|begins|next (intake|cohort|month|term)|schedule|timetable|duration|how long)\b/iu',
+			'/(متي|موعد|مواعيد|توقيت|يبدا|تبدا|البدء|الجدول|المده|كم مده|الدفعه القادمه)/u',
+		),
 	);
 
 	/**
@@ -97,7 +119,7 @@ class EduAI_Enquiry_NLU {
 	 * cost?" is a price question that also mentions a course; testing
 	 * `discover` first would answer the wrong half.
 	 */
-	private const PRECEDENCE = array( 'human', 'register', 'price', 'recommend', 'discover', 'greeting' );
+	private const PRECEDENCE = array( 'human', 'register', 'price', 'schedule', 'recommend', 'details', 'discover', 'greeting' );
 
 	/**
 	 * Read a visitor's message.
@@ -107,6 +129,82 @@ class EduAI_Enquiry_NLU {
 	 * @return array{intent:string,confidence:float,entities:array,by:string}
 	 */
 	public static function read( string $text, string $language = 'en' ): array {
+		$result = self::classify( $text, $language );
+
+		self::record( $language, $result['by'] );
+
+		/**
+		 * Replace or refine the classification.
+		 *
+		 * The seam that keeps this decision reversible. The deterministic
+		 * matcher is one implementation; swapping in a model classifier, or a
+		 * hosted NLU service, is a filter rather than surgery on the flows.
+		 * Baking keyword patterns into the conversation logic itself is the
+		 * version that could not be unpicked, and this exists so that never
+		 * happens.
+		 *
+		 * @param array  $result   intent, confidence, entities, by.
+		 * @param string $text     The visitor's message.
+		 * @param string $language Detected language.
+		 */
+		return (array) apply_filters( 'eduai_enquiry_classify', $result, $text, $language );
+	}
+
+	/**
+	 * Count how each language is being understood.
+	 *
+	 * ARABIC WILL NOT BEHAVE LIKE ENGLISH AND A BLENDED FIGURE HIDES IT.
+	 *
+	 * Pattern matching degrades badly in Arabic — clitics attach to words, the
+	 * morphology is rich, dialect diverges from MSA, and there is no
+	 * capitalisation to lean on. So the deterministic pass will hit less often
+	 * there, escalation will be higher, replies slower and costlier, FOR ARABIC
+	 * SPEAKERS ONLY. A single hit rate of 90% can be 98% English and 40%
+	 * Arabic, and nothing on any screen would say so.
+	 *
+	 * Counts only. No message text, ever.
+	 *
+	 * @param string $language en or ar.
+	 * @param string $by       pattern, model or none.
+	 */
+	private static function record( string $language, string $by ): void {
+		$stats = (array) get_option( self::STATS_OPTION, array() );
+		$key   = ( 'ar' === $language ? 'ar' : 'en' ) . '_' . $by;
+
+		$stats[ $key ] = (int) ( $stats[ $key ] ?? 0 ) + 1;
+
+		update_option( self::STATS_OPTION, $stats, false );
+	}
+
+	/**
+	 * Understanding rates per language, for the admin screen.
+	 */
+	public static function stats(): array {
+		$s   = (array) get_option( self::STATS_OPTION, array() );
+		$out = array();
+
+		foreach ( array( 'en', 'ar' ) as $lang ) {
+			$pattern = (int) ( $s[ $lang . '_pattern' ] ?? 0 );
+			$model   = (int) ( $s[ $lang . '_model' ] ?? 0 );
+			$none    = (int) ( $s[ $lang . '_none' ] ?? 0 );
+			$total   = $pattern + $model + $none;
+
+			$out[ $lang ] = array(
+				'total'     => $total,
+				'pattern'   => $pattern,
+				'escalated' => $model,
+				'unknown'   => $none,
+				'hit_rate'  => $total ? round( 100 * $pattern / $total ) : null,
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The classification itself.
+	 */
+	private static function classify( string $text, string $language ): array {
 		$entities = self::entities( $text, $language );
 
 		// Contact details are the loudest signal there is: somebody who types

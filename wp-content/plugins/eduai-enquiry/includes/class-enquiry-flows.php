@@ -92,6 +92,7 @@ class EduAI_Enquiry_Flows {
 				return self::discover( $read, $state, $language, 'price' === $intent );
 
 			case 'details':
+			case 'schedule':
 				return self::discover( $read, $state, $language, false );
 
 			case 'recommend':
@@ -134,10 +135,29 @@ class EduAI_Enquiry_Flows {
 	 */
 	private static function chips( string $language ): array {
 		return array(
-			array( 'id' => 'browse', 'label' => EduAI_Enquiry_I18n::t( 'chip_browse', $language ) ),
-			array( 'id' => 'recommend', 'label' => EduAI_Enquiry_I18n::t( 'chip_recommend', $language ) ),
-			array( 'id' => 'enrol', 'label' => EduAI_Enquiry_I18n::t( 'chip_enrol', $language ) ),
-			array( 'id' => 'human', 'label' => EduAI_Enquiry_I18n::t( 'chip_human', $language ) ),
+			self::chip( 'browse', 'chip_browse', $language ),
+			self::chip( 'recommend', 'chip_recommend', $language ),
+			self::chip( 'enrol', 'chip_enrol', $language ),
+			self::chip( 'human', 'chip_human', $language ),
+		);
+	}
+
+	/**
+	 * One shortcut.
+	 *
+	 * `label` is what the visitor reads, `value` is what is sent back when they
+	 * press it. They are the same phrase today, and they must stay separate
+	 * fields anyway: the moment a label is reworded for the interface, a chip
+	 * whose value IS its label starts sending different text to the classifier
+	 * and the flow quietly changes with the copy.
+	 */
+	private static function chip( string $id, string $key, string $language ): array {
+		$label = EduAI_Enquiry_I18n::t( $key, $language );
+
+		return array(
+			'id'    => $id,
+			'label' => $label,
+			'value' => $label,
 		);
 	}
 
@@ -170,7 +190,7 @@ class EduAI_Enquiry_Flows {
 		if ( ! $courses ) {
 			return self::envelope(
 				EduAI_Enquiry_I18n::t( 'nothing_at_all', $language ),
-				array( 'chips' => array( array( 'id' => 'human', 'label' => EduAI_Enquiry_I18n::t( 'chip_human', $language ) ) ) )
+				array( 'chips' => array( self::chip( 'human', 'chip_human', $language ) ) )
 			);
 		}
 
@@ -199,10 +219,10 @@ class EduAI_Enquiry_Flows {
 		return self::envelope(
 			$text,
 			array(
-				'cards' => array_map( array( __CLASS__, 'card' ), $courses ),
+				'cards' => self::cards( $courses, $language ),
 				'chips' => array(
-					array( 'id' => 'enrol', 'label' => EduAI_Enquiry_I18n::t( 'chip_enrol', $language ) ),
-					array( 'id' => 'human', 'label' => EduAI_Enquiry_I18n::t( 'chip_human', $language ) ),
+					self::chip( 'enrol', 'chip_enrol', $language ),
+					self::chip( 'human', 'chip_human', $language ),
 				),
 				'meta'  => array( 'intent' => $emphasise_price ? 'price' : 'discover', 'count' => count( $courses ) ),
 			)
@@ -284,10 +304,10 @@ class EduAI_Enquiry_Flows {
 		return self::envelope(
 			$text,
 			array(
-				'cards' => array_map( array( __CLASS__, 'card' ), array_slice( $courses, 0, 3 ) ),
+				'cards' => self::cards( array_slice( $courses, 0, 3 ), $language ),
 				'chips' => array(
-					array( 'id' => 'enrol', 'label' => EduAI_Enquiry_I18n::t( 'chip_enrol', $language ) ),
-					array( 'id' => 'human', 'label' => EduAI_Enquiry_I18n::t( 'chip_human', $language ) ),
+					self::chip( 'enrol', 'chip_enrol', $language ),
+					self::chip( 'human', 'chip_human', $language ),
 				),
 				'meta'  => array( 'intent' => 'recommend', 'model_used' => ! is_wp_error( $out ) ),
 			)
@@ -327,9 +347,9 @@ class EduAI_Enquiry_Flows {
 		return self::envelope(
 			$text,
 			array(
-				'cards' => array_map( array( __CLASS__, 'card' ), $courses ),
+				'cards' => self::cards( $courses, $language ),
 				'chips' => array(
-					array( 'id' => 'human', 'label' => EduAI_Enquiry_I18n::t( 'chip_human', $language ) ),
+					self::chip( 'human', 'chip_human', $language ),
 				),
 				'meta'  => array( 'intent' => 'register' ),
 			)
@@ -382,14 +402,43 @@ class EduAI_Enquiry_Flows {
 		$known = (array) ( $state['entities'] ?? array() );
 
 		return array(
-			'id'      => 'lead',
+			'id'      => 'enquiry',
+			'title'   => EduAI_Enquiry_I18n::t( 'form_title', $language ),
 			'consent' => EduAI_Enquiry_I18n::t( 'consent', $language ),
 			'submit'  => EduAI_Enquiry_I18n::t( 'send', $language ),
 			'fields'  => array(
-				array( 'name' => 'name', 'label' => EduAI_Enquiry_I18n::t( 'ask_name', $language ), 'type' => 'text', 'value' => (string) ( $known['name'] ?? '' ), 'required' => false ),
-				array( 'name' => 'email', 'label' => 'Email', 'type' => 'email', 'value' => (string) ( $known['email'] ?? '' ), 'required' => false ),
-				array( 'name' => 'phone', 'label' => 'Phone', 'type' => 'tel', 'value' => (string) ( $known['phone'] ?? '' ), 'required' => false ),
-				array( 'name' => 'interest', 'label' => EduAI_Enquiry_I18n::t( 'ask_interest', $language ), 'type' => 'text', 'value' => implode( ', ', (array) ( $known['topics'] ?? array() ) ), 'required' => false ),
+				array(
+					'name'         => 'name',
+					'label'        => EduAI_Enquiry_I18n::t( 'ask_name', $language ),
+					'type'         => 'text',
+					'value'        => (string) ( $known['name'] ?? '' ),
+					'required'     => false,
+					'autocomplete' => 'name',
+				),
+				array(
+					'name'         => 'email',
+					'label'        => EduAI_Enquiry_I18n::t( 'f_email', $language ),
+					'type'         => 'email',
+					'value'        => (string) ( $known['email'] ?? '' ),
+					'required'     => false,
+					'autocomplete' => 'email',
+				),
+				array(
+					'name'         => 'phone',
+					'label'        => EduAI_Enquiry_I18n::t( 'f_phone', $language ),
+					'type'         => 'tel',
+					'value'        => (string) ( $known['phone'] ?? '' ),
+					'required'     => false,
+					'autocomplete' => 'tel',
+				),
+				array(
+					'name'         => 'interest',
+					'label'        => EduAI_Enquiry_I18n::t( 'ask_interest', $language ),
+					'type'         => 'text',
+					'value'        => implode( ', ', (array) ( $known['topics'] ?? array() ) ),
+					'required'     => false,
+					'autocomplete' => 'off',
+				),
 			),
 		);
 	}
@@ -422,7 +471,26 @@ class EduAI_Enquiry_Flows {
 	 * the interface can say "not listed" and nobody downstream is tempted to
 	 * treat blank as zero.
 	 */
-	private static function card( array $c ): array {
+	private static function card( array $c, string $language = 'en' ): array {
+		/*
+		 * EVERY KEY IS ALWAYS PRESENT, and unknown is an explicit null.
+		 *
+		 * Front-end asked for this and the reason is exact: once JSON reaches
+		 * JavaScript, an omitted key and a null are indistinguishable. Both
+		 * would print "not listed" — one because we said so, the other because
+		 * the engine had a bug. That is the difference between a card that is
+		 * honest and a card that is lucky.
+		 */
+		$price = null;
+
+		if ( $c['price_known'] ) {
+			// Free and open are a controlled vocabulary, so the word is chosen
+			// in the VISITOR's language rather than the site's.
+			$price = '' !== $c['price_token']
+				? EduAI_Enquiry_I18n::t( 'free' === $c['price_token'] ? 'free' : 'open', $language )
+				: $c['price'];
+		}
+
 		return array(
 			'id'          => $c['id'],
 			'title'       => $c['title'],
@@ -430,9 +498,17 @@ class EduAI_Enquiry_Flows {
 			'description' => $c['description_known'] ? $c['description'] : null,
 			'duration'    => $c['duration_known'] ? $c['duration'] : null,
 			'format'      => $c['format_known'] ? $c['format'] : null,
-			'price'       => $c['price_known'] ? $c['price'] : null,
+			'price'       => $price,
 			'schedule'    => $c['schedule_known'] ? $c['schedule'] : null,
+			'cta'         => null,
 			'categories'  => $c['categories'],
 		);
+	}
+
+	/**
+	 * Cards for a list, in the visitor's language.
+	 */
+	private static function cards( array $courses, string $language ): array {
+		return array_map( static fn( $c ) => self::card( $c, $language ), $courses );
 	}
 }

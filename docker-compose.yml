@@ -83,6 +83,7 @@ services:
       - ./wp-content/themes/scholaris:/var/www/html/wp-content/themes/scholaris
       - ./wp-content/plugins/eduai-assistant:/var/www/html/wp-content/plugins/eduai-assistant
       - ./wp-content/plugins/scholaris-library:/var/www/html/wp-content/plugins/scholaris-library
+      - ./wp-content/plugins/eduai-enquiry:/var/www/html/wp-content/plugins/eduai-enquiry
       - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
       # Dev-only mail routing to Mailpit; inert without SCHOLARIS_DEV_SMTP.
       - ./php/dev-mail.php:/var/www/html/wp-content/mu-plugins/dev-mail.php:ro
@@ -114,6 +115,7 @@ services:
       - ./wp-content/themes/scholaris:/var/www/html/wp-content/themes/scholaris
       - ./wp-content/plugins/eduai-assistant:/var/www/html/wp-content/plugins/eduai-assistant
       - ./wp-content/plugins/scholaris-library:/var/www/html/wp-content/plugins/scholaris-library
+      - ./wp-content/plugins/eduai-enquiry:/var/www/html/wp-content/plugins/eduai-enquiry
       - ./scripts:/scripts
       # Without this, wp-cli runs PHP defaults (2M/8M) while the web container
       # is at 64M — so `wp eval` reporting wp_max_upload_size() answers for a
@@ -168,6 +170,7 @@ services:
       - ./wp-content/themes/scholaris:/var/www/html/wp-content/themes/scholaris
       - ./wp-content/plugins/eduai-assistant:/var/www/html/wp-content/plugins/eduai-assistant
       - ./wp-content/plugins/scholaris-library:/var/www/html/wp-content/plugins/scholaris-library
+      - ./wp-content/plugins/eduai-enquiry:/var/www/html/wp-content/plugins/eduai-enquiry
       - ./php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini:ro
     # 60s: a transcript appearing a minute after upload reads as working; an
     # hour reads as broken, which is the standard this is held to.

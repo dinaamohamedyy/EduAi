@@ -209,6 +209,7 @@ class EduAI_Enquiry_Catalog {
 			'format_known'    => '' !== $format,
 
 			'price'           => $price['label'],
+			'price_token'     => $price['token'],
 			'price_known'     => $price['known'],
 			'is_free'         => $price['free'],
 
@@ -257,8 +258,19 @@ class EduAI_Enquiry_Catalog {
 		}
 
 		if ( in_array( $type, array( 'free', 'open' ), true ) ) {
+			/*
+			 * A TOKEN, not a translated word.
+			 *
+			 * This used to return __( 'Free' ), which resolves in the SITE's
+			 * locale. Front-end caught the result: an Arabic card with Arabic
+			 * labels and the value "Free" sitting in Latin script beside them.
+			 * Course titles staying English is correct - a name is a name - but
+			 * free and open are a controlled vocabulary, so the word has to be
+			 * chosen where the visitor's language is known, which is not here.
+			 */
 			return array(
-				'label' => __( 'Free', 'eduai-enquiry' ),
+				'label' => '',
+				'token' => $type,
 				'known' => true,
 				'free'  => true,
 			);
@@ -267,6 +279,7 @@ class EduAI_Enquiry_Catalog {
 		if ( '' !== $amount && is_numeric( str_replace( array( ',', ' ' ), '', $amount ) ) ) {
 			return array(
 				'label' => self::money( $amount ),
+				'token' => '',
 				'known' => true,
 				'free'  => false,
 			);
@@ -274,6 +287,7 @@ class EduAI_Enquiry_Catalog {
 
 		return array(
 			'label' => '',
+			'token' => '',
 			'known' => false,
 			'free'  => null,
 		);

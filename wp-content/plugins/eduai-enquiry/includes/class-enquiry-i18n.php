@@ -59,6 +59,8 @@ class EduAI_Enquiry_I18n {
 		'price'             => array( 'en' => 'Price', 'ar' => 'الرسوم' ),
 		'schedule'          => array( 'en' => 'Starts', 'ar' => 'يبدأ' ),
 		'free'              => array( 'en' => 'Free', 'ar' => 'مجاني' ),
+		'open'              => array( 'en' => 'Open access', 'ar' => 'وصول مفتوح' ),
+		'form_title'        => array( 'en' => 'Leave your details', 'ar' => 'اترك بياناتك' ),
 		'view_course'       => array( 'en' => 'View course', 'ar' => 'عرض الدورة' ),
 		'enrol_now'         => array( 'en' => 'How to enrol', 'ar' => 'كيفية التسجيل' ),
 		'no_courses'        => array(
@@ -105,6 +107,8 @@ class EduAI_Enquiry_I18n {
 			'en' => 'I do not have the fee for that one on file — I can ask someone to confirm it.',
 			'ar' => 'لا تتوفر لدي الرسوم لهذه الدورة — يمكنني طلب تأكيدها من أحد الموظفين.',
 		),
+		'f_email'           => array( 'en' => 'Email', 'ar' => 'البريد الإلكتروني' ),
+		'f_phone'           => array( 'en' => 'Phone', 'ar' => 'رقم الهاتف' ),
 		'switch_language'   => array( 'en' => 'العربية', 'ar' => 'English' ),
 		'restart'           => array( 'en' => 'Start over', 'ar' => 'ابدأ من جديد' ),
 		'chip_browse'       => array( 'en' => 'Show me courses', 'ar' => 'اعرض الدورات' ),

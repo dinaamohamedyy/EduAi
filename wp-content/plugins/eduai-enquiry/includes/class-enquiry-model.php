@@ -44,6 +44,28 @@ class EduAI_Enquiry_Model {
 	private const TIMEOUT = 6;
 
 	/**
+	 * Tokens this public assistant may spend per minute.
+	 *
+	 * A SHARE OF THE PROVIDER ALLOWANCE, NOT THE WHOLE THING.
+	 *
+	 * This endpoint is unauthenticated. The study assistant sits behind
+	 * enrolment and every caller there is a known student; here every caller is
+	 * a stranger. Same key means same bucket, so without a local ceiling one
+	 * visitor in a loop can exhaust the provider allowance for the entire site
+	 * — and the first people to notice are enrolled students whose lessons stop
+	 * answering. **The marketing widget can take out the classroom.**
+	 *
+	 * 2,000 of the measured 8,000 per minute. Deliberately a quarter: this
+	 * feature is worth degrading to protect the one people paid for.
+	 */
+	private const BUDGET_TOKENS = 2000;
+
+	/**
+	 * Where the spend is counted.
+	 */
+	private const BUDGET_KEY = 'eduai_eq_spend';
+
+	/**
 	 * Is a model reachable at all?
 	 */
 	public static function available(): bool {
@@ -74,6 +96,21 @@ class EduAI_Enquiry_Model {
 	public static function ask( string $system, string $user, int $max = 400, float $temp = 0.3, int $timeout = 0 ) {
 		$deadline = $timeout > 0 ? $timeout : self::TIMEOUT;
 
+		/*
+		 * The ceiling is checked BEFORE the call, and charged optimistically at
+		 * the requested budget rather than the actual usage. Charging after the
+		 * fact lets a burst of simultaneous requests all pass the check and then
+		 * blow through it together, which is the shape every naive rate limiter
+		 * has.
+		 */
+		if ( ! self::afford( $max ) ) {
+			return new WP_Error(
+				'eduai_eq_budget',
+				__( 'The assistant is busy. Please try again in a moment.', 'eduai-enquiry' ),
+				array( 'status' => 429 )
+			);
+		}
+
 		if ( self::via_assistant() ) {
 			$out = EduAI_Claude::message(
 				array( array( 'role' => 'user', 'content' => $user ) ),
@@ -96,6 +133,44 @@ class EduAI_Enquiry_Model {
 		}
 
 		return self::direct( $system, $user, $max, $temp, $deadline );
+	}
+
+	/**
+	 * Can this call be afforded out of the public assistant's own share?
+	 *
+	 * @param int $tokens Reply budget being requested.
+	 */
+	private static function afford( int $tokens ): bool {
+		$minute = (int) floor( time() / MINUTE_IN_SECONDS );
+		$key    = self::BUDGET_KEY . '_' . $minute;
+		$spent  = (int) get_transient( $key );
+
+		/**
+		 * Tokens per minute this assistant may spend.
+		 *
+		 * @param int $budget Ceiling.
+		 */
+		$ceiling = (int) apply_filters( 'eduai_enquiry_token_budget', self::BUDGET_TOKENS );
+
+		if ( $spent + $tokens > $ceiling ) {
+			return false;
+		}
+
+		set_transient( $key, $spent + $tokens, 2 * MINUTE_IN_SECONDS );
+
+		return true;
+	}
+
+	/**
+	 * Tokens spent this minute, for the admin screen.
+	 */
+	public static function spent(): array {
+		$minute = (int) floor( time() / MINUTE_IN_SECONDS );
+
+		return array(
+			'spent'   => (int) get_transient( self::BUDGET_KEY . '_' . $minute ),
+			'ceiling' => (int) apply_filters( 'eduai_enquiry_token_budget', self::BUDGET_TOKENS ),
+		);
 	}
 
 	/**
