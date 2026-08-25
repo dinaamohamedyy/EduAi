@@ -211,27 +211,69 @@ class EduAI_Enquiry_Catalog {
 			return array();
 		}
 
-		$lessons = get_posts(
-			array(
-				'post_type'           => $types,
-				'post_status'         => 'publish',
-				'posts_per_page'      => 40,
-				's'                   => implode( ' ', array_slice( $words, 0, 6 ) ),
-				'fields'              => 'ids',
-				'ignore_sticky_posts' => true,
-				'no_found_rows'       => true,
-			)
-		);
+		/*
+		 * Whole phrase first, then term by term.
+		 *
+		 * WordPress ANDs the words in `s`, so one word the catalogue has never
+		 * heard of vetoes the entire search. "do you teach regression" reached
+		 * here as `teach regression`, no lesson contains "teach", and a course
+		 * that plainly covers regression was reported as not found.
+		 *
+		 * That is the same defect as the stopword list eating "classification"
+		 * — and a stopword list is a fix per instance. Every extractor will
+		 * eventually leak a word, so this stops depending on the extractor
+		 * being right: unknown words now contribute nothing instead of
+		 * vetoing, and courses are ranked by HOW MANY of the terms they
+		 * actually matched, so precision survives the wider net.
+		 *
+		 * The phrase attempt is kept and kept first, because when every word
+		 * does match it is the most precise answer available.
+		 */
+		$terms = array_slice( array_values( $words ), 0, 6 );
+		$tries = array( implode( ' ', $terms ) );
+
+		if ( count( $terms ) > 1 ) {
+			foreach ( $terms as $term ) {
+				// Short words match far too much to be evidence of anything.
+				if ( mb_strlen( $term ) >= 4 ) {
+					$tries[] = $term;
+				}
+			}
+		}
 
 		$courses = array();
 
-		foreach ( (array) $lessons as $lesson_id ) {
-			$course_id = (int) learndash_get_course_id( (int) $lesson_id );
+		foreach ( $tries as $i => $needle ) {
+			$lessons = get_posts(
+				array(
+					'post_type'           => $types,
+					'post_status'         => 'publish',
+					'posts_per_page'      => 40,
+					's'                   => $needle,
+					'fields'              => 'ids',
+					'ignore_sticky_posts' => true,
+					'no_found_rows'       => true,
+				)
+			);
 
-			// A lesson attached to no course cannot be offered to anybody, and
-			// four of them on this site are in exactly that state.
-			if ( $course_id > 0 && 'publish' === get_post_status( $course_id ) ) {
-				$courses[ $course_id ] = ( $courses[ $course_id ] ?? 0 ) + 1;
+			foreach ( (array) $lessons as $lesson_id ) {
+				$course_id = (int) learndash_get_course_id( (int) $lesson_id );
+
+				// A lesson attached to no course cannot be offered to anybody,
+				// and four of them on this site are in exactly that state.
+				if ( $course_id <= 0 || 'publish' !== get_post_status( $course_id ) ) {
+					continue;
+				}
+
+				// The full phrase is worth more than any single word, so a
+				// course matching all of it stays ahead of one that matched
+				// a word in passing.
+				$courses[ $course_id ] = ( $courses[ $course_id ] ?? 0 ) + ( 0 === $i ? 10 : 1 );
+			}
+
+			// Every word matched together: nothing wider can improve on that.
+			if ( 0 === $i && $courses ) {
+				break;
 			}
 		}
 
