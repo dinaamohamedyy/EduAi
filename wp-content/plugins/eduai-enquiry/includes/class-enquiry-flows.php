@@ -273,49 +273,14 @@ class EduAI_Enquiry_Flows {
 			return self::envelope( EduAI_Enquiry_I18n::t( 'nothing_at_all', $language ) );
 		}
 
-		$lines = array();
-
-		foreach ( $courses as $i => $c ) {
-			$lines[] = sprintf(
-				'%d. %s — %s',
-				$i + 1,
-				$c['title'],
-				$c['description_known'] ? mb_substr( $c['description'], 0, 180 ) : 'no description on file'
-			);
-		}
-
-		$profile = array_filter(
-			array(
-				'level'  => $known['level'] ?? '',
-				'format' => $known['format'] ?? '',
-				'topics' => implode( ', ', (array) ( $known['topics'] ?? array() ) ),
-			)
-		);
-
-		$system = 'You help a visitor choose a course. You will be given a numbered list of real courses. '
-			. 'Recommend at most two, by number, and say briefly why in one sentence each. '
-			. 'NEVER state a price, duration, start date or format — you have not been given them and they will be shown separately. '
-			. 'If nothing fits, say so plainly. '
-			. ( 'ar' === $language ? 'Reply in Arabic.' : 'Reply in English.' )
-			. ' Keep the whole reply under 60 words.';
-
-		$user = "Courses:\n" . implode( "\n", $lines )
-			. "\n\nWhat the visitor has told me: " . ( $profile ? wp_json_encode( $profile ) : 'nothing specific yet' )
-			. "\n\nRecent conversation:\n" . EduAI_Enquiry_Session::transcript( $state );
-
 		/*
-		 * A HARD DEADLINE, because the promise is a reply in under two seconds
-		 * and this is the only path that waits on somebody else's server.
+		 * Phase one builds NO prompt and calls no model.
 		 *
-		 * Measured: the courses are found in ~250 ms and the model then takes
-		 * 1.8-2.1 s, which lands on or over the line. No amount of tuning fixes
-		 * that, because the variable is a third party under load.
-		 *
-		 * So the model gets what is left of the budget and not a millisecond
-		 * more. If it misses, the visitor still gets the right courses with a
-		 * plain sentence instead of a written recommendation — degraded, useful,
-		 * and inside the promise. Exceeding the budget to deliver nicer prose
-		 * would be choosing the wrong one of the two.
+		 * It used to do both. When the written half moved to follow_up(), the
+		 * prompt-building left here became dead - and then DRIFTED, still
+		 * telling the model to answer "by number" long after the live copy had
+		 * stopped. I edited this one by mistake and measured no change, which is
+		 * how a second copy of a prompt costs more than the lines it occupies.
 		 */
 		/*
 		 * PHASE ONE: the cards, and a ticket for the sentence.
@@ -386,8 +351,9 @@ class EduAI_Enquiry_Flows {
 			return new WP_Error( 'eduai_eq_expired', __( 'That request expired.', 'eduai-enquiry' ), array( 'status' => 410 ) );
 		}
 
-		$lines = array();
-		$n     = 0;
+		$lines  = array();
+		$titles = array();
+		$n      = 0;
 
 		foreach ( (array) $pending['courses'] as $id ) {
 			$course = EduAI_Enquiry_Catalog::get( (int) $id );
@@ -397,10 +363,18 @@ class EduAI_Enquiry_Flows {
 			}
 
 			++$n;
+			$titles[] = $course['title'];
 
+			/*
+			 * Deliberately UNNUMBERED. A numbered list invites the model to
+			 * answer in numbers, and front-end proved an ordinal cannot be
+			 * resolved on screen: the transcript accumulates cards across turns,
+			 * so "course 3" indexes a list that exists nowhere as a single
+			 * visible thing. Titles are the only reference that survives a
+			 * scrolling conversation.
+			 */
 			$lines[] = sprintf(
-				'%d. %s - %s',
-				$n,
+				'- %s - %s',
 				$course['title'],
 				$course['description_known'] ? mb_substr( $course['description'], 0, 180 ) : 'no description on file'
 			);
@@ -412,8 +386,12 @@ class EduAI_Enquiry_Flows {
 
 		$profile = (array) ( $pending['profile'] ?? array() );
 
-		$system = 'You help a visitor choose a course. You will be given a numbered list of real courses. '
-			. 'Recommend at most two, by number, and say briefly why in one sentence each. '
+		$system = 'You help a visitor choose a course. You will be given a list of real courses. '
+			. 'Recommend at most two. Refer to each ONLY by its exact title, written exactly as given, '
+			. 'in its original script even when the rest of your reply is in Arabic. '
+			. 'NEVER use a number or a position: the reader sees titled cards, not a numbered list, '
+			. 'so "course 3" points at nothing they can see. '
+			. 'Say briefly why in one sentence each. '
 			. 'NEVER state a price, duration, start date or format - you have not been given them and they are already shown beside your reply. '
 			. 'If nothing fits, say so plainly. '
 			. ( 'ar' === $language ? 'Reply in Arabic.' : 'Reply in English.' )
@@ -444,7 +422,96 @@ class EduAI_Enquiry_Flows {
 			return $out;
 		}
 
-		return array( 'text' => $out );
+		$clean = self::tidy( $out, $titles );
+
+		/*
+		 * A refused reply is not an error. The cards are already on the
+		 * visitor's screen and they are right - they came from the database,
+		 * not from a model. Losing the sentence loses a nicety; showing a
+		 * reference the reader cannot resolve would cost their trust in the
+		 * cards beside it.
+		 */
+		return array(
+			'text'     => '' !== $clean ? $clean : EduAI_Enquiry_I18n::t( 'closest_matches', $language ),
+			'verified' => '' !== $clean,
+		);
+	}
+
+	/**
+	 * Clean a model reply before it becomes a chat bubble.
+	 *
+	 * Models pad. A trailing newline and a doubled space are invisible in JSON
+	 * and visible in a bubble, and front-end saw both in the Arabic reply -
+	 * which is exactly the kind of thing only rendering finds.
+	 *
+	 * @param string $text Raw reply.
+	 */
+	/**
+	 * Is this reply fit to show, and tidied if so?
+	 *
+	 * VERIFY AND REFUSE, RATHER THAN EDIT.
+	 *
+	 * The first attempt at this rewrote the model's prose: strip a leading
+	 * ordinal, strip stray digits, protect the titles while doing it. It
+	 * worked on fixtures and corrupted real replies — two of four live runs
+	 * came back with a title missing and a stray colon where it had been. A
+	 * cleaner that damages the thing it cleans is worse than no cleaner, and
+	 * the damage is invisible in JSON.
+	 *
+	 * So this does not edit. It ASKS TWO QUESTIONS and, if either answer is
+	 * wrong, discards the prose entirely — the caller then shows the cards with
+	 * a plain templated sentence. That is the rule the rest of this plugin runs
+	 * on: a model may choose which courses to talk about, and everything it
+	 * says about them is checked rather than trusted.
+	 *
+	 *   1. Does it reference a course by NUMBER? An ordinal indexes a list the
+	 *      visitor cannot see — the transcript accumulates cards across turns,
+	 *      so "course 3" points at nothing on screen.
+	 *   2. Does it name at least one course actually offered? A recommendation
+	 *      that names none is either about something we did not send or about
+	 *      nothing at all.
+	 *
+	 * Losing the sentence costs a nicety. Showing a confident reference the
+	 * reader cannot resolve costs their trust in the cards beside it, which
+	 * ARE right.
+	 *
+	 * @param string   $text   Raw reply from the model.
+	 * @param string[] $titles Titles the model was given.
+	 * @return string Tidied reply, or '' when it should not be shown.
+	 */
+	private static function tidy( string $text, array $titles = array() ): string {
+		// Models pad. A trailing newline and a doubled space are invisible in
+		// JSON and visible in a bubble; front-end saw both in Arabic.
+		$text = trim( $text );
+		$text = preg_replace( '/[ \t]{2,}/u', ' ', $text );
+		$text = preg_replace( '/[ \t]+\n/u', "\n", (string) $text );
+		$text = trim( (string) preg_replace( '/\n{3,}/u', "\n\n", (string) $text ) );
+
+		if ( '' === $text ) {
+			return '';
+		}
+
+		/*
+		 * Numbers, in any of the shapes seen live. Enumerating phrasings would
+		 * be whack-a-mole if this were a CLEANER — as a detector it is fine,
+		 * because a shape nobody listed simply passes, and the title check
+		 * below still has to hold.
+		 */
+		$ordinal = '/(?:^|\n)\s*\d+\s*[.):\-]|\b(?:course|option|number|item|no)\s*#?\s*\d+\b|(?:المقرر|المساق|المسار|الدوره|الاختيار|الخيار|البند)\s*(?:رقم\s*)?\d+/iu';
+
+		if ( preg_match( $ordinal, $text ) ) {
+			return '';
+		}
+
+		foreach ( $titles as $title ) {
+			$title = trim( (string) $title );
+
+			if ( '' !== $title && false !== mb_stripos( $text, $title ) ) {
+				return $text;
+			}
+		}
+
+		return '';
 	}
 
 	/**

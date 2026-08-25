@@ -93,6 +93,12 @@ class EduAI_Enquiry_NLU {
 			'/\b(do you (have|offer|run|teach)|is there|are there|got anything|looking for|interested in|anything (on|about)|something (on|about))\b/iu',
 			'/(دوره|دوره|دورات|كورس|كورسات|برنامج|تدريب|ورشه|عندكم|ابحث عن|اتعلم|تعليم)/u',
 			'/(هل يوجد|هل توجد|يوجد شي|توجد شي|لديكم|تقدمون|متوفر)/u',
+			// "do you teach X" names the VERB rather than the catalogue, and is
+			// close to the canonical way a stranger asks a school what it offers.
+			// The English form was covered; the Arabic was not, and a hit rate
+			// measured on discovery phrasings cannot see it - every phrasing that
+			// passed named a course or a catalogue.
+			'/(تدرسون|تدرس|تعلمون|تعطون|يدرسون|شرح|تشرحون)/u',
 		),
 		'greeting'  => array(
 			'/^\s*(hi|hey|hello|good (morning|afternoon|evening)|salam|salaam)\b/iu',

@@ -63,6 +63,10 @@ class EduAI_Enquiry_I18n {
 		'form_title'        => array( 'en' => 'Leave your details', 'ar' => 'اترك بياناتك' ),
 		'view_course'       => array( 'en' => 'View course', 'ar' => 'عرض الدورة' ),
 		'enrol_now'         => array( 'en' => 'How to enrol', 'ar' => 'كيفية التسجيل' ),
+		'closest_matches'   => array(
+			'en' => 'Here are the closest matches:',
+			'ar' => 'إليك الدورات الأقرب لطلبك:',
+		),
 		'covered_inside'    => array(
 			'en' => 'Nothing is called that, but this covers it:',
 			'ar' => 'لا توجد دورة بهذا الاسم، لكن هذه تغطيه:',
