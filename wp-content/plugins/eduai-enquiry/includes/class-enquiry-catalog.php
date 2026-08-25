@@ -189,10 +189,48 @@ class EduAI_Enquiry_Catalog {
 		$id = (int) $post->ID;
 
 		$description = self::description( $post );
+		$derived     = false;
+
+		if ( '' === $description ) {
+			$description = self::derived_description( $id );
+			$derived     = '' !== $description;
+		}
+
 		$duration    = self::first_meta( $id, array( '_learndash_course_grid_duration', '_course_duration', 'duration', '_duration' ) );
 		$format      = self::format( $id );
 		$price       = self::price( $id );
 		$schedule    = self::first_meta( $id, array( '_course_start_date', 'course_start_date', '_start_date', 'schedule', '_schedule' ) );
+
+		/*
+		 * Every field with the reason it looks the way it does. See status():
+		 * a renderer needs "not listed" and "we do not track that here" to come
+		 * out differently, and a boolean cannot tell them apart.
+		 */
+		$fields = array(
+			'description' => array(
+				'value'  => $description,
+				'status' => self::status( $description, 'description', $derived ),
+			),
+			'duration'    => array(
+				'value'  => $duration,
+				'status' => self::status( $duration, 'duration' ),
+			),
+			'format'      => array(
+				'value'  => $format,
+				'status' => self::status( $format, 'format' ),
+			),
+			'price'       => array(
+				'value'  => $price['label'],
+				'token'  => $price['token'],
+				// Free and open carry an empty label and a token, so emptiness
+				// is not absence here — ask the price reader, not the string.
+				'status' => $price['known'] ? 'present' : self::status( '', 'price' ),
+			),
+			'schedule'    => array(
+				'value'  => $schedule,
+				'status' => self::status( $schedule, 'schedule' ),
+			),
+		);
 
 		return array(
 			'id'              => $id,
@@ -218,7 +256,130 @@ class EduAI_Enquiry_Catalog {
 
 			'categories'      => self::terms( $id ),
 			'fallback'        => false,
+
+			'fields'          => $fields,
 		);
+	}
+
+	/**
+	 * What each source can express at all.
+	 *
+	 * The distinction this exists for: LearnDash HAS a duration field and this
+	 * site leaves it empty, which is "not listed" and worth saying. LearnDash
+	 * has no concept of a class SCHEDULE at all, which is not a blank to be
+	 * filled but a question this catalogue cannot be asked. Rendering those two
+	 * the same way turns an absent feature into an oversight, and invites an
+	 * administrator to hunt for a field that was never there.
+	 *
+	 * Only the ABSENT case consults this. A value found in meta is reported as
+	 * present whatever the map says, because a site that stores something is
+	 * more authoritative than our guess about its plugin.
+	 */
+	private const SUPPORTS = array(
+		'learndash' => array( 'description', 'duration', 'price' ),
+		'woo'       => array( 'description', 'price' ),
+		'generic'   => array( 'description' ),
+	);
+
+	/**
+	 * How a field came to have the value it has.
+	 *
+	 * present     — read from the source, and real.
+	 * derived     — computed by us from something else. True, but ours rather
+	 *               than the lecturer's, so a renderer should hedge it.
+	 * not_set     — the source holds this field and nobody filled it in.
+	 *               Say "not listed".
+	 * unsupported — the source has no such concept. Say nothing at all.
+	 *
+	 * A boolean cannot carry the last two apart, which is why this replaced
+	 * `*_known`. The old keys are still emitted for callers that have not
+	 * moved; they are the `present || derived` collapse of this.
+	 *
+	 * @param string $value  Found value, '' when absent.
+	 * @param string $field  Field key.
+	 * @param bool   $derived Whether we computed it.
+	 */
+	private static function status( string $value, string $field, bool $derived = false ): string {
+		if ( '' !== $value ) {
+			return $derived ? 'derived' : 'present';
+		}
+
+		$supported = self::SUPPORTS[ self::source() ] ?? array();
+
+		return in_array( $field, $supported, true ) ? 'not_set' : 'unsupported';
+	}
+
+	/**
+	 * A description assembled from the course's own lesson titles.
+	 *
+	 * Because on this install every course description is empty, and the honest
+	 * alternatives were a blank card or an invented sentence. Lesson titles are
+	 * FACTS the lecturer typed, so listing them is reporting rather than
+	 * writing — "Covers Linear Regression and Least Squares" is something the
+	 * catalogue knows, not something a model guessed.
+	 *
+	 * DELIBERATELY NOT FROM TRANSCRIPTS. The lesson text is available and
+	 * summarising it would read better, but a summary of a lecture is new prose
+	 * about a subject, and the moment it is wrong it is wrong in the confident
+	 * register. Titles cannot be wrong in that way.
+	 *
+	 * AND NOTHING IS DERIVED BUT THIS. Price, duration, format and schedule are
+	 * never inferred, because there is nothing to infer them FROM — a course
+	 * with eight lessons is not thereby eight weeks long, and guessing produces
+	 * exactly the invented fee this plugin exists to avoid.
+	 *
+	 * @param int $id Course id.
+	 */
+	private static function derived_description( int $id ): string {
+		if ( ! function_exists( 'learndash_course_get_lessons' ) ) {
+			return '';
+		}
+
+		$lessons = learndash_course_get_lessons( $id );
+
+		if ( ! is_array( $lessons ) || ! $lessons ) {
+			return '';
+		}
+
+		$titles = array();
+
+		foreach ( $lessons as $lesson ) {
+			$title = trim( (string) get_the_title( is_object( $lesson ) ? $lesson->ID : (int) $lesson ) );
+
+			/*
+			 * Placeholder titles are dropped rather than listed. "Covers
+			 * Lesson 1, Lesson 2 and Section 1" is worse than saying nothing:
+			 * it occupies the space where a description belongs while carrying
+			 * no information, and it reads as though somebody wrote it.
+			 */
+			if ( '' === $title || preg_match( '/^(lesson|section|topic|module|part|unit|new)\s*\d*$/i', $title ) ) {
+				continue;
+			}
+
+			$titles[ mb_strtolower( $title ) ] = $title;
+		}
+
+		$titles = array_values( $titles );
+
+		if ( ! $titles ) {
+			return '';
+		}
+
+		return sprintf(
+			/* translators: %s: a list of lesson titles. */
+			__( 'Covers %s.', 'eduai-enquiry' ),
+			wp_sprintf_l( '%l', array_slice( $titles, 0, 6 ) )
+		);
+	}
+
+	/**
+	 * One field of a record, for a caller that wants the status with the value.
+	 *
+	 * @param array  $record Course record.
+	 * @param string $key    Field key.
+	 */
+	public static function field( array $record, string $key ): array {
+		return $record['fields'][ $key ] ?? array( 'value' => '', 'status' => 'unsupported' );
 	}
 
 	/**

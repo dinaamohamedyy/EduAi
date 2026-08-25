@@ -292,26 +292,134 @@ class EduAI_Enquiry_Flows {
 		 * and inside the promise. Exceeding the budget to deliver nicer prose
 		 * would be choosing the wrong one of the two.
 		 */
-		$out = EduAI_Enquiry_Model::ask( $system, $user, 220, 0.4, 2 );
+		/*
+		 * PHASE ONE: the cards, and a ticket for the sentence.
+		 *
+		 * The courses are found in ~250 ms and the model then takes 1.4-2.1 s.
+		 * Waiting for it puts the whole reply outside the two-second promise,
+		 * so the cards go now and the written recommendation follows.
+		 *
+		 * The ticket is a random id and nothing else. The chosen course ids
+		 * live in the session on this server, so a client cannot edit a token
+		 * into asking us to write prose about courses we never selected, and
+		 * cannot replay it to burn tokens - it is spent on use.
+		 */
+		$ticket = substr( hash( 'sha1', wp_generate_password( 24, false ) . microtime( true ) ), 0, 32 );
 
-		// Degrade to showing the courses rather than failing. A visitor who
-		// asked for advice and receives a list has been helped; one who
-		// receives an error has not.
-		$text = is_wp_error( $out )
-			? ( 'ar' === $language ? 'إليك الدورات الأقرب لطلبك:' : 'Here are the closest matches:' )
-			: $out;
+		$state['follow_up'] = array(
+			'ticket'  => $ticket,
+			'courses' => wp_list_pluck( array_slice( $courses, 0, 3 ), 'id' ),
+			'profile' => $profile,
+			'expires' => time() + 60,
+		);
 
 		return self::envelope(
-			$text,
+			'',
 			array(
 				'cards' => self::cards( array_slice( $courses, 0, 3 ), $language ),
 				'chips' => array(
 					self::chip( 'enrol', 'chip_enrol', $language ),
 					self::chip( 'human', 'chip_human', $language ),
 				),
-				'meta'  => array( 'intent' => 'recommend', 'model_used' => ! is_wp_error( $out ) ),
+				'meta'  => array(
+					'intent'    => 'recommend',
+					'follow_up' => array(
+						'url'        => rest_url( 'eduai-enquiry/v1/recommend' ),
+						'token'      => $ticket,
+						'timeout_ms' => 6000,
+					),
+				),
 			)
 		);
+	}
+
+	/**
+	 * PHASE TWO: the sentence, once the model has written it.
+	 *
+	 * Called by the widget after the cards are already on screen, so this is
+	 * the one place in the plugin allowed to take its time. It still carries a
+	 * deadline, because the client has one too and a reply arriving after the
+	 * placeholder is gone is wasted work and wasted tokens.
+	 *
+	 * @param array  $state    Conversation state, by reference so the ticket can be spent.
+	 * @param string $ticket   The ticket issued in phase one.
+	 * @param string $language Visitor language.
+	 * @return array|WP_Error
+	 */
+	public static function follow_up( array &$state, string $ticket, string $language ) {
+		$pending = (array) ( $state['follow_up'] ?? array() );
+
+		if ( empty( $pending['ticket'] ) || ! hash_equals( (string) $pending['ticket'], $ticket ) ) {
+			return new WP_Error( 'eduai_eq_no_ticket', 'debug', array( 'status' => 404 ) );
+		}
+
+		// Spent BEFORE the model is called, not after: a slow model must not
+		// leave a replayable ticket open behind it.
+		unset( $state['follow_up'] );
+
+		if ( (int) ( $pending['expires'] ?? 0 ) < time() ) {
+			return new WP_Error( 'eduai_eq_expired', __( 'That request expired.', 'eduai-enquiry' ), array( 'status' => 410 ) );
+		}
+
+		$lines = array();
+		$n     = 0;
+
+		foreach ( (array) $pending['courses'] as $id ) {
+			$course = EduAI_Enquiry_Catalog::get( (int) $id );
+
+			if ( ! $course ) {
+				continue;
+			}
+
+			++$n;
+
+			$lines[] = sprintf(
+				'%d. %s - %s',
+				$n,
+				$course['title'],
+				$course['description_known'] ? mb_substr( $course['description'], 0, 180 ) : 'no description on file'
+			);
+		}
+
+		if ( ! $lines ) {
+			return new WP_Error( 'eduai_eq_gone', __( 'Those courses are no longer available.', 'eduai-enquiry' ), array( 'status' => 410 ) );
+		}
+
+		$profile = (array) ( $pending['profile'] ?? array() );
+
+		$system = 'You help a visitor choose a course. You will be given a numbered list of real courses. '
+			. 'Recommend at most two, by number, and say briefly why in one sentence each. '
+			. 'NEVER state a price, duration, start date or format - you have not been given them and they are already shown beside your reply. '
+			. 'If nothing fits, say so plainly. '
+			. ( 'ar' === $language ? 'Reply in Arabic.' : 'Reply in English.' )
+			. ' Keep the whole reply under 60 words.';
+
+		$user = "Courses:\n" . implode( "\n", $lines )
+			. "\n\nWhat the visitor has told me: " . ( $profile ? wp_json_encode( $profile ) : 'nothing specific yet' );
+
+		/*
+		 * 600 tokens for a sixty-word answer, measured rather than guessed.
+		 *
+		 * 220 failed with eduai_truncated: the model reasons before it writes
+		 * and bills the thinking to the same budget. 500 answered, 900 answered
+		 * no better. This is the same lesson as the intent classifier one size
+		 * up — there, one word needed 200 — and it is worth stating as a rule:
+		 * on a reasoning model, a budget sized to the VISIBLE answer produces
+		 * an empty reply and an error, never a cheaper reply.
+		 *
+		 * The cost is real: against the 2,000-token minute this assistant is
+		 * allowed, 600 buys about three written recommendations a minute
+		 * site-wide. Everything else on the page is free, so that is the
+		 * feature to watch if the ceiling ever starts biting.
+		 */
+		$out = EduAI_Enquiry_Model::ask( $system, $user, 600, 0.4, 5 );
+
+
+		if ( is_wp_error( $out ) ) {
+			return $out;
+		}
+
+		return array( 'text' => $out );
 	}
 
 	/**

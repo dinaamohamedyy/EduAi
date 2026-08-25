@@ -83,9 +83,25 @@ class EduAI_Enquiry_Rest {
 			)
 		);
 
+		/*
+		 * Phase two of a recommendation. Separate from /chat because it is the
+		 * one endpoint allowed to be slow, and mixing it in would blur the
+		 * budget the chat route is measured against.
+		 */
+		register_rest_route(
+			self::NS,
+			'/recommend',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'permission_callback' => '__return_true',
+				'callback'            => array( __CLASS__, 'recommend' ),
+			)
+		);
+
 		register_rest_route(
 			self::NS,
 			'/lead',
+
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
 				'permission_callback' => '__return_true',
@@ -145,6 +161,55 @@ class EduAI_Enquiry_Rest {
 	}
 
 	/**
+	 * The written half of a recommendation.
+	 *
+	 * Rate limited on the same chat bucket, because it is a model call by
+	 * another name and the point of the bucket is the model, not the route.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 */
+	public static function recommend( WP_REST_Request $request ) {
+		if ( ! self::allowed( 'chat', self::CHAT_LIMIT ) ) {
+			return new WP_Error(
+				'eduai_eq_rate_limited',
+				__( 'Too many messages. Please wait a moment.', 'eduai-enquiry' ),
+				array( 'status' => 429 )
+			);
+		}
+
+		$ticket = preg_replace( '/[^a-f0-9]/', '', strtolower( (string) $request->get_param( 'token' ) ) );
+
+		if ( '' === $ticket ) {
+			return new WP_Error( 'eduai_eq_no_ticket', __( 'No request to complete.', 'eduai-enquiry' ), array( 'status' => 400 ) );
+		}
+
+		$session  = EduAI_Enquiry_Session::open( self::token( $request, false ) );
+		$language = in_array( $request->get_param( 'lang' ), array( 'en', 'ar' ), true )
+			? (string) $request->get_param( 'lang' )
+			: $session['language'];
+
+		$state = $session['state'];
+
+		$out   = EduAI_Enquiry_Flows::follow_up( $state, $ticket, $language );
+
+		// Saved either way: the ticket is spent whether or not the model
+		// answered, so a failed attempt cannot be retried into a second bill.
+		EduAI_Enquiry_Session::save( $session['token'], $language, $state );
+
+		if ( is_wp_error( $out ) ) {
+			return $out;
+		}
+
+		return rest_ensure_response(
+			array(
+				'text' => $out['text'],
+				'lang' => $language,
+				'dir'  => EduAI_Enquiry_I18n::dir( $language ),
+			)
+		);
+	}
+
+	/**
 	 * A submitted enquiry.
 	 *
 	 * @param WP_REST_Request $request Request.
@@ -197,6 +262,13 @@ class EduAI_Enquiry_Rest {
 				'course_id' => (int) $value( 'course_id' ),
 				'language'  => $language,
 				'consent'   => true,
+				/*
+				 * The wording the visitor actually saw, recorded with their
+				 * answer. The widget renders this exact string as the checkbox
+				 * label (see EduAI_Enquiry_Flows), so it is what they agreed
+				 * to and not a later edit of the same key.
+				 */
+				'consent_text' => EduAI_Enquiry_I18n::t( 'consent', $language ),
 				'source'    => 'chat',
 			)
 		);
@@ -221,8 +293,26 @@ class EduAI_Enquiry_Rest {
 	/**
 	 * The conversation token: body first, then cookie.
 	 */
-	private static function token( WP_REST_Request $request ): string {
-		$body = (string) ( $request->get_param( 'session' ) ?? $request->get_param( 'token' ) ?? '' );
+	private static function token( WP_REST_Request $request, bool $accept_token_param = true ): string {
+		/*
+		 * `token` is an accepted alias for `session` on /chat, for a caller not
+		 * using the widget. It must NOT be accepted on /recommend, where
+		 * `token` is the follow-up TICKET and means something else entirely.
+		 *
+		 * The collision was real. Phase two opened a session keyed by the
+		 * ticket, found nothing, minted an empty one, and returned 404 for a
+		 * request that was perfectly valid — and the failure was indis-
+		 * tinguishable from an expired ticket.
+		 *
+		 * Worse, the first fix did not take. The patch adding this parameter
+		 * failed halfway and only the CALL SITE was saved, so line 186 passed
+		 * two arguments to a one-argument function. PHP discards extra
+		 * arguments to a user function in silence, so the call read as correct,
+		 * the signature read as correct, and only the two of them together were
+		 * wrong. That is the same defect that cost a day on the transcript
+		 * guard, twice in two days, and it is invisible from either file alone.
+		 */
+		$body = (string) ( $request->get_param( 'session' ) ?? ( $accept_token_param ? $request->get_param( 'token' ) : null ) ?? '' );
 
 		if ( '' !== $body ) {
 			return $body;
