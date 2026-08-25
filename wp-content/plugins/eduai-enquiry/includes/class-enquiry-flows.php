@@ -42,7 +42,17 @@ class EduAI_Enquiry_Flows {
 	 */
 	public static function handle( string $message, array $session ): array {
 		$state    = (array) $session['state'];
-		$language = EduAI_Enquiry_NLU::language( $message, $session['language'] ?? 'en' );
+		/*
+		 * `requested` is what the visitor asked for; `language` is what the
+		 * session was last answered in. They are different questions and were
+		 * previously collapsed into one, which is how an explicit choice ended
+		 * up losing to the alphabet somebody typed a course title in.
+		 */
+		$language = EduAI_Enquiry_NLU::language(
+			$message,
+			$session['language'] ?? 'en',
+			(string) ( $session['requested'] ?? $state['requested'] ?? '' )
+		);
 
 		$read  = EduAI_Enquiry_NLU::read( $message, $language );
 		$state = EduAI_Enquiry_Session::remember( $state, 'user', $message );

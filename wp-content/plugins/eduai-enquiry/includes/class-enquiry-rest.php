@@ -139,8 +139,15 @@ class EduAI_Enquiry_Rest {
 
 		$forced = (string) ( $request->get_param( 'lang' ) ?? $request->get_param( 'language' ) ?? '' );
 
+		/*
+		 * Kept as `requested` rather than overwriting the session language.
+		 * Overwriting made the choice indistinguishable from "what we last
+		 * replied in", so the resolver could not tell a deliberate switch from
+		 * a default and detection quietly outranked both.
+		 */
 		if ( in_array( $forced, array( 'en', 'ar' ), true ) ) {
-			$session['language'] = $forced;
+			$session['state']['requested'] = $forced;
+			$session['requested']          = $forced;
 		}
 
 		$result = EduAI_Enquiry_Flows::handle( $text, $session );

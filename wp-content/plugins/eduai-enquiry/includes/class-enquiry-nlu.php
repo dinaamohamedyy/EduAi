@@ -543,13 +543,60 @@ class EduAI_Enquiry_NLU {
 	}
 
 	/**
-	 * Which language is this, so the reply matches.
+	 * Which language should the reply be in?
 	 *
-	 * Counts Arabic letters rather than looking for keywords: a visitor writing
-	 * Arabic gets Arabic even when they use an English technical term, which is
-	 * how bilingual speakers actually type.
+	 * AN EXPLICIT CHOICE OUTRANKS THE ALPHABET, AND THAT IS THE WHOLE FIX.
+	 *
+	 * This used to detect the script and use the visitor's choice only as a
+	 * fallback when the message held no letters at all. Front-end found what
+	 * that costs, and it is worse here than it would be almost anywhere else:
+	 * every course on this site has an ENGLISH title, so the single most likely
+	 * thing an Arabic-speaking visitor types is the name of the course they
+	 * want — and typing it silently threw them back into English.
+	 *
+	 * But detection is still right when nobody has chosen, and a visitor who
+	 * opens in English and writes a paragraph of Arabic should be answered in
+	 * Arabic without hunting for a toggle. So the rule is not "choice always
+	 * wins"; it is:
+	 *
+	 *   no choice made      -> detect
+	 *   choice matches      -> that
+	 *   choice contradicted -> keep the choice, UNLESS the message is composed
+	 *                          in the other language rather than merely
+	 *                          containing words from it
+	 *
+	 * FUNCTION WORDS ARE THE TEST. Content words travel — a proper noun, a
+	 * product name, a technical term — and their script says nothing about the
+	 * language somebody is writing in. Function words do not travel: "how much
+	 * is it" is composed in English, "Machine Learning" is a name that happens
+	 * to be Latin. That distinction is the difference between honouring a
+	 * choice and overriding it.
+	 *
+	 * @param string $text      What they typed.
+	 * @param string $fallback  Session language, when nothing else decides.
+	 * @param string $requested Explicit choice from the client, or ''.
 	 */
-	public static function language( string $text, string $fallback = 'en' ): string {
+	public static function language( string $text, string $fallback = 'en', string $requested = '' ): string {
+		$detected = self::script( $text );
+		$chosen   = in_array( $requested, array( 'en', 'ar' ), true ) ? $requested : '';
+
+		if ( '' === $chosen ) {
+			return '' !== $detected ? $detected : ( in_array( $fallback, array( 'en', 'ar' ), true ) ? $fallback : 'en' );
+		}
+
+		if ( '' === $detected || $detected === $chosen ) {
+			return $chosen;
+		}
+
+		// The message is in the other script. Only a sentence composed in that
+		// language overrides a deliberate choice; a borrowed name does not.
+		return self::composed_in( $text, $detected ) ? $detected : $chosen;
+	}
+
+	/**
+	 * Which script dominates, or '' when there are no letters to judge.
+	 */
+	private static function script( string $text ): string {
 		$arabic = preg_match_all( '/[\x{0600}-\x{06FF}]/u', $text );
 		$latin  = preg_match_all( '/[A-Za-z]/u', $text );
 
@@ -557,10 +604,46 @@ class EduAI_Enquiry_NLU {
 			return 'ar';
 		}
 
-		if ( $latin ) {
-			return 'en';
+		return $latin ? 'en' : '';
+	}
+
+	/**
+	 * Is this written IN that language, rather than merely containing its words?
+	 *
+	 * Two ways to qualify, either alone sufficient: a function word, which is
+	 * what people cannot avoid when composing a sentence; or enough words that
+	 * it is a sentence whatever it contains. A one or two word proper noun
+	 * clears neither.
+	 *
+	 * @param string $text     Message.
+	 * @param string $language Candidate language.
+	 */
+	private static function composed_in( string $text, string $language ): bool {
+		static $function_words = array(
+			'en' => array( 'the', 'a', 'an', 'is', 'are', 'was', 'do', 'does', 'did', 'how', 'what', 'when',
+				'where', 'which', 'who', 'why', 'can', 'could', 'would', 'should', 'i', 'you', 'we', 'me',
+				'my', 'your', 'it', 'this', 'that', 'for', 'to', 'of', 'in', 'on', 'and', 'or', 'with',
+				'have', 'has', 'want', 'need', 'please', 'thanks', 'there', 'any', 'much', 'many' ),
+			'ar' => array( 'هل', 'ما', 'ماذا', 'كيف', 'متي', 'اين', 'من', 'في', 'علي', 'الي', 'عن', 'مع',
+				'انا', 'انت', 'نحن', 'هذا', 'هذه', 'ذلك', 'التي', 'الذي', 'او', 'و', 'لو', 'عندكم',
+				'لديكم', 'اريد', 'ابحث', 'يوجد', 'ممكن', 'كم', 'شكرا', 'الان' ),
+		);
+
+		$norm  = self::normalise( $text );
+		$words = preg_split( '/[^\p{L}\p{N}]+/u', mb_strtolower( $norm ), -1, PREG_SPLIT_NO_EMPTY );
+		$words = (array) $words;
+
+		if ( count( $words ) >= 4 ) {
+			return true;
 		}
 
-		return $fallback;
+		foreach ( $words as $w ) {
+			if ( in_array( $w, $function_words[ $language ] ?? array(), true ) ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 }
+
