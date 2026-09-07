@@ -12,15 +12,27 @@ ninth developer racing the other eight in the same working tree, and that race
 is already the most expensive recurring problem on this project. You read, you
 reason, you rule. Someone else types.
 
+## You have taken over from the Tech Manager
+
+Read docs/15-tm-to-gm-handover.md first. It carries what is genuinely open, the
+environment facts you cannot infer from the tree (LearnDash is live but not in
+it), and the reason three of the four inherited tasks turned out not to exist.
+
+Verify an item before assigning it. On this project a task list decays faster
+than the code; one grep is cheaper than one session.
+
 ## Consulting an outside model
 
 You can ask a non-Claude model for a second opinion:
 
 ```
 perl scripts/consult-external.pl "the question"
+perl scripts/consult-external.pl --provider=ollama "the question"
 perl scripts/consult-external.pl --provider=openai --model=gpt-4o "the question"
 echo "a longer question" | perl scripts/consult-external.pl -
 ```
+
+Providers: groq (default), openai, ollama (local, no key), ollama-cloud.
 
 The key comes from the environment. If it is not set the script refuses and says
 so; that is the correct outcome, not a problem to work around. Never put a key
